@@ -5,41 +5,28 @@
 // `idb` dimock dengan penyimpan in-memory sederhana: yang diuji adalah logika
 // gabung, bukan IndexedDB-nya.
 
-const mockSimpanan = { meta: new Map(), assets: new Map(), assetReads: 0, keyReads: 0 };
-
-// axios (ESM murni) tak bisa diparse jest CRA dari node_modules — dan memang
-// tak dipakai uji ini; upsertSnapshotAsset tak menyentuh jaringan.
+import "../uji/indexedDB";
+const mockSimpanan = { meta: new Map(), assets: new Map(), query_rows: new Map(), assetReads: 0, keyReads: 0 };
 jest.mock("axios", () => ({ get: jest.fn(), post: jest.fn() }));
-
-// CATATAN: CRA menyetel resetMocks:true — implementasi jest.fn() DIBUANG
-// sebelum tiap uji, membuat openDB mengembalikan undefined. Fungsi POLOS
-// tidak tersentuh reset, jadi mock ini dipakai fungsi biasa.
 jest.mock("idb", () => ({
   openDB: async () => ({
-    get: async (store, key) =>
-      (store === "meta" ? mockSimpanan.meta : mockSimpanan.assets).get(key),
-    put: async (store, val) => {
-      const peta = store === "meta" ? mockSimpanan.meta : mockSimpanan.assets;
-      peta.set(store === "meta" ? val.activityId : val.id, val);
-    },
-    delete: async (store, key) =>
-      (store === "meta" ? mockSimpanan.meta : mockSimpanan.assets).delete(key),
-    getAll: async () => [],
-    getAllKeysFromIndex: async (_store, _index, activityId) => {
+    get: async (store, key) => mockSimpanan[store].get(key),
+    getAll: async store => [...mockSimpanan[store].values()],
+    getAllKeysFromIndex: async (store, _index, activityId) => {
       mockSimpanan.keyReads++;
-      return [...mockSimpanan.assets.values()].filter(r => r.activity_id === activityId).map(r => r.id);
+      return [...mockSimpanan[store].values()].filter(r => r.activity_id === activityId).map(r => r.id).sort();
     },
-    transaction: store => ({
-      store: store === "meta" ? {
-        get: async key => mockSimpanan.meta.get(key),
-        put: async meta => mockSimpanan.meta.set(meta.activityId, meta),
-      } : {
-        get: async id => { mockSimpanan.assetReads++; return mockSimpanan.assets.get(id); },
-        delete: async id => mockSimpanan.assets.delete(id),
-        put: async row => mockSimpanan.assets.set(row.id, row),
-      },
-      done: Promise.resolve(),
-    }),
+    getAllFromIndex: async (store, _index, range) => [...mockSimpanan[store].values()]
+      .filter(r => range.includes([r.activity_id, r.id])).sort((a, b) => a.id.localeCompare(b.id)),
+    transaction: store => {
+      const objectStore = name => ({
+        get: async id => { if (name === "assets") mockSimpanan.assetReads++; return mockSimpanan[name].get(id); },
+        put: async row => mockSimpanan[name].set(name === "meta" ? row.activityId : row.id, row),
+        delete: async id => mockSimpanan[name].delete(id),
+        clear: async () => mockSimpanan[name].clear(),
+      });
+      return { store: typeof store === "string" ? objectStore(store) : undefined, objectStore, done: Promise.resolve() };
+    },
   }),
 }));
 // (openDB di atas: arrow yang MENGEMBALIKAN promise objek — dipanggil sebagai
@@ -52,6 +39,7 @@ beforeEach(() => {
   mockSimpanan.assetReads = 0; mockSimpanan.keyReads = 0;
   mockSimpanan.meta.clear();
   mockSimpanan.assets.clear();
+  mockSimpanan.query_rows.clear();
   mockSimpanan.meta.set("keg1", { activityId: "keg1", lastSync: Date.now() });
 });
 
@@ -184,12 +172,14 @@ describe("upsertSnapshotAsset — baca-gabung-tulis", () => {
 
 test("paged IDB: halaman berikutnya membaca hanya halaman, upsert/delete/fullsync menginvalidasi index", async () => {
   const activityId = "query-cache";
-  mockSimpanan.meta.set(activityId, { activityId, userId: "u", lastSync: new Date().toISOString(), revision: 1 });
+  mockSimpanan.meta.set(activityId, { activityId, userId: "u", lastSync: new Date().toISOString(), revision: 1, queryReady: true });
   for (let i = 0; i < 1000; i++) {
     mockSimpanan.assets.set(`q-${i}`, { id: `q-${i}`, activity_id: activityId, purchase_price: String(i), thumbnail: "data:image/jpeg;base64,thumbnail" });
   }
+  for (const row of mockSimpanan.assets.values()) mockSimpanan.query_rows.set(row.id, { ...row, thumbnail: undefined });
   const first = await getSnapshotPage(activityId, { ownerId: "u", sort: "price_asc" });
   expect(first.total).toBe(1000); expect(first.items[0].id).toBe("q-0");
+  expect(mockSimpanan.assetReads).toBe(50); // cold scan never clones thumbnail bytes
   const reads = mockSimpanan.assetReads;
   const second = await getSnapshotPage(activityId, { ownerId: "u", sort: "price_asc", page: 2 });
   expect(second.timing.scanned).toBe(0); expect(mockSimpanan.assetReads - reads).toBe(50);

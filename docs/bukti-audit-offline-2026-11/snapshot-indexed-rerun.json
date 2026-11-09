@@ -1,0 +1,110 @@
+[
+  {
+    "count": 1000,
+    "firstMs": 92.5999999998603,
+    "secondMs": 16.5,
+    "changedQueryMs": 18.600000000093132,
+    "changedQuery": {
+      "idbMs": 10.899999999906868,
+      "queryMs": 2.699999999953434,
+      "cacheHit": false,
+      "baseCacheHit": true,
+      "idbScanned": 0,
+      "scanned": 1000
+    },
+    "first": {
+      "idbMs": 36.50000000023283,
+      "queryMs": 49.699999999953434,
+      "cacheHit": false,
+      "baseCacheHit": false,
+      "idbScanned": 1000,
+      "scanned": 1000
+    },
+    "second": {
+      "idbMs": 6.800000000046566,
+      "queryMs": 0,
+      "cacheHit": true,
+      "baseCacheHit": false,
+      "idbScanned": 0,
+      "scanned": 0
+    },
+    "total": 500,
+    "firstID": "benchmark-1000-0000019",
+    "page2ID": "benchmark-1000-0000018",
+    "heap": 2446129,
+    "thumbnailBytes": 4096,
+    "retainedHeap": 1346440
+  },
+  {
+    "count": 10000,
+    "firstMs": 505.10000000009313,
+    "secondMs": 5.199999999953434,
+    "changedQueryMs": 36.60000000009313,
+    "changedQuery": {
+      "idbMs": 16.300000000046566,
+      "queryMs": 17.9000000001397,
+      "cacheHit": false,
+      "baseCacheHit": true,
+      "idbScanned": 0,
+      "scanned": 10000
+    },
+    "first": {
+      "idbMs": 411.80000000004657,
+      "queryMs": 90.79999999981374,
+      "cacheHit": false,
+      "baseCacheHit": false,
+      "idbScanned": 10000,
+      "scanned": 10000
+    },
+    "second": {
+      "idbMs": 3.800000000046566,
+      "queryMs": 0,
+      "cacheHit": true,
+      "baseCacheHit": false,
+      "idbScanned": 0,
+      "scanned": 0
+    },
+    "total": 5000,
+    "firstID": "benchmark-10000-0000019",
+    "page2ID": "benchmark-10000-0001019",
+    "heap": 10615866,
+    "thumbnailBytes": 4096,
+    "retainedHeap": 3438348
+  },
+  {
+    "count": 50000,
+    "firstMs": 2104.1999999999534,
+    "secondMs": 5.099999999860302,
+    "changedQueryMs": 141.80000000004657,
+    "changedQuery": {
+      "idbMs": 10.900000000139698,
+      "queryMs": 103.89999999967404,
+      "cacheHit": false,
+      "baseCacheHit": true,
+      "idbScanned": 0,
+      "scanned": 50000
+    },
+    "first": {
+      "idbMs": 1886.2000000022817,
+      "queryMs": 213.39999999804422,
+      "cacheHit": false,
+      "baseCacheHit": false,
+      "idbScanned": 50000,
+      "scanned": 50000
+    },
+    "second": {
+      "idbMs": 3.3999999999068677,
+      "queryMs": 0,
+      "cacheHit": true,
+      "baseCacheHit": false,
+      "idbScanned": 0,
+      "scanned": 0
+    },
+    "total": 25000,
+    "firstID": "benchmark-50000-0000019",
+    "page2ID": "benchmark-50000-0001019",
+    "heap": 41409423,
+    "thumbnailBytes": 4096,
+    "retainedHeap": 12680668
+  }
+]

@@ -16,20 +16,20 @@
  *   auto-401/idle logout does NOT — field data protection.
  */
 import { openDB } from "idb";
+import { abortOnFailure } from "./idbTransaction";
 import { ASSET_SCALAR_FIELDS } from "./assetFields";
 import axios from "axios";
 import { isQuotaExceeded } from "./idbErrors";
 import { TENGGAT_BAKA, muatAndal } from "./muatAndal";
 import { gabungVersiBaris } from "./rekonsiliasiBaris";
-import { buatCacheQuerySnapshot, queryHalamanSnapshot } from "./cacheQuerySnapshot";
+import { buatCacheQuerySnapshot, queryHalamanSnapshot, queryRow } from "./cacheQuerySnapshot";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const DB_NAME = "aman_offline_snapshot";
-// v2: proyeksi list menambah field berlebih/sengketa — snapshot lama tidak
-// memilikinya dan sync delta tak akan mengisi ulang baris yang tak berubah,
-// jadi upgrade mengosongkan cache agar sync berikutnya full resync.
-const DB_VERSION = 2;
+// v3 adds a lightweight query projection. Existing assets remain readable
+// while the new projection is backfilled in bounded, resumable batches.
+const DB_VERSION = 3;
 // Muat ulang proyeksi saat daring tanpa menghapus cache baca/antrean luring.
 // v3 memuat SIMAN/PSP yang telah diverifikasi satkernya. Sanitasi proyeksi
 // tidak mengubah version/updated_at aset, sehingga delta tidak memperbaiki
@@ -37,6 +37,9 @@ const DB_VERSION = 2;
 const VERSI_PROYEKSI = 3;
 const ASSET_STORE = "assets"; // keyed by asset id, indexed by activity_id
 const META_STORE = "meta";    // keyed by activityId → {activityId, userId, lastSync, count}
+const QUERY_STORE = "query_rows";
+const WRITE_STORES = [ASSET_STORE, QUERY_STORE, META_STORE];
+const projectQuery = row => ({ ...queryRow(row).row, activity_id: row.activity_id });
 
 const queryCache = buatCacheQuerySnapshot();
 let revisionChannel;
@@ -53,14 +56,10 @@ function listenForRevisions() {
   window.addEventListener("focus", () => queryCache.clear());
   revisionChannel.unref?.();
 }
-async function bumpRevision(db, activityId) {
-  invalidateQueryCache(activityId);
-  try {
-    const tx = db.transaction(META_STORE, "readwrite");
-    const meta = await tx.store.get(activityId);
-    if (meta) await tx.store.put({ ...meta, revision: (Number(meta.revision) || 0) + 1 });
-    await tx.done;
-  } catch (e) { if (!isQuotaExceeded(e)) throw e; }
+async function bumpRevision(tx, activityId) {
+  const store = tx.objectStore(META_STORE);
+  const meta = await store.get(activityId);
+  if (meta) await store.put({ ...meta, revision: (Number(meta.revision) || 0) + 1 });
 }
 
 const PAGE_LIMIT = 1000;
@@ -84,7 +83,7 @@ let databasePromise;
 function getDB() {
   if (databasePromise) return databasePromise;
   databasePromise = openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion, _newVersion, tx) {
+    upgrade(db) {
       if (!db.objectStoreNames.contains(ASSET_STORE)) {
         const store = db.createObjectStore(ASSET_STORE, { keyPath: "id" });
         store.createIndex("by-activity", "activity_id", { unique: false });
@@ -92,15 +91,68 @@ function getDB() {
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE, { keyPath: "activityId" });
       }
-      if (oldVersion > 0 && oldVersion < 2) {
-        tx.objectStore(ASSET_STORE).clear();
-        tx.objectStore(META_STORE).clear();
+      if (!db.objectStoreNames.contains(QUERY_STORE)) {
+        const store = db.createObjectStore(QUERY_STORE, { keyPath: "id" });
+        store.createIndex("by-activity-id", ["activity_id", "id"]);
       }
     },
     blocking() { databasePromise?.then(db => db.close()); databasePromise = null; },
     terminated() { databasePromise = null; },
   }).catch(error => { databasePromise = null; throw error; });
   return databasePromise;
+}
+
+const indexing = new Map();
+async function ensureQueryIndex(db, activityId) {
+  if (indexing.has(activityId)) return indexing.get(activityId);
+  const work = (async () => {
+    const meta = await db.get(META_STORE, activityId);
+    if (!meta || meta.queryReady) return !!meta?.queryReady;
+    const keys = await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId);
+    const remaining = keys.filter(id => !meta.queryCursor || id > meta.queryCursor);
+    for (let i = 0; i < remaining.length; i += 256) {
+      const ids = remaining.slice(i, i + 256);
+      const tx = db.transaction(WRITE_STORES, "readwrite");
+      const written = await abortOnFailure(tx, async () => {
+        const current = await tx.objectStore(META_STORE).get(activityId);
+        if (!current || current.userId !== meta.userId) { await tx.done; return false; }
+        for (const id of ids) {
+          const row = await tx.objectStore(ASSET_STORE).get(id);
+          if (row?.activity_id === activityId) await tx.objectStore(QUERY_STORE).put(projectQuery(row));
+        }
+        await tx.objectStore(META_STORE).put({ ...current, queryCursor: ids[ids.length - 1] });
+        await tx.done;
+        return true;
+      });
+      if (!written) return false;
+    }
+    const tx = db.transaction(META_STORE, "readwrite");
+    const completed = await abortOnFailure(tx, async () => {
+      const current = await tx.store.get(activityId);
+      if (!current || current.userId !== meta.userId) { await tx.done; return false; }
+      await tx.store.put({ ...current, queryReady: true, queryCursor: null, revision: (Number(current.revision) || 0) + 1 });
+      await tx.done;
+      return true;
+    });
+    if (!completed) return false;
+    invalidateQueryCache(activityId);
+    return true;
+  })().catch(() => false).finally(() => indexing.delete(activityId));
+  indexing.set(activityId, work);
+  return work;
+}
+
+async function deleteRows(db, activityId, ids) {
+  const tx = db.transaction(WRITE_STORES, "readwrite");
+  await abortOnFailure(tx, async () => {
+    for (const id of ids) {
+      await tx.objectStore(ASSET_STORE).delete(id);
+      await tx.objectStore(QUERY_STORE).delete(id);
+    }
+    await bumpRevision(tx, activityId);
+    await tx.done;
+  });
+  invalidateQueryCache(activityId);
 }
 
 // Ask the browser to protect our IndexedDB from storage-pressure eviction.
@@ -244,10 +296,7 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
 
     // Apply tombstones (first delta page only carries them)
     if (deletedIds.length) {
-      const tx = db.transaction(ASSET_STORE, "readwrite");
-      for (const id of deletedIds) tx.store.delete(id);
-      await tx.done;
-      await bumpRevision(db, activityId);
+      await deleteRows(db, activityId, deletedIds);
     }
 
     if (items.length) {
@@ -257,13 +306,18 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
         if (row.id && row.activity_id === activityId) staged.push(row);
       }
       try {
-        const tx = db.transaction(ASSET_STORE, "readwrite");
-        for (const row of staged) {
-          const lama = await tx.store.get(row.id);
-          await tx.store.put(gabungVersiBaris(lama, row));
-        }
-        await tx.done;
-        await bumpRevision(db, activityId);
+        const tx = db.transaction(WRITE_STORES, "readwrite");
+        await abortOnFailure(tx, async () => {
+          for (const row of staged) {
+            const lama = await tx.objectStore(ASSET_STORE).get(row.id);
+            const merged = gabungVersiBaris(lama, row);
+            await tx.objectStore(ASSET_STORE).put(merged);
+            await tx.objectStore(QUERY_STORE).put(projectQuery(merged));
+          }
+          await bumpRevision(tx, activityId);
+          await tx.done;
+        });
+        invalidateQueryCache(activityId);
         for (const row of staged) fetchedIds?.add(row.id);
         loaded += items.length;
       } catch (e) {
@@ -292,10 +346,7 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
     const existing = await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId);
     const stale = existing.filter((id) => !fetchedIds.has(id));
     if (stale.length) {
-      const tx = db.transaction(ASSET_STORE, "readwrite");
-      for (const id of stale) tx.store.delete(id);
-      await tx.done;
-      await bumpRevision(db, activityId);
+      await deleteRows(db, activityId, stale);
     }
   }
 
@@ -323,10 +374,14 @@ async function _syncSnapshot(activityId, userId, onProgress, { forceFull = false
   let metaTersimpan = newMeta;
   try {
     const tx = db.transaction(META_STORE, "readwrite");
-    const latestMeta = await tx.store.get(activityId);
-    newMeta.revision = (Number(latestMeta?.revision) || 0) + 1;
-    await tx.store.put(newMeta);
-    await tx.done;
+    await abortOnFailure(tx, async () => {
+      const latestMeta = await tx.store.get(activityId);
+      newMeta.revision = (Number(latestMeta?.revision) || 0) + 1;
+      newMeta.queryReady = !!latestMeta?.queryReady || (fullSync && !quotaHit);
+      newMeta.queryCursor = latestMeta?.queryCursor || null;
+      await tx.store.put(newMeta);
+      await tx.done;
+    });
     invalidateQueryCache(activityId);
   } catch (e) {
     // Meta ~beberapa byte; bila ini pun kena kuota, catat tanpa crash. Snapshot
@@ -347,14 +402,25 @@ export async function getSnapshotPage(activityId, { ownerId, kodeSatker = "", se
   if (!activityId) return null;
   listenForRevisions();
   const db = await getDB();
+  const initialMeta = await db.get(META_STORE, activityId);
+  if (!initialMeta || isExpired(initialMeta) || (ownerId && initialMeta.userId !== ownerId)) return null;
+  await ensureQueryIndex(db, activityId);
   for (let attempt = 0; attempt < 2; attempt++) {
     const meta = await db.get(META_STORE, activityId);
     if (!meta || isExpired(meta) || (ownerId && meta.userId !== ownerId)) return null;
     const source = {
       keys: () => db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId),
+      queryRows: meta.queryReady ? async ids => {
+        if (!ids.length) return [];
+        const rows = await db.getAllFromIndex(QUERY_STORE, "by-activity-id",
+          IDBKeyRange.bound([activityId, ids[0]], [activityId, ids[ids.length - 1]]));
+        const selected = new Set(ids);
+        return rows.filter(row => selected.has(row.id));
+      } : undefined,
       rows: async ids => {
         if (!ids.length) return [];
         const tx = db.transaction(ASSET_STORE, "readonly");
+        tx.done.catch(() => {});
         const rows = await Promise.all(ids.map(id => tx.store.get(id)));
         await tx.done;
         return rows.filter(row => row?.activity_id === activityId);
@@ -362,7 +428,7 @@ export async function getSnapshotPage(activityId, { ownerId, kodeSatker = "", se
     };
     const result = await queryHalamanSnapshot({ source, cache: queryCache,
       scope: [ownerId || meta.userId, kodeSatker, activityId], meta,
-      query: { search, category, filters, sort }, page, size, pendingRevision, signal });
+      query: { search, category, filters, sort }, page, size, pendingRevision, signal, batchSize: 512 });
     const latestMeta = await db.get(META_STORE, activityId);
     if (latestMeta?.userId === meta.userId && latestMeta?.revision === meta.revision &&
       latestMeta?.lastSync === meta.lastSync && !isExpired(latestMeta)) return { ...result, meta: latestMeta };
@@ -411,13 +477,17 @@ export async function upsertSnapshotAsset(activityId, row) {
     // Menggabung dengan rekaman lama membuat potongan tetap potongan.
     // Satu transaksi baca-tulis: dua upsert paralel tidak boleh membaca dasar
     // yang sama lalu menimpa hasil satu sama lain (termasuk versi lebih baru).
-    const tx = db.transaction(ASSET_STORE, "readwrite");
-    const lama = await tx.store.get(row.id);
-    const dasar = lama && lama.activity_id === activityId ? lama : {};
-    const clean = toSnapshotRow({ ...gabungVersiBaris(dasar, row), activity_id: activityId });
-    await tx.store.put(clean);
-    await tx.done;
-    await bumpRevision(db, activityId);
+    const tx = db.transaction(WRITE_STORES, "readwrite");
+    await abortOnFailure(tx, async () => {
+      const lama = await tx.objectStore(ASSET_STORE).get(row.id);
+      const dasar = lama && lama.activity_id === activityId ? lama : {};
+      const clean = toSnapshotRow({ ...gabungVersiBaris(dasar, row), activity_id: activityId });
+      await tx.objectStore(ASSET_STORE).put(clean);
+      await tx.objectStore(QUERY_STORE).put(projectQuery(clean));
+      await bumpRevision(tx, activityId);
+      await tx.done;
+    });
+    invalidateQueryCache(activityId);
   } catch {
     // Best-effort cache maintenance — the queue still holds the real change.
   }
@@ -431,8 +501,7 @@ export async function removeSnapshotAsset(activityId, id) {
     const db = await getDB();
     const meta = await db.get(META_STORE, activityId);
     if (!meta) return;
-    await db.delete(ASSET_STORE, id);
-    await bumpRevision(db, activityId);
+    await deleteRows(db, activityId, [id]);
   } catch {
     // best-effort — TTL akan membereskan bila gagal
   }
@@ -445,10 +514,15 @@ export async function clearSnapshot(activityId) {
   try {
     const db = await getDB();
     const keys = await db.getAllKeysFromIndex(ASSET_STORE, "by-activity", activityId);
-    const tx = db.transaction([ASSET_STORE, META_STORE], "readwrite");
-    for (const id of keys) tx.objectStore(ASSET_STORE).delete(id);
-    tx.objectStore(META_STORE).delete(activityId);
-    await tx.done;
+    const tx = db.transaction(WRITE_STORES, "readwrite");
+    await abortOnFailure(tx, async () => {
+      for (const id of keys) {
+        tx.objectStore(ASSET_STORE).delete(id);
+        tx.objectStore(QUERY_STORE).delete(id);
+      }
+      tx.objectStore(META_STORE).delete(activityId);
+      await tx.done;
+    });
   } catch {
     // ignore — worst case the TTL retires it
   }
@@ -459,10 +533,13 @@ export async function clearAllSnapshots() {
   invalidateQueryCache();
   try {
     const db = await getDB();
-    const tx = db.transaction([ASSET_STORE, META_STORE], "readwrite");
-    tx.objectStore(ASSET_STORE).clear();
-    tx.objectStore(META_STORE).clear();
-    await tx.done;
+    const tx = db.transaction(WRITE_STORES, "readwrite");
+    await abortOnFailure(tx, async () => {
+      tx.objectStore(ASSET_STORE).clear();
+      tx.objectStore(QUERY_STORE).clear();
+      tx.objectStore(META_STORE).clear();
+      await tx.done;
+    });
   } catch {
     // ignore
   }

@@ -43,7 +43,7 @@ const SORT_FIELD = { newest: "created_at", oldest: "created_at", name_asc: "asse
   price_asc: "purchase_price", price_desc: "purchase_price", category_asc: "category", category_desc: "category",
   location_asc: "location", eselon1_asc: "eselon1", condition_asc: "condition", status_asc: "status" };
 const QUERY_FIELDS = new Set([...FIELD_CARI_ASET, "id", "purchase_price", "purchase_date", "created_at", "inventory_status", "stiker_status", "pengguna_nip"]);
-function queryRow(row) {
+export function queryRow(row) {
   const out = {};
   let bytes = 32;
   for (const field of QUERY_FIELDS) {
@@ -84,7 +84,7 @@ export async function queryHalamanSnapshot({ source, cache, scope, meta, query, 
       let rows;
       if (baseline) rows = baseline.slice(i, i + batchSize);
       else {
-        const loaded = (await source.rows(keys.slice(i, i + batchSize))).filter(Boolean);
+        const loaded = (await (source.queryRows || source.rows)(keys.slice(i, i + batchSize))).filter(Boolean);
         timing.idbMs += clock() - start;
         const projectionStart = clock();
         timing.idbScanned += loaded.length;

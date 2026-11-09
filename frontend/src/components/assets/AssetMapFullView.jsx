@@ -28,6 +28,7 @@ import { CONDITION_COLORS, STATUS_COLORS } from "../../lib/warnaAset";
 import { JARAK_DARI_MARKER, kotakLabel, pasangLebarLabel, pilihLabelTampil } from "../../lib/petaLabel";
 import { parseKoordinat } from "../../lib/koordinatAset";
 import { opsiPinDesain } from "../../lib/markerPin";
+import { pasangLokasiSaya } from "../../lib/lokasiSayaPeta";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useUkurPeta } from "../../hooks/useUkurPeta";
 import { useDenahSpasial } from "../../hooks/useDenahSpasial";
@@ -260,6 +261,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const lokasiSayaRef = useRef(null);
   const layerRef = useRef(null);         // L.LayerGroup pin
   const markersRef = useRef(new Map());  // id -> { marker, row, lat, lng, iconKey, draggable }
   const didFitRef = useRef(false);       // fitBounds hanya saat muat pertama / ganti kelompok
@@ -752,68 +754,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
     });
     new NorthControl({ position: "topright" }).addTo(map);
 
-    // ── "TAMPILKAN LOKASI ANDA": tombol di bawah kontrol zoom (topleft —
-    //    kontrol menumpuk berurutan) → GPS perangkat → titik biru +
-    //    lingkaran akurasi + pan ke lokasi; klik lagi = sembunyikan. ──
-    const lokasiSaya = { marker: null, lingkaran: null, tombol: null, mencari: false };
-    const IKON_LOKASI = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>';
-    const hapusLokasiSaya = () => {
-      if (lokasiSaya.marker) { map.removeLayer(lokasiSaya.marker); lokasiSaya.marker = null; }
-      if (lokasiSaya.lingkaran) { map.removeLayer(lokasiSaya.lingkaran); lokasiSaya.lingkaran = null; }
-    };
-    const LokasiControl = L.Control.extend({
-      onAdd() {
-        const d = L.DomUtil.create("div", "leaflet-bar");
-        const a = L.DomUtil.create("a", "", d);
-        a.href = "#";
-        a.title = "Tampilkan lokasi Anda";
-        a.setAttribute("role", "button");
-        a.setAttribute("aria-label", "Tampilkan lokasi Anda");
-        a.setAttribute("data-testid", "peta-lokasi-saya");
-        a.style.cssText = "display:flex;align-items:center;justify-content:center;width:30px;height:30px";
-        a.innerHTML = IKON_LOKASI;
-        lokasiSaya.tombol = a;
-        L.DomEvent.disableClickPropagation(d);
-        L.DomEvent.on(a, "click", (e) => {
-          L.DomEvent.preventDefault(e);
-          if (lokasiSaya.mencari) return;
-          // Toggle: lokasi sedang tampil → sembunyikan.
-          if (lokasiSaya.marker) { hapusLokasiSaya(); return; }
-          lokasiSaya.mencari = true;
-          a.style.opacity = "0.4";
-          map.locate({ setView: false, enableHighAccuracy: true, timeout: 15000 });
-        });
-        return d;
-      },
-    });
-    new LokasiControl({ position: "topleft" }).addTo(map);
-    map.on("locationfound", (ev) => {
-      lokasiSaya.mencari = false;
-      if (lokasiSaya.tombol) lokasiSaya.tombol.style.opacity = "1";
-      hapusLokasiSaya();
-      const akurasi = Math.round(ev.accuracy || 0);
-      lokasiSaya.lingkaran = L.circle(ev.latlng, {
-        radius: ev.accuracy || 0, color: "#2563eb", weight: 1,
-        fillColor: "#3b82f6", fillOpacity: 0.12, interactive: false,
-      }).addTo(map);
-      lokasiSaya.marker = L.marker(ev.latlng, {
-        interactive: true,
-        icon: L.divIcon({
-          className: "",
-          html: '<div style="width:16px;height:16px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 2px rgba(37,99,235,.35),0 1px 4px rgba(0,0,0,.4)"></div>',
-          iconSize: [16, 16], iconAnchor: [8, 8],
-        }),
-      }).addTo(map).bindTooltip(`Lokasi Anda (±${akurasi} m)`, { direction: "top" });
-      // Pan + zoom secukupnya ke lokasi (jangan menjauh bila sudah dekat).
-      map.setView(ev.latlng, Math.max(map.getZoom(), 17));
-    });
-    map.on("locationerror", (ev) => {
-      lokasiSaya.mencari = false;
-      if (lokasiSaya.tombol) lokasiSaya.tombol.style.opacity = "1";
-      toast.error(ev?.message && /denied|ditolak/i.test(ev.message)
-        ? "Izin lokasi ditolak — aktifkan izin lokasi browser untuk fitur ini"
-        : "Gagal mendapatkan lokasi Anda — pastikan GPS aktif lalu coba lagi");
-    });
+    lokasiSayaRef.current = pasangLokasiSaya(map);
     // Info skala nominal (1:N) + level zoom — diperbarui tiap zoom/geser.
     const scaleInfo = L.control({ position: "bottomleft" });
     scaleInfo.onAdd = () => {
@@ -936,11 +877,19 @@ const AssetMapFullView = memo(function AssetMapFullView({
         wrap.querySelector('[data-aksi="galeri"]').addEventListener("click", () => inGaleri.click());
         inKamera.addEventListener("change", (fe) => { tambahBerkas(fe.target.files); fe.target.value = ""; });
         inGaleri.addEventListener("change", (fe) => { tambahBerkas(fe.target.files); fe.target.value = ""; });
-        const simpan = () => {
+        const simpan = async () => {
           if (memproses) return;
           const nama = (input.value || "").trim();
           if (!nama) { input.style.borderColor = "#dc2626"; input.focus(); return; }
-          onQuickAddRef.current?.(lat, lng, nama, fotos.slice());
+          memproses = true;
+          btnSimpan.disabled = true;
+          try { await onQuickAddRef.current?.(lat, lng, nama, fotos.slice()); }
+          catch {
+            memproses = false;
+            btnSimpan.disabled = false;
+            toast.error("Belum tersimpan di perangkat. Isian dan foto tetap di sini; coba lagi.");
+            return;
+          }
           map.closePopup(popup);
           // Marker SEMENTARA (biru pudar) — pin final tampil setelah antrean
           // simpan tersinkron dan peta dimuat ulang.
@@ -965,12 +914,18 @@ const AssetMapFullView = memo(function AssetMapFullView({
     return () => {
       if (ro) ro.disconnect();
       setPetaSiap(false);
+      lokasiSayaRef.current?.destroy();
+      lokasiSayaRef.current = null;
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
       markersRef.current = new Map();
     };
   }, []);
+
+  // Dijalankan setelah init, juga saat peta pertama kali dibuka tersembunyi.
+  // Peta tetap ter-mount saat berpindah mode: jeda GPS meski tidak unmount.
+  useEffect(() => { lokasiSayaRef.current?.setVisible(visible); }, [visible]);
 
   // Versi terbaru pasca-simpan (best-effort): antrean menyimpan async, jadi
   // versi server diambil sesaat kemudian agar drag berikutnya memakai

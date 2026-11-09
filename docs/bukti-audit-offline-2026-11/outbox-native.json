@@ -1,0 +1,13 @@
+{
+  "nativeIDB": true,
+  "twoRealTabs": true,
+  "claimWinners": 1,
+  "closedSendingTab": true,
+  "reloadedSurvivor": true,
+  "offlineDuringRecovery": true,
+  "leaseExpiry": "simulated clock advance",
+  "unchanged": true,
+  "ordered": true,
+  "remaining": 0,
+  "photoBytes": 2097152
+}
