@@ -1,6 +1,7 @@
 import React, { memo, useState, useRef } from "react";
 import { Camera, Briefcase, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Scale, CircleDashed } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
+import BadgeDraf from "./BadgeDraf";
 import BadgeStiker from "./BadgeStiker";
 import { labelBarisLokasi } from "@/lib/koordinatAset";
 import { sisaGaransi } from "../../lib/garansi";
@@ -294,7 +295,10 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground truncate">{asset.asset_name}</div>
+                <div className="flex items-center gap-1 min-w-0">
+                  <BadgeDraf assetId={asset.id} className="shrink-0" />
+                  <div className="text-xs text-muted-foreground truncate">{asset.asset_name}</div>
+                </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
                 {/* Document count not shown (lazy loaded) */}

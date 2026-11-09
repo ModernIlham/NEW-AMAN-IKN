@@ -415,6 +415,7 @@ const InventoryFieldSheet = ({
                 <button type="button" onClick={() => onOpenPhoto(i)} aria-label={`Lihat foto ${i + 1}`} className="w-14 h-14 rounded-lg overflow-hidden border border-border">
                   <img src={item.thumbnail} alt={`Foto ${i + 1}`} loading="lazy" className="w-full h-full object-cover bg-muted" data-testid={`sheet-photo-thumb-${i}`} />
                 </button>
+                {item.type === "new" && <span className="absolute -top-1 -left-1 bg-amber-500 text-white text-[8px] px-1 rounded pointer-events-none" title="Foto baru — belum disimpan" data-testid={`sheet-photo-new-${i}`}>Baru</span>}
                 <button type="button" onClick={() => onRemovePhoto(i)} disabled={isSubmitting} aria-label={`Hapus foto ${i + 1}`}
                   data-testid={`sheet-photo-remove-${i}`} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 min-w-0 min-h-0 flex items-center justify-center" title="Hapus foto">
                   <X className="w-3 h-3" />

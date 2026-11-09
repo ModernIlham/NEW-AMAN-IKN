@@ -2,6 +2,7 @@ import React, { memo, useState, useCallback } from "react";
 import { unitTerdalam, jalurEselon } from "@/lib/pohonUnit";
 import { Camera, Tag, Images, User, QrCode, CreditCard, Trash2, FileCheck, FileX, Calendar, Lock, ClipboardCheck, Building2, ImageIcon, FileText, ShieldCheck, RefreshCcw as RefreshCcwIcon, Check as CheckIcon } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
+import BadgeDraf from "./BadgeDraf";
 import { labelBarisLokasi } from "@/lib/koordinatAset";
 import { keteranganStiker } from "@/lib/stikerAset";
 import TooltipKetuk from "../ui/TooltipKetuk";
@@ -277,7 +278,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
       >
         {/* Asset name */}
         <h3 className="text-[11px] sm:text-xs font-semibold text-foreground leading-snug line-clamp-2 mb-1 min-h-[1.25rem] sm:min-h-[2rem]" title={asset.asset_name}>
-          {asset.asset_name || "-"}
+          <BadgeDraf assetId={asset.id} className="mr-1 align-middle" />{asset.asset_name || "-"}
         </h3>
 
         {/* Pengguna - full width, above eselon */}

@@ -5,6 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useJangkarDaftarAset } from "@/hooks/usePosisiDaftarAset";
 import { Camera, Briefcase, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
+import BadgeDraf from "./BadgeDraf";
 import IkonStikerBelum from "./IkonStikerBelum";
 import { diDenah, labelBarisLokasi, punyaKoordinat } from "@/lib/koordinatAset";
 import { sisaGaransi } from "../../lib/garansi";
@@ -370,7 +371,10 @@ const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, on
                         sendiri membunuh tooltipnya sendiri. */}
                     <TooltipTrigger asChild>
                       <div className="min-w-0">
-                        <div className="text-[11px] text-foreground/80 font-medium truncate cursor-default">{a.asset_name}</div>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <BadgeDraf assetId={a.id} className="shrink-0" />
+                          <div className="text-[11px] text-foreground/80 font-medium truncate cursor-default">{a.asset_name}</div>
+                        </div>
                       </div>
                     </TooltipTrigger>
                     {a.asset_name && a.asset_name.length > 18 && (
