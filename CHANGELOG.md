@@ -18,7 +18,7 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
-## [#DRAF] Draf otomatis form aset & foto — perubahan tak hilang saat Back/tutup — 2026-11-09
+## [#1113] Draf otomatis form aset & foto — perubahan tak hilang saat Back/tutup — 2026-11-09
 
 - Isian form aset dan foto baru (galeri, kamera biasa, Mode Kamera Penuh)
   tersimpan otomatis sebagai **draf di IndexedDB perangkat** (debounce 0,7 dtk,
