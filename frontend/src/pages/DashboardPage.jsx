@@ -74,6 +74,7 @@ import BatchOperationStatus from "@/components/assets/BatchOperationStatus";
 import { useMuatUlangManual } from "@/hooks/useMuatUlangManual";
 import { useDragDropImport } from "@/hooks/useDragDropImport";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import { muatIndeksDraf } from "@/lib/drafAset";
 import { usePenyegaranAset } from "@/hooks/usePenyegaranAset";
 import { useRekonsiliasiBaris } from "@/hooks/useRekonsiliasiBaris";
 import { usePosisiDaftarAset } from "@/hooks/usePosisiDaftarAset";
@@ -235,6 +236,10 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
   // === FORM / EDIT STATE ===
   const [editAssetForForm, setEditAssetForForm] = useState(null);
+  // Gerbang keluar milik AssetForm (dialog "perubahan belum disimpan" / draf).
+  const formGuardRef = useRef(null);
+  // Indeks chip "Draf" (perubahan tersimpan di perangkat, belum dikirim).
+  useEffect(() => { muatIndeksDraf(user?.id); }, [user?.id]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [formPanelVisible, setFormPanelVisible] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -1495,11 +1500,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (selectedAssets.size > 0) { clearSelection(); return; }
     // Form edit versi mobile adalah overlay (di desktop selalu tampil) — tutup
     // hanya di layar kecil agar tidak mengganggu panel desktop.
+    // Ada perubahan belum disimpan → gerbang form (dialog/draf) yang memutuskan.
+    const lewatGerbangForm = (aksi) => (formGuardRef.current ? formGuardRef.current(aksi) : aksi());
     if (isSidebarOpen && typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
-      handleFormClose(); return;
+      lewatGerbangForm(handleFormClose); return;
     }
     if (showAdvancedFilter) { setShowAdvancedFilter(false); return; }
-    onBack();
+    // Desktop: panel form selalu tampil — keluar ke daftar kegiatan juga lewat gerbang.
+    lewatGerbangForm(onBack);
   }, [kartuIdentity, dialogs, auditOpen, selectedAssets, isSidebarOpen, showAdvancedFilter, closeDialog, setDialog, clearSelection, handleFormClose, setShowAdvancedFilter, onBack]);
   useBackGuard(handleAppBack);
 
@@ -1567,7 +1575,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 
         {/* Satu form persisten: draf, tab, media, dan fokus mengikuti resize. */}
         {perms.canEdit && (
-            <AssetFormSidebar isDesktop={desktopSelection} panelVisible={formPanelVisible} isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} onOpenLokasiDenah={perms.canEdit ? handleOpenLokasiDenah : undefined} />
+            <AssetFormSidebar isDesktop={desktopSelection} panelVisible={formPanelVisible} isOpen={isSidebarOpen} onClose={handleFormClose} activity={activity} categories={categories} editAsset={editAssetForForm} onSubmitSuccess={handleFormSubmitSuccess} onOptimisticSubmit={handleOptimisticSubmit} onSaveAndNavigate={handleSaveAndNavigate} onCameraReviewSaved={handleCameraReviewSaved} onExitToNewAsset={() => setEditAssetForForm(null)} assetIndex={editAssetIndex} totalAssetsInView={mobileAssets.length} hasMoreToLoad={mobileCurrentPage < totalPages} saveQueueLength={queueLength} inventoryMode={inventoryMode} onShowCategoryManager={perms.canManageCategories ? () => openDialog('categoryManager') : undefined} onOpenKartu={handleOpenKartu} onOpenTimeline={handleOpenTimeline} onOpenLokasiDenah={perms.canEdit ? handleOpenLokasiDenah : undefined} closeGuardRef={formGuardRef} />
         )}
 
         {/* MAIN CONTENT */}
