@@ -10,15 +10,36 @@ export function cocokScanPemegang(aset, raw) {
     .some(v => v && String(v).toLowerCase() === kode));
 }
 
+const AWALAN_JPEG = "data:image/jpeg;base64,";
+
+// Validasi base64 TANPA regex. Foto kamera berukuran megabita; regex
+// ber-grup tangkap di atas string sepanjang itu bisa menghabiskan stack
+// backtracking V8 (tergantung perangkat/mesin) dan melempar "Maximum call
+// stack size exceeded" alih-alih pesan yang bisa ditindaklanjuti pengguna.
+function base64Sah(s) {
+  let n = s.length;
+  for (let pad = 0; pad < 2 && n > 0 && s.charCodeAt(n - 1) === 61; pad += 1) n -= 1; // "="
+  if (n === 0) return false;
+  for (let i = 0; i < n; i += 1) {
+    const c = s.charCodeAt(i);
+    const sah = (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 43 || c === 47;
+    if (!sah) return false;
+  }
+  return true;
+}
+
 export function buktiJepretan(dataUrl, pengambilan, existing = []) {
-  const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl || "");
-  if (!match) throw new Error("Hasil kamera tidak dapat dibaca. Ambil foto kembali.");
+  const teks = typeof dataUrl === "string" ? dataUrl : "";
+  if (!teks.startsWith(AWALAN_JPEG)) throw new Error("Hasil kamera tidak dapat dibaca. Ambil foto kembali.");
+  const isi = teks.slice(AWALAN_JPEG.length);
   if (existing.length >= 3) throw new Error("Maksimal tiga foto per laporan.");
   const bytes = s => Math.floor(s.length * 3 / 4) - (s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0);
-  if (existing.reduce((n, p) => n + bytes(p.data_base64), bytes(match[1])) > BATAS_BUKTI) {
+  // Ukuran dicek SEBELUM isi dipindai — foto kebesaran ditolak murah & jelas.
+  if (existing.reduce((n, p) => n + bytes(p.data_base64), bytes(isi)) > BATAS_BUKTI) {
     throw new Error("Total foto maksimal 3 MB. Turunkan resolusi/kualitas di setelan kamera lalu potret kembali.");
   }
-  return { nama: `kamera-${Date.now()}-${existing.length + 1}.jpg`, mime: "image/jpeg", data_base64: match[1], pengambilan };
+  if (!base64Sah(isi)) throw new Error("Hasil kamera tidak dapat dibaca. Ambil foto kembali.");
+  return { nama: `kamera-${Date.now()}-${existing.length + 1}.jpg`, mime: "image/jpeg", data_base64: isi, pengambilan };
 }
 
 export function ringkasPengambilan(p) {

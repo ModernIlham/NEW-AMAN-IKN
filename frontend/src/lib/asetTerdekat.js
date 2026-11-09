@@ -7,9 +7,9 @@ const rad = (d) => (d * Math.PI) / 180;
 
 /** Arah awal (azimut, 0° = utara, searah jarum jam) dari a ke b, derajat 0–360. */
 export function arahDerajat(a, b) {
-  const φ1 = rad(a.lat), φ2 = rad(b.lat), Δλ = rad(b.lng - a.lng);
-  const y = Math.sin(Δλ) * Math.cos(φ2);
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const lat1 = rad(a.lat), lat2 = rad(b.lat), dLng = rad(b.lng - a.lng);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
@@ -68,21 +68,35 @@ export function jumlahDalamRadius(titik, posisi, meter, { hanyaBelum = false } =
   return n;
 }
 
-// ── Jejak perjalanan (hanya di memori tab) ──
-export const JEJAK_MAKS_TITIK = 3000;
-export const JEJAK_AKURASI_MAKS = 50; // fix lebih kasar dari ini tak masuk jejak
+// ── Pekerjaan lapangan dari lokasi Anda ──
 
 /**
- * Apakah fix ini layak menambah titik jejak? Menyaring jitter GPS saat diam:
- * titik baru hanya bila bergeser ≥ max(5 m, setengah akurasi) dari titik
- * jejak terakhir, dan akurasinya cukup baik.
- * → jarak tambahan (meter) bila layak; null bila tidak.
+ * Batas akurasi untuk MENULIS koordinat aset dari GPS — sama dengan gerbang
+ * rana Mode Kamera Penuh (≤ 8 m). Titik aset adalah data resmi; fix ±30 m di
+ * dalam gedung bisa menaruh aset di ruangan sebelah.
  */
-export function langkahJejak(titikTerakhir, fix) {
-  if (!fix || !Number.isFinite(fix.accuracy) || fix.accuracy > JEJAK_AKURASI_MAKS) return null;
-  if (!titikTerakhir) return 0;
-  const jarak = jarakMeter(titikTerakhir, fix);
-  return jarak >= Math.max(5, fix.accuracy / 2) ? jarak : null;
+export const AKURASI_TITIK_M = 8;
+
+/** Fix cukup presisi untuk dijadikan titik aset? */
+export function cukupPresisi(posisi) {
+  return !!posisi && Number.isFinite(posisi.accuracy) && posisi.accuracy <= AKURASI_TITIK_M;
+}
+
+/**
+ * Status pemandu menuju aset tujuan.
+ * `tiba` = jarak ≤ max(5 m, akurasi GPS) — lebih dekat dari itu GPS tak
+ * bisa membedakan, jadi menunggu "0 m" hanya membuat petugas berputar-putar.
+ */
+export function statusPandu(posisi, tujuan) {
+  if (!posisi || !tujuan) return null;
+  const jarak = jarakMeter(posisi, tujuan);
+  const ambang = Math.max(5, Number(posisi.accuracy) || 0);
+  return { jarak, arah: arahDerajat(posisi, tujuan), tiba: jarak <= ambang, ambang };
+}
+
+/** Tautan navigasi Google Maps (untuk aset jauh: lahan, gedung lain). */
+export function urlGoogleMaps(lat, lng) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
 }
 
 /** Arah gerak layak ditampilkan? (GPS memberi heading acak saat diam.) */

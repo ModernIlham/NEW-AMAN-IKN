@@ -18,7 +18,6 @@ function fix(lat = -1.4, accuracy = 8) {
 }
 
 const tombol = () => host.querySelector('[data-testid="peta-lokasi-saya"]');
-const ikuti = () => host.querySelector('[data-testid="peta-lokasi-saya-ikuti"]');
 const pesan = () => host.querySelector('[role="status"]').textContent;
 function lapisan(Jenis) {
   const hasil = [];
@@ -79,23 +78,10 @@ test("Leaflet asli: titik dan radius berpindah tanpa mengganti layer atau melaku
   expect(map.getBounds().contains(marker.getLatLng())).toBe(true);
   expect(map.getZoom()).toBe(zoom);
   expect(fitBounds).toHaveBeenCalledTimes(1);
-  expect(ikuti()).toHaveAttribute("aria-pressed", "true");
+  expect(tombol().title).toMatch(/diikuti/);
 });
 
-test("menggeser peta menghentikan ikuti kamera; titik tetap diperbarui dan tombol ikuti memusatkan kembali", () => {
-  tombol().click();
-  sesi[0].ok(fix());
-  map.setView([-2, 116.7], map.getZoom(), { animate: false });
-  expect(ikuti()).toHaveAttribute("aria-pressed", "false");
-  const pusat = map.getCenter();
-  jest.advanceTimersByTime(1000);
-  sesi[0].ok(fix(-1.5));
-  expect(lapisan(L.Marker)[0].getLatLng().lat).toBe(-1.5);
-  expect(map.getCenter()).toEqual(pusat);
-  ikuti().click();
-  expect(ikuti()).toHaveAttribute("aria-pressed", "true");
-  expect(map.getCenter().lat).toBeCloseTo(-1.5, 3);
-});
+
 
 test("sinyal hilang mempertahankan lokasi terakhir dengan penanda basi, lalu pulih tanpa toast berulang", () => {
   tombol().click();
@@ -125,7 +111,7 @@ test("tombol dapat membatalkan pencarian; mematikan fitur menghapus titik dan ca
   tombol().click();
   expect(lapisan(L.Marker)).toHaveLength(0);
   expect(lapisan(L.Circle)).toHaveLength(0);
-  expect(ikuti().hidden).toBe(true);
+  expect(tombol().title).toMatch(/^Tampilkan/);
 });
 
 test("peta keep-alive menjeda GPS dan kembali memperbarui; map.remove membersihkan watch dan listener", () => {
@@ -160,25 +146,7 @@ test("izin dicabut menghapus titik dan mematikan tombol dengan satu pesan izin",
   expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/Izin lokasi ditolak/));
 });
 
-test("jejak perjalanan: garis bertambah saat bergerak, jitter diam diabaikan, panjang tampil, terhapus saat berhenti", () => {
-  const jejakBtn = () => host.querySelector('[data-testid="peta-lokasi-saya-jejak"]');
-  expect(jejakBtn().hidden).toBe(true);
-  tombol().click();
-  expect(jejakBtn().hidden).toBe(false);
-  sesi[0].ok(fix(-1.4, 8));
-  jest.advanceTimersByTime(1000);
-  sesi[0].ok(fix(-1.40001, 8)); // ±1 m: jitter
-  jest.advanceTimersByTime(1000);
-  sesi[0].ok(fix(-1.4002, 8)); // ±22 m: langkah nyata
-  const [garis] = lapisan(L.Polyline).filter((l) => !(l instanceof L.Circle));
-  expect(garis.getLatLngs()).toHaveLength(2);
-  expect(pesan()).toMatch(/jejak 2\d,\d m/);
-  jejakBtn().click(); // sembunyikan
-  expect(lapisan(L.Polyline).filter((l) => !(l instanceof L.Circle))).toHaveLength(0);
-  jejakBtn().click();
-  tombol().click(); // berhenti
-  expect(lapisan(L.Polyline)).toHaveLength(0);
-});
+
 
 test("kerucut arah tampil hanya saat bergerak dengan heading sah; onPosisi menerima fix & null", () => {
   kontrol.destroy();
@@ -197,25 +165,68 @@ test("kerucut arah tampil hanya saat bergerak dengan heading sah; onPosisi mener
   expect(onPosisi).toHaveBeenLastCalledWith(null);
 });
 
-test("layar tetap menyala: hanya bila didukung, atas permintaan, dilepas saat lokasi dimatikan", async () => {
-  const lepas = jest.fn(() => Promise.resolve());
-  const request = jest.fn(() => Promise.resolve({ release: lepas, addEventListener: jest.fn() }));
-  Object.defineProperty(navigator, "wakeLock", { configurable: true, value: { request } });
-  try {
-    kontrol.destroy();
-    kontrol = pasangLokasiSaya(map);
-    const layar = () => host.querySelector('[data-testid="peta-lokasi-saya-layar"]');
-    expect(layar().hidden).toBe(true);
-    tombol().click();
-    expect(layar().hidden).toBe(false);
-    expect(request).not.toHaveBeenCalled(); // tidak otomatis
-    layar().click();
-    await Promise.resolve(); await Promise.resolve();
-    expect(request).toHaveBeenCalledWith("screen");
-    expect(layar()).toHaveAttribute("aria-pressed", "true");
-    tombol().click();
-    expect(lepas).toHaveBeenCalled();
-  } finally {
-    delete navigator.wakeLock;
-  }
+
+
+
+
+
+
+
+
+test("SATU tombol seukuran zoom: mati → nyala+ikuti → (geser peta) kembali ke lokasi → mati", () => {
+  expect(host.querySelectorAll(".peta-lokasi-bar button")).toHaveLength(1);
+  expect(tombol().className).toBe("peta-lokasi-btn");
+  expect(tombol().style.width).toBe("");
+  tombol().click();
+  sesi[0].ok(fix());
+  expect(tombol().title).toMatch(/diikuti/);
+  // Pengguna menggeser peta → tidak mengikuti; titik tetap diperbarui.
+  map.setView([-2, 116.7], map.getZoom(), { animate: false });
+  expect(tombol().title).toBe("Kembali ke lokasi Anda");
+  expect(pesan()).toMatch(/Peta digeser — ketuk ◎/);
+  const pusat = map.getCenter();
+  jest.advanceTimersByTime(3000);
+  sesi[0].ok(fix(-1.5));
+  expect(lapisan(L.Marker)[0].getLatLng().lat).toBe(-1.5);
+  expect(map.getCenter()).toEqual(pusat);
+  // Ketuk: kembali ke lokasi (GPS TIDAK dimatikan).
+  tombol().click();
+  expect(map.getCenter().lat).toBeCloseTo(-1.5, 3);
+  expect(tombol().title).toMatch(/diikuti/);
+  expect(gps.clearWatch).not.toHaveBeenCalled();
+  expect(pesan()).toMatch(/Kembali mengikuti/);
+  // Ketuk lagi saat mengikuti: mati.
+  tombol().click();
+  expect(gps.clearWatch).toHaveBeenCalled();
+  expect(lapisan(L.Marker)).toHaveLength(0);
+  expect(pesan()).toBe("Lokasi dimatikan");
+});
+
+test("garis pandu ke tujuan: tampil Anda+aset sekaligus, ikut bergerak, hilang saat dihapus/lokasi mati", () => {
+  tombol().click();
+  sesi[0].ok(fix());
+  const garis = () => lapisan(L.Polyline).filter((l) => !(l instanceof L.Circle));
+  kontrol.setTujuan({ lat: -1.402, lng: 116.702 });
+  expect(garis()).toHaveLength(1);
+  expect(map.getBounds().contains([-1.402, 116.702])).toBe(true);
+  expect(map.getBounds().contains([-1.4, 116.7])).toBe(true);
+  expect(tombol().title).toMatch(/diikuti/); // gerakan kamera milik aplikasi, bukan pengguna
+  jest.advanceTimersByTime(1000);
+  sesi[0].ok(fix(-1.401));
+  expect(garis()[0].getLatLngs()[0].lat).toBeCloseTo(-1.401, 5);
+  kontrol.setTujuan(null);
+  expect(garis()).toHaveLength(0);
+  kontrol.setTujuan({ lat: -1.402, lng: 116.702 });
+  tombol().click(); // matikan
+  expect(garis()).toHaveLength(0);
+});
+
+test("berhentiMengikuti (geseran milik aplikasi) tidak memunculkan pesan 'Peta digeser'", () => {
+  tombol().click();
+  sesi[0].ok(fix());
+  jest.advanceTimersByTime(3000);
+  kontrol.berhentiMengikuti();
+  map.setView([-2, 116.7], map.getZoom(), { animate: false });
+  expect(tombol().title).toBe("Kembali ke lokasi Anda");
+  expect(pesan()).not.toMatch(/Peta digeser/);
 });

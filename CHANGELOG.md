@@ -18,6 +18,27 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1117] Lokasi Anda dirancang ulang untuk kerja lapangan: pandu, titik = lokasi saya, tambah di sini — 2026-11-09
+
+- **Dihapus** (umpan balik pemilik: kurang bermanfaat): jejak perjalanan, tombol
+  ikuti terpisah, tombol layar tetap menyala. Kolom tombol kini hanya **satu
+  tombol ◎ seukuran zoom +/−**: mati → nyala+ikuti; peta digeser → ketuk kembali
+  ke lokasi; mengikuti → ketuk mati.
+- **Pandu ke aset**: garis ungu + jarak & arah langsung; tiba (≤ max(5 m,
+  akurasi)) → getar, "Anda di lokasi …", tombol Edit/foto & Titik = lokasi saya;
+  > 300 m → Rute Google Maps. Dari daftar terdekat atau popup pin.
+- **Titik = lokasi saya** (popup pin & saat tiba) dan **Tambah aset di lokasi
+  saya** (panel) — bergerbang akurasi **≤ 8 m** seperti rana kamera; dua ketuk
+  untuk memindah titik; simpan lewat antrean luring yang sama dengan geser pin.
+- Panel lapangan menampilkan pil **GPS ±N m** berwarna; kotak status di Peta
+  Aset hanya untuk pesan & masalah (tak lagi menutupi popup). Popup pin & popup
+  tambah aset tak lagi tertutup panel/kolom tombol.
+- Diuji end-to-end di Chromium nyata (komponen peta penuh, GPS simulasi, HP):
+  14/14 alur lulus tanpa galat JS.
+- Perbaikan sampingan (CI): validasi foto kamera Portal Pemegang tak lagi
+  memakai regex ber-grup atas string bermegabita — di sebagian mesin V8 regex
+  itu melempar "Maximum call stack size exceeded" alih-alih pesan "maks 3 MB".
+
 ## [#1116] Lokasi Anda di peta: aset terdekat, jejak, arah gerak, layar menyala — 2026-11-09
 
 - **Aset terdekat:** panel di Peta Aset saat lokasi aktif — jumlah aset ≤ 50 m,

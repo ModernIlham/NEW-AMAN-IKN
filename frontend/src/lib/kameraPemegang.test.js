@@ -19,3 +19,11 @@ test("hasil kamera menjaga metadata dan batas foto/ukuran tanpa kompresi ulang",
   expect(() => buktiJepretan(`data:image/jpeg;base64,${"A".repeat(4 * 1024 * 1024 + 4)}`, meta)).toThrow("3 MB");
   expect(() => buktiJepretan("javascript:alert(1)", meta)).toThrow("tidak dapat dibaca");
 });
+
+test("validasi base64 tanpa regex: isi rusak & awalan salah ditolak, foto besar sah diterima", () => {
+  const meta = { waktu: "2026-10-03T10:00:00Z", gps: null };
+  ["data:image/jpeg;base64,", "data:image/jpeg;base64,YQ=x", "data:image/jpeg;base64,Y Q==", "data:image/jpeg;base64,YQ===",
+    "data:image/png;base64,YQ==", null, 42].forEach((v) => expect(() => buktiJepretan(v, meta)).toThrow("tidak dapat dibaca"));
+  const besar = buktiJepretan(`data:image/jpeg;base64,${"QUFB".repeat(700 * 1024)}`, meta); // ±2,1 MB
+  expect(besar.data_base64).toHaveLength(4 * 700 * 1024);
+});
