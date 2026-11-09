@@ -1,16 +1,16 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import axios from "axios";
-import { openDB } from "idb";
 import { toast } from "sonner";
 import { getApiError } from "../lib/utils";
 import { checkReachable, REACHABILITY_RETRY_MS } from "../lib/connectivity";
 import { summarizeSyncStatuses } from "../lib/syncStatus";
-import { resolveBaseVersion } from "../lib/occ";
 import { terapkanHeaderSatker, getSatkerAktif } from "../lib/satkerAktif";
-import { gabungPatch } from "../lib/gabungPatch";
-import { tertundaUntukEnqueue, tertundaUntukKegagalan } from "../lib/gabungAntrean";
-import { idPenggunaAktif, bolehReplay } from "../lib/pemilikAntrean";
+import { idPenggunaAktif } from "../lib/pemilikAntrean";
 import { keputusanGagalTulisAntrean } from "../lib/idbErrors";
+import {
+  operationId, appendOperation, readOperations, claimOperation, renewOperation,
+  acknowledgeOperation, failOperation, retryOperations, cancelOperations, renumberOperation, hasMediaMutation,
+} from "../lib/saveOutbox";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -67,741 +67,293 @@ function getAuditHeaders() {
 }
 
 const MAX_CONCURRENT = 3;
-
-// --- Persistent save queue (IndexedDB) ---
-// Every queued/failed save is written through to IndexedDB so a crash, page
-// reload, or 401-logout → re-login doesn't lose the user's work. Items are
-// removed only when the server confirms the save or the user dismisses them.
-const QUEUE_DB_NAME = "aman_save_queue";
-const QUEUE_STORE = "items";
-
-function getQueueDB() {
-  return openDB(QUEUE_DB_NAME, 1, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains(QUEUE_STORE)) {
-        db.createObjectStore(QUEUE_STORE, { keyPath: "statusKey" });
-      }
-    },
-  });
+function downloadPending(items) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify({ schema: "aman-outbox-backup-v1", items })], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url; link.download = "aman-simpanan-tertunda.json";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// Strip non-serializable fields (resolve/reject) before storing/persisting
-function toPlainItem(item, statusKey) {
-  const { tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, hadConflict, locked, queuedAt, nama_kegiatan, satkerAktif, antreanId, pemilik } = item;
-  return {
-    statusKey,
-    // Stempel PEMILIK (temuan audit G3): IndexedDB hidup per-origin, bukan
-    // per-akun. Tanpa stempel ini, rehidrasi di perangkat dinas bersama
-    // memutar ulang simpanan akun LAIN memakai token & identitas audit akun
-    // yang sedang login. Lihat lib/pemilikAntrean.js.
-    pemilik: pemilik ?? idPenggunaAktif(),
-    // Identitas SATU simpanan (beda dari statusKey, yang dipakai bersama oleh
-    // semua simpanan atas aset yang sama). Dipakai memastikan sebuah simpanan
-    // hanya menghapus rekamannya SENDIRI — lihat processNext.
-    antreanId: antreanId ?? null,
-    tempId,
-    payload,
-    isEdit: !!isEdit,
-    editId: editId ?? null,
-    usePatch: !!usePatch,
-    baseVersion: baseVersion ?? null,
-    idempotencyKey: idempotencyKey ?? null,
-    nama_kegiatan: nama_kegiatan || "",
-    // Satker aktif SAAT di-enqueue — direplay apa adanya agar simpanan tak
-    // salah dikirim ke satker lain yang aktif saat sinkron (temuan tinjauan).
-    satkerAktif: satkerAktif ?? "",
-    hadConflict: !!hadConflict,
-    // 423 Locked (kegiatan disahkan): retry otomatis tidak akan pernah
-    // berhasil — auto-flush melewati item ini; hanya retry/dismiss manual.
-    locked: !!locked,
-    queuedAt: queuedAt || new Date().toISOString(),
-  };
-}
-
-async function persistQueueItem(item, statusKey, onKuotaPenuh) {
-  try {
-    const db = await getQueueDB();
-    await db.put(QUEUE_STORE, toPlainItem(item, statusKey));
-  } catch (e) {
-    // Best-effort: the in-memory queue keeps working without persistence.
-    // TAPI kuota penuh BUKAN "best-effort yang wajar" — antrean lalu hanya
-    // hidup di memori dan lenyap begitu tab ditutup, padahal chip barisnya
-    // tetap menampilkan "queued". Naikkan ke pemanggil agar pengguna diberi
-    // tahu; klasifikasinya ada di lib/idbErrors (diuji terpisah).
-    if (keputusanGagalTulisAntrean(e) === "beri_tahu_pengguna") onKuotaPenuh?.();
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[useOptimisticQueue] Failed to persist queue item:", e?.message);
-    }
-  }
-}
-
-async function removePersistedItem(statusKey, antreanId) {
-  try {
-    const db = await getQueueDB();
-    // Kunci rekaman adalah statusKey, yang dipakai BERSAMA oleh semua simpanan
-    // atas aset yang sama. Menghapus tanpa memeriksa pemiliknya berarti sebuah
-    // simpanan yang berhasil bisa membuang rekaman simpanan LAIN atas aset itu
-    // yang baru saja gagal — muatannya lenyap dari perangkat, dan chip-nya
-    // terlanjur berubah "saved" sehingga tak ada yang tahu.
-    if (antreanId != null) {
-      const ada = await db.get(QUEUE_STORE, statusKey);
-      if (ada && ada.antreanId != null && ada.antreanId !== antreanId) return;
-    }
-    await db.delete(QUEUE_STORE, statusKey);
-  } catch {
-    // ignore — TTL-less store, an orphan is re-deduped by idempotency key
-  }
-}
-
-async function loadPersistedItems() {
-  try {
-    const db = await getQueueDB();
-    return await db.getAll(QUEUE_STORE);
-  } catch {
-    return [];
-  }
-}
-
-// Generate a short idempotency key for each save attempt
-function genIdempotencyKey() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-export function useOptimisticQueue({ onItemSaved, onItemFailed, onRowSynced, onConflict, onItemDismissed, onRehydrate, getLatestVersion, onKuotaPenuh }) {
+export function useOptimisticQueue(options) {
+  const callbacks = useRef(options);
+  callbacks.current = options;
   const [syncStatuses, setSyncStatuses] = useState({});
   const [queueLength, setQueueLength] = useState(0);
-  const queueRef = useRef([]);
-  const activeCountRef = useRef(0);
-  const failedItemsRef = useRef({});
-  const failTimersRef = useRef({});
-  // Track whether a full refresh is needed (accumulated after saves complete)
-  const needsRefreshRef = useRef(false);
-  // Synchronous mirror of syncStatuses so queue callbacks can read fresh state
-  const statusesRef = useRef({});
-  // editIds with a request in flight — same-asset saves are serialized behind them
-  const inFlightEditsRef = useRef(new Set());
-  // Last confirmed server version per editId (from a completed save's response)
-  const lastSavedVersionsRef = useRef({});
-  const flushGuardRef = useRef(false);
-  // statusKey yang baru saja di-"Abaikan" — penyelesaian in-flight-nya diabaikan
-  const dismissedRef = useRef(new Set());
-  const rehydratedRef = useRef(false);
+  const pendingRef = useRef([]);
+  const volatile = useRef(new Map());
+  const bodies = useRef(new Map());
+  const completions = useRef(new Map());
+  const active = useRef(new Map());
+  const worker = useRef(operationId());
+  const mounted = useRef(false);
+  const refreshing = useRef(Promise.resolve());
+  const pumping = useRef(false);
+  const needsRefresh = useRef(false);
+  const pumpRef = useRef(null);
+  const owner = idPenggunaAktif();
+  const reportedQuota = useRef(false);
 
-  // Parent callbacks that may be recreated each render — read via refs
-  const getLatestVersionRef = useRef(getLatestVersion);
-  const onRehydrateRef = useRef(onRehydrate);
-  const onKuotaPenuhRef = useRef(onKuotaPenuh);
-  useEffect(() => {
-    getLatestVersionRef.current = getLatestVersion;
-    onRehydrateRef.current = onRehydrate;
-    onKuotaPenuhRef.current = onKuotaPenuh;
-  });
-
-  // Kuota IndexedDB penuh: dilaporkan SEKALI per sesi. Sekali penuh, setiap
-  // simpanan berikutnya juga gagal — tanpa penjaga ini setiap ketukan Simpan
-  // memunculkan toast baru, dan yang terjadi justru pengguna belajar
-  // mengabaikannya. Satu peringatan yang menetap (duration: 0) lebih efektif
-  // daripada sepuluh yang berkedip.
-  const kuotaDilaporkanRef = useRef(false);
-  const laporKuotaPenuh = useCallback(() => {
-    if (kuotaDilaporkanRef.current) return;
-    kuotaDilaporkanRef.current = true;
-    onKuotaPenuhRef.current?.();
-  }, []);
-
-  const updateStatus = useCallback((id, status, error, extra) => {
-    // `extra` menempelkan penanda tambahan (mis. { locked: true } untuk 423)
-    // agar summarizeSyncStatuses bisa membedakan gagal-jaringan (bisa di-flush)
-    // dari gagal-terkunci (perlu tindakan manual). Selalu ditulis ulang penuh,
-    // jadi penanda hanya ada saat status ini memang membawanya.
-    statusesRef.current = { ...statusesRef.current, [id]: { status, error: error || null, ts: Date.now(), ...(extra || {}) } };
-    setSyncStatuses(statusesRef.current);
-  }, []);
-
-  const clearStatus = useCallback((id) => {
-    const next = { ...statusesRef.current };
-    delete next[id];
-    statusesRef.current = next;
-    setSyncStatuses(next);
-  }, []);
-
-  useEffect(() => {
-    const timers = failTimersRef.current;
-    return () => {
-      Object.values(timers).forEach(t => clearTimeout(t));
-    };
-  }, []);
-
-  const processNext = useCallback(async () => {
-    if (activeCountRef.current >= MAX_CONCURRENT) return;
-    if (queueRef.current.length === 0) return;
-
-    // Serialize same-asset saves: skip items whose editId is already in flight
-    // (a rapid double-save of one row would otherwise 409 against itself).
-    let idx = -1;
-    for (let i = 0; i < queueRef.current.length; i++) {
-      const it = queueRef.current[i];
-      if (it.isEdit && it.editId && inFlightEditsRef.current.has(it.editId)) {
-        it.awaitingPrior = true; // dispatched later with the prior save's returned version
-        continue;
-      }
-      idx = i;
-      break;
+  const storageError = useCallback(error => {
+    if (!reportedQuota.current && keputusanGagalTulisAntrean(error) === "beri_tahu_pengguna") {
+      reportedQuota.current = true;
+      callbacks.current.onKuotaPenuh?.();
     }
-    if (idx === -1) return; // everything left is waiting behind an in-flight same-asset save
+    toast.error("Penyimpanan lokal gagal. Jangan tutup halaman; periksa ruang penyimpanan lalu coba lagi.",
+      { id: "antrean-storage-error", duration: Infinity });
+  }, []);
 
-    const item = queueRef.current.splice(idx, 1)[0];
-    setQueueLength(queueRef.current.length);
-
-    const statusKey = item.isEdit ? item.editId : item.tempId;
-    activeCountRef.current++;
-    if (item.isEdit && item.editId) inFlightEditsRef.current.add(item.editId);
-    updateStatus(statusKey, "saving");
-
-    // Kirim If-Match dengan versi TERTINGGI yang kita ketahui agar tak self-409:
-    // edit berantai atas aset yang sama (atau yang menunggu di belakang simpanan
-    // lain) sudah menaikkan versi server; `baseVersion` item bisa jadi versi saat
-    // form dimuat. resolveBaseVersion mengambil max(base, lastSaved) — tak pernah
-    // menurunkan versi, jadi bentrok orang lain yang benar-benar baru tetap 409.
-    if (item.isEdit && item.editId) {
-      const resolved = resolveBaseVersion(item.baseVersion, lastSavedVersionsRef.current[item.editId]);
-      if (resolved != null) item.baseVersion = resolved;
-    }
-
-    // Build per-request headers for OCC + idempotency + audit stamping
-    const headers = {
-      "Idempotency-Key": item.idempotencyKey,
-      ...getAuditHeaders(),
-    };
-    if (item.isEdit && item.baseVersion != null) {
-      headers["If-Match"] = String(item.baseVersion);
-    }
-
-    // Replay dengan satker SAAT enqueue (bukan yang aktif kini) — lihat interceptor.
-    const _sa = item.satkerAktif ?? "";
-    try {
-      let result;
-      if (item.isEdit && item.editId) {
-        if (item.usePatch) {
-          result = await axiosLargeUpload.patch(`${API}/assets/${item.editId}`, item.payload, { headers, saOverride: _sa });
-        } else {
-          result = await axiosLargeUpload.put(`${API}/assets/${item.editId}`, item.payload, { headers, saOverride: _sa });
-        }
-      } else {
-        result = await axiosLargeUpload.post(`${API}/assets`, item.payload, { headers, saOverride: _sa });
+  const refresh = useCallback(() => {
+    const task = async () => {
+      if (!mounted.current || !owner || owner !== idPenggunaAktif()) return;
+      const previous = new Map(pendingRef.current.map(item => [item.antreanId, item]));
+      const { states, items } = await readOperations(owner, bodies.current);
+      if (!mounted.current || owner !== idPenggunaAktif()) return;
+      const saved = [];
+      const dismissedKeys = new Set();
+      const next = {};
+      pendingRef.current = [...items, ...[...volatile.current.values()].filter(item => item.pemilik === owner)];
+      for (const item of pendingRef.current) {
+        const state = item.state || {};
+        const status = { ready: "queued", sending: "saving", failed: "failed", conflict: "conflict", locked: "failed" }[state.status] || "failed";
+        const current = next[item.statusKey];
+        // The oldest blocking operation determines the row's action.
+        if (!current) next[item.statusKey] = { status, error: state.error || null, ts: Date.now(),
+          ...(["locked", "rejected"].includes(state.status) ? { locked: true } : {}) };
       }
-
-      if (dismissedRef.current.has(statusKey)) {
-        // Pengguna sudah membuang baris ini saat permintaan terbang — jangan
-        // hidupkan lagi status/registrasinya. removePersistedItem tetap aman
-        // (ber-antreanId).
-        removePersistedItem(statusKey, item.antreanId);
-        item.resolve?.(result);
-        return;
-      }
-      // Lepaskan hanya simpanan yang selesai SEBELUM memberi tahu layar.
-      // Simpanan berikutnya harus tetap terbaca sebagai pending agar respons
-      // pertama tidak menimpa nilai optimistis yang lebih baru.
-      if (failedItemsRef.current[statusKey]?.antreanId === item.antreanId) {
-        delete failedItemsRef.current[statusKey];
-      }
-      const masihTertunda = !!failedItemsRef.current[statusKey];
-      if (!masihTertunda) updateStatus(statusKey, "saved");
-      // Clear only if still 'saved' — a follow-up save of the same row may have
-      // set a newer status (queued/saving/failed) that this timer must not wipe
-      setTimeout(() => {
-        if (statusesRef.current[statusKey]?.status === "saved") clearStatus(statusKey);
-      }, 3000);
-
-      // Unlock the saved row
-      if (item.isEdit && item.editId && !masihTertunda) {
-        onItemSaved?.(item.editId);
-      }
-
-      // Notify parent with server data for targeted row update (no full refresh!)
-      const serverData = result?.data;
-      if (serverData) {
-        if (item.isEdit && item.editId && serverData.version != null) {
-          lastSavedVersionsRef.current[item.editId] = resolveBaseVersion(
-            serverData.version, lastSavedVersionsRef.current[item.editId]);
-        }
-        onRowSynced?.(statusKey, serverData, item.isEdit);
-      }
-
-      // Mark that a refresh is needed when editing session ends
-      needsRefreshRef.current = true;
-
-      if (failTimersRef.current[statusKey]) {
-        clearTimeout(failTimersRef.current[statusKey]);
-        delete failTimersRef.current[statusKey];
-      }
-      // Hanya buang rekaman milik SIMPANAN INI. Bila sementara itu sudah ada
-      // simpanan lain atas aset yang sama yang mendaftar (mis. yang tadi gagal
-      // lalu didaftarkan ulang), rekamannya harus tetap hidup agar bisa
-      // di-replay — bukan ikut terhapus oleh keberhasilan kita.
-      removePersistedItem(statusKey, item.antreanId); // confirmed by server
-
-      item.resolve?.(result);
-    } catch (err) {
-      if (dismissedRef.current.has(statusKey)) {
-        // Baris sudah dibuang pengguna saat permintaan terbang — kegagalan ini
-        // tak boleh mendaftarkan ulang item (failedItemsRef/persist) ataupun
-        // menghidupkan chip-nya. Janji ditutup dan selesai.
-        item.reject?.(err);
-        return;
-      }
-      // --- Handle 409 Conflict (OCC) separately ---
-      const isConflict = err?.response?.status === 409;
-      if (isConflict && item.isEdit && item.editId) {
-        const conflictDetail = err.response?.data?.detail || {};
-        updateStatus(statusKey, "conflict", conflictDetail.message || "Data telah diubah oleh pengguna lain.");
-        // Clear after a moment (mirrors the saved branch) so the row becomes
-        // clickable again — the user re-edits on the fresh server version
-        // that onConflict merges into the local list.
-        setTimeout(() => {
-          if (statusesRef.current[statusKey]?.status === "conflict") clearStatus(statusKey);
-        }, 4000);
-        // Notify parent — they can refresh the row and optionally re-enqueue
-        onConflict?.(item.editId, conflictDetail);
-        // Unlock since save failed — let user re-acquire lock after refresh
-        onItemFailed?.(item.editId);
-        // Keep failed item for potential manual retry after user review.
-        // `hadConflict` makes retry() refresh the base version + mint a new key.
-        const stored = toPlainItem({ ...item, hadConflict: true }, statusKey);
-        failedItemsRef.current[statusKey] = stored;
-        persistQueueItem(stored, statusKey, laporKuotaPenuh);
-        if (failTimersRef.current[statusKey]) clearTimeout(failTimersRef.current[statusKey]);
-        failTimersRef.current[statusKey] = setTimeout(() => {
-          delete failTimersRef.current[statusKey];
-        }, 120000);
-        item.reject?.(err);
-        return;
-      }
-
-      // --- Auto-renumber NUP untuk aset "dummy" yang bentrok (mis. dibuat
-      // offline oleh perangkat lain) --- ambil NUP berikutnya dari server lalu
-      // coba ulang otomatis (maks 3x). Hanya untuk CREATE kategori dummy yang
-      // NUP-nya memang dinomori otomatis — tidak mengubah NUP yang diketik user.
-      const detail = err?.response?.data?.detail;
-      const isNupCollision = err?.response?.status === 400 && typeof detail === "string"
-        && /NUP/.test(detail) && /sudah digunakan/i.test(detail);
-      if (!item.isEdit && isNupCollision && /dummy/i.test(item.payload?.category || "") && (item.nupRetries || 0) < 3) {
-        try {
-          const params = new URLSearchParams({ activity_id: item.payload.activity_id || "" });
-          if (item.payload.asset_code) params.set("asset_code", item.payload.asset_code);
-          const r = await axiosLargeUpload.get(`${API}/assets/next-nup?${params}`, { headers: getAuditHeaders(), saOverride: item.satkerAktif ?? "" });
-          const nextNup = r?.data?.next_nup;
-          if (nextNup && String(nextNup) !== String(item.payload.NUP)) {
-            const newItem = {
-              ...item,
-              payload: { ...item.payload, NUP: String(nextNup) },
-              idempotencyKey: genIdempotencyKey(),
-              nupRetries: (item.nupRetries || 0) + 1,
-            };
-            // WRITE-THROUGH: samakan salinan persist + failedItemsRef dengan retry
-            // yang benar-benar berjalan. Tanpa ini, IndexedDB tetap menyimpan
-            // {key lama, NUP lama}; bila crash setelah retry sukses, rehydrate
-            // me-replay NUP lama → aset KEMBAR. Sekarang yang di-replay adalah
-            // item ber-NUP baru + key barunya (server bisa dedup lewat idempotensi).
-            failedItemsRef.current[statusKey] = toPlainItem(newItem, statusKey);
-            persistQueueItem(newItem, statusKey, laporKuotaPenuh);
-            updateStatus(statusKey, "queued");
-            queueRef.current.push(newItem);
-            setQueueLength(queueRef.current.length);
-            toast.info(`NUP ${item.payload.NUP} sudah dipakai — dinomori ulang otomatis ke ${nextNup}`, { duration: 3500 });
-            item.reject?.(err); // promise asli sudah tak ditunggu; item baru yang diproses
-            return; // finally akan memicu processNext untuk item ber-NUP baru
+      for (const state of states) {
+        if (state.status === "cancelled" && previous.has(state.antreanId)) {
+          const item = previous.get(state.antreanId);
+          completions.current.get(state.antreanId)?.resolve(null);
+          completions.current.delete(state.antreanId);
+          if (!dismissedKeys.has(item.statusKey) && !pendingRef.current.some(it => it.statusKey === item.statusKey)) {
+            dismissedKeys.add(item.statusKey);
+            callbacks.current.onItemDismissed?.(item.statusKey, item);
+            if (item.isEdit) callbacks.current.onItemSaved?.(item.editId);
           }
-        } catch { /* gagal ambil NUP baru → jatuh ke penanganan gagal biasa */ }
-      }
-
-      // 401 SAJA: token kedaluwarsa / sesi dicabut. Pesan mentah server untuk
-      // ini ("Invalid authorization header", "Not authenticated") terbaca
-      // seperti kerusakan aplikasi, padahal obatnya sederhana — masuk lagi.
-      // Yang paling perlu dikatakan justru bagian keduanya: data yang belum
-      // terkirim TIDAK hilang, ia menunggu di perangkat (antrean ini memang
-      // bertahan melintasi logout → login, lihat catatan rehidrasi di atas).
-      //
-      // 403 SENGAJA TIDAK ikut: itu bukan sesi habis melainkan hak akses
-      // (viewer read-only, satker lain). Masuk ulang tak akan menolongnya, dan
-      // detail dari server justru pesan yang benar untuk kasus itu.
-      const _sesiHabis = err?.response?.status === 401;
-      const _baseErr = _sesiHabis
-        ? "Sesi berakhir — masuk kembali lalu tekan Sinkronkan. Data Anda masih tersimpan di perangkat."
-        : getApiError(err, err.code === "ECONNABORTED" ? "Koneksi timeout" : "Gagal menyimpan");
-      // Identitas aset agar mudah dicari di antara puluhan ribu aset & banyak
-      // kegiatan (Kode Aset · NUP · Kegiatan). nama_kegiatan di-stamp ke payload
-      // saat enqueue (DashboardPage) karena hook tak tahu nama kegiatan.
-      const _p = item.payload || {};
-      const _ident = [
-        _p.asset_code && `Kode ${_p.asset_code}`,
-        _p.NUP && `NUP ${_p.NUP}`,
-        item.nama_kegiatan && `Keg. ${item.nama_kegiatan}`,
-      ].filter(Boolean).join(" · ");
-      const errorMsg = _ident ? `[${_ident}] ${_baseErr}` : _baseErr;
-      // 423 Locked: kegiatan sudah disahkan — retry tidak akan pernah berhasil,
-      // jadi tampilkan toast yang jelas (save berjalan di background sehingga
-      // form sudah tertutup dan tidak bisa menampilkan errornya sendiri).
-      const isLocked = err?.response?.status === 423;
-      if (isLocked) {
-        toast.error(errorMsg || "Kegiatan sudah disahkan dan terkunci", { duration: 6000 });
-      }
-      // 423 ditandai {locked} → dihitung sebagai "perlu tindakan" (bukan pending
-      // sinkron) sehingga tombol Sinkronkan tidak menyala selamanya untuk
-      // kegiatan terkunci yang flush-nya memang selalu dilewati (flushPending).
-      updateStatus(statusKey, "failed", errorMsg, isLocked ? { locked: true } : undefined);
-
-      // Re-register + persist so retry/rehydrate always have the payload (a
-      // prior success of the same statusKey may have removed the entry).
-      // `locked` mengikuti kegagalan TERAKHIR: item 423 tidak ikut auto-flush
-      // (lihat flushPending) agar antrian offline tidak me-replay + toast
-      // berulang setiap reconnect terhadap kegiatan yang sudah terkunci.
-      // SIMPANAN PERTAMA YANG JUGA GAGAL TAK BOLEH TERTIMPA (temuan audit
-      // adversarial). Saat simpanan lama masih TERBANG, enqueue sengaja
-      // MELEWATI penggabungan — kalau yang lama ternyata sampai ke server,
-      // menggabungnya berarti `photo_ops.add` diterapkan dua kali (foto kembar).
-      // Tetapi begitu yang lama akhirnya GAGAL juga, ia terbukti TIDAK pernah
-      // diterapkan, dan kini dua rekaman berebut satu kunci `statusKey`:
-      // yang belakangan menghapus muatan yang pertama beserta fotonya, senyap.
-      // Di titik ini penggabungan justru aman DAN wajib — keduanya dihitung
-      // terhadap keadaan server yang sama dan sama-sama belum diterapkan.
-      // Aturannya dipisah ke lib/gabungAntrean.js agar bisa diuji (hook ini
-      // tak dapat dirender — repo tak memasang @testing-library).
-      const sebelumnya = tertundaUntukKegagalan(
-        failedItemsRef.current[statusKey], item);
-      const itemSimpan = { ...item, locked: isLocked };
-      if (sebelumnya) {
-        itemSimpan.payload = gabungPatch(sebelumnya.payload, item.payload);
-        // Patokan versi ikut yang TERTUNDA lebih dulu — patch gabungan ini
-        // dihitung terhadap keadaan server itu, bukan yang lebih baru.
-        if (sebelumnya.baseVersion != null) itemSimpan.baseVersion = sebelumnya.baseVersion;
-        // Kunci idempotensi lama menempel pada muatan yang kini sudah berubah;
-        // dipakai ulang, server bisa memutar balik respons untuk isi yang keliru.
-        itemSimpan.idempotencyKey = null;
-      }
-      const stored = toPlainItem(itemSimpan, statusKey);
-      failedItemsRef.current[statusKey] = stored;
-      persistQueueItem(stored, statusKey, laporKuotaPenuh);
-
-      if (item.isEdit && item.editId) {
-        if (failTimersRef.current[statusKey]) clearTimeout(failTimersRef.current[statusKey]);
-        failTimersRef.current[statusKey] = setTimeout(() => {
-          onItemFailed?.(item.editId);
-          delete failTimersRef.current[statusKey];
-        }, 60000);
-      }
-
-      item.reject?.(err);
-    } finally {
-      if (item.isEdit && item.editId) inFlightEditsRef.current.delete(item.editId);
-      activeCountRef.current--;
-      processNext();
-    }
-  }, [updateStatus, clearStatus, onItemSaved, onItemFailed, onRowSynced, onConflict, laporKuotaPenuh]);
-
-  const enqueue = useCallback(({ tempId, payload, isEdit, editId, usePatch, baseVersion, idempotencyKey, nama_kegiatan, satkerAktif }) => {
-    const statusKey = isEdit ? editId : tempId;
-
-    // PEMBATALAN HANYA BERLAKU UNTUK SIMPANAN YANG SEDANG TERBANG SAAT ITU.
-    // `dismissedRef` menahan kunci selama 5 menit agar penyelesaian permintaan
-    // yang tak bisa ditarik dari jaringan tak menghidupkan kembali baris yang
-    // sudah dibuang. Tetapi simpanan BARU atas aset yang sama adalah kehendak
-    // pengguna yang baru — tanpa pembersihan ini, mengedit ulang aset itu dalam
-    // 5 menit setelah membatalkan membuat jalur sukses/gagal keluar lebih awal:
-    // baris tak pernah diperbarui, chip tak pernah bersih, dan pengguna mengira
-    // simpanannya hilang (temuan audit adversarial atas perbaikan G3 sendiri).
-    dismissedRef.current.delete(statusKey);
-
-    // SATU ASET BISA PUNYA LEBIH DARI SATU SIMPANAN TERTUNDA — dan dulu yang
-    // kedua MENIMPA yang pertama. statusKey untuk EDIT adalah editId, yang
-    // memang sengaja berulang, sedangkan failedItemsRef dan IndexedDB
-    // (keyPath: "statusKey") sama-sama peta berkunci: menulis dua kali ke kunci
-    // yang sama berarti yang pertama lenyap tanpa satu pesan pun.
-    //
-    // Akibat nyatanya: surveyor luring menambah FOTO (patch berisi photo_ops)
-    // → gagal kirim → lalu menggeser pin aset itu di peta (patch ramping berisi
-    // koordinat saja). Saat sinyal pulih hanya patch koordinat yang terkirim;
-    // fotonya tak pernah sampai, chip tetap berakhir "saved", dan byte fotonya
-    // sudah tak ada di perangkat karena snapshot luring memang membuang foto.
-    //
-    // Menggabung keduanya SAH justru karena yang pertama BELUM diterapkan:
-    // kedua patch dihitung terhadap keadaan server yang sama.
-    //
-    // TAPI HANYA BILA YANG LAMA BELUM TERBANG. Kalau simpanan pertama sedang
-    // dikirim, ia akan diterapkan server sebentar lagi; menggabung isinya ke
-    // simpanan kedua berarti perubahan yang sama diterapkan DUA KALI — untuk
-    // `photo_ops.add` artinya foto kembar. Saat sedang terbang, biarkan
-    // keduanya berjalan sendiri-sendiri: processNext memang sudah menderetkan
-    // simpanan atas aset yang sama (inFlightEditsRef), jadi urutannya terjaga.
-    const sedangTerbang = !!(isEdit && editId && inFlightEditsRef.current.has(editId));
-    const calon = { isEdit, usePatch, editId };
-    const tertunda = tertundaUntukEnqueue(failedItemsRef.current, statusKey,
-                                          calon, sedangTerbang);
-    let payloadEfektif = payload;
-    let baseVersionEfektif = baseVersion;
-    if (tertunda) {
-      payloadEfektif = gabungPatch(tertunda.payload, payload);
-      // Patokan versi tetap milik simpanan TERTUNDA: patch gabungan ini
-      // dihitung terhadap keadaan server yang itu, bukan yang lebih baru.
-      if (tertunda.baseVersion != null) baseVersionEfektif = tertunda.baseVersion;
-      // Kunci idempotensi lama menempel pada muatan yang kini sudah berubah —
-      // dipakai ulang, server bisa memutar balik respons untuk isi yang keliru.
-      idempotencyKey = null;
-      // Item lama yang MASIH mengantre (belum sempat terbang) kini sudah
-      // terwakili sepenuhnya oleh patch gabungan. Kalau dibiarkan, ia terkirim
-      // lebih dulu dengan muatan usang lalu menaikkan versi server sehingga
-      // patch gabungan justru ditolak 409 oleh perubahan kita sendiri.
-      const sisa = [];
-      for (const it of queueRef.current) {
-        if (it.isEdit && it.editId === editId) {
-          it.resolve?.(null); // janji lamanya ditutup, bukan digantung
-          continue;
         }
-        sisa.push(it);
+        if (state.status !== "ack" || !previous.has(state.antreanId)) continue;
+        const item = previous.get(state.antreanId);
+        saved.push([item, state.result]);
+        needsRefresh.current = true;
+        if (!next[item.statusKey]) next[item.statusKey] = { status: "saved", ts: Date.now() };
       }
-      queueRef.current = sisa;
-      setQueueLength(queueRef.current.length);
-    }
-
-    // One idempotency key per logical save — REUSED on network-failure retry so
-    // the server dedupes. Conflict retries pass none, so a fresh key is minted
-    // (the stale key sits reserved server-side without a stored response).
-    const item = {
-      tempId, payload: payloadEfektif, isEdit, editId, usePatch,
-      baseVersion: baseVersionEfektif,
-      idempotencyKey: idempotencyKey || genIdempotencyKey(),
-      // Nama kegiatan HANYA untuk pesan gagal (identitas aset) — TIDAK dikirim
-      // ke server (yang dikirim hanya item.payload).
-      nama_kegiatan: nama_kegiatan || "",
-      // Bekukan satker aktif SAAT enqueue (super-admin act-as). Retry membawa
-      // nilai tersimpan agar tak ter-recapture ke satker yang aktif kini.
-      satkerAktif: satkerAktif !== undefined ? satkerAktif : getSatkerAktif(),
-      queuedAt: new Date().toISOString(),
-      antreanId: genIdempotencyKey(),
+      setSyncStatuses(next);
+      setQueueLength(pendingRef.current.filter(item => item.state?.status === "ready").length);
+      const newlySeen = items.filter(item => !previous.has(item.antreanId));
+      if (newlySeen.length) callbacks.current.onRehydrate?.(newlySeen);
+      for (const [item, data] of saved) {
+        if (item.isEdit && !pendingRef.current.some(it => it.statusKey === item.statusKey)) callbacks.current.onItemSaved?.(item.editId);
+        callbacks.current.onRowSynced?.(item.statusKey, data, item.isEdit);
+        completions.current.get(item.antreanId)?.resolve({ data });
+        completions.current.delete(item.antreanId);
+      }
     };
+    refreshing.current = refreshing.current.catch(() => {}).then(task);
+    return refreshing.current;
+  }, [owner]);
 
-    failedItemsRef.current[statusKey] = toPlainItem(item, statusKey);
-    persistQueueItem(item, statusKey, laporKuotaPenuh); // write-through: survives reload/crash
-    updateStatus(statusKey, "queued");
+  const processTicket = useCallback(async ticket => {
+    const controller = new AbortController();
+    let heartbeatBusy = false;
+    const heartbeat = setInterval(async () => {
+      if (heartbeatBusy) return;
+      heartbeatBusy = true;
+      try { if (!await renewOperation(ticket)) controller.abort(); }
+      catch { controller.abort(); }
+      finally { heartbeatBusy = false; }
+    }, 15000);
+    controller.signal.addEventListener("abort", () => clearInterval(heartbeat), { once: true });
+    active.current.set(ticket.antreanId, controller);
+    try {
+      if (!mounted.current || idPenggunaAktif() !== ticket.pemilik) return;
+      const headers = { "Idempotency-Key": ticket.idempotencyKey, ...getAuditHeaders() };
+      if (ticket.isEdit && ticket.baseVersion != null) headers["If-Match"] = String(ticket.baseVersion);
+      const config = { headers, signal: controller.signal, saOverride: ticket.satkerAktif || "" };
+      const result = ticket.isEdit
+        ? await axiosLargeUpload[ticket.usePatch ? "patch" : "put"](`${API}/assets/${ticket.editId}`, ticket.payload, config)
+        : await axiosLargeUpload.post(`${API}/assets`, ticket.payload, config);
+      if (!result?.data?.id) throw new Error("Respons simpan tidak lengkap. Antrean tetap tersimpan untuk dicoba kembali.");
+      // Ack and dependent scalar version advance are ONE local transaction.
+      if (await acknowledgeOperation(ticket, result?.data)) await refresh();
+    } catch (error) {
+      const httpStatus = error?.response?.status;
+      const detail = error?.response?.data?.detail;
+      if (!ticket.isEdit && httpStatus === 400 && typeof detail === "string" && /NUP/.test(detail)
+          && /sudah digunakan/i.test(detail) && /dummy/i.test(ticket.payload?.category || "") && (ticket.nupRetries || 0) < 3) {
+        try {
+          const params = new URLSearchParams({ activity_id: ticket.payload.activity_id || "", asset_code: ticket.payload.asset_code || "" });
+          const next = await axiosLargeUpload.get(`${API}/assets/next-nup?${params}`, {
+            headers: getAuditHeaders(), saOverride: ticket.satkerAktif || "", signal: controller.signal });
+          if (next.data?.next_nup && String(next.data.next_nup) !== String(ticket.payload.NUP)
+              && await renumberOperation(ticket, next.data.next_nup)) {
+            await refresh();
+            return;
+          }
+        } catch { /* retain original body if renumbering cannot be committed */ }
+      }
+      // 409 also means an idempotency key is still processing. That is an
+      // uncertain outcome: preserve the key/body and retry, never rebase it.
+      const status = httpStatus === 409 ? (detail?.current_version != null ? "conflict" : "failed") : httpStatus === 423 ? "locked"
+        : httpStatus >= 400 && httpStatus < 500 && ![408, 429].includes(httpStatus) ? "rejected" : "failed";
+      const message = error?.response?.status === 401 ? "Sesi berakhir. Masuk kembali, lalu pilih Coba lagi pada aset ini. Simpanan tetap tersimpan."
+        : getApiError(error, "Belum tersinkron. Perubahan tetap tersimpan di perangkat.");
+      const retryHeader = error?.response?.headers?.["retry-after"];
+      const retryAfter = retryHeader == null ? 0 : Number.isFinite(Number(retryHeader))
+        ? Date.now() + Number(retryHeader) * 1000 : Date.parse(retryHeader);
+      if (await failOperation(ticket, status, message, retryAfter)) {
+        if (mounted.current && idPenggunaAktif() === ticket.pemilik) {
+          if (status === "conflict") callbacks.current.onConflict?.(ticket.editId, error.response?.data?.detail || {});
+          if (ticket.isEdit) callbacks.current.onItemFailed?.(ticket.editId);
+        }
+        completions.current.get(ticket.antreanId)?.reject(error);
+        completions.current.delete(ticket.antreanId);
+        await refresh();
+      }
+    } finally {
+      clearInterval(heartbeat);
+      active.current.delete(ticket.antreanId);
+      if (mounted.current) pumpRef.current?.();
+    }
+  }, [refresh]);
 
-    return new Promise((resolve, reject) => {
-      queueRef.current.push({ ...item, resolve, reject });
-      setQueueLength(queueRef.current.length);
-      processNext();
-    });
-  }, [processNext, updateStatus, laporKuotaPenuh]);
+  const pump = useCallback(async () => {
+    if (pumping.current || !mounted.current || !owner || owner !== idPenggunaAktif() || !navigator.onLine) return;
+    pumping.current = true;
+    try {
+      while (mounted.current && active.current.size < MAX_CONCURRENT) {
+        const ticket = await claimOperation(owner, worker.current);
+        if (!ticket) break;
+        // processTicket registers itself synchronously before its first await.
+        processTicket(ticket).catch(storageError);
+      }
+      await refresh();
+    } catch (error) { storageError(error); }
+    finally { pumping.current = false; }
+  }, [owner, processTicket, refresh, storageError]);
+  pumpRef.current = pump;
 
-  const retry = useCallback((id) => {
-    const item = failedItemsRef.current[id];
-    if (!item) return;
-    if (failTimersRef.current[id]) {
-      clearTimeout(failTimersRef.current[id]);
-      delete failTimersRef.current[id];
-    }
-    delete failedItemsRef.current[id];
-    const next = { ...item };
-    if (next.hadConflict || statusesRef.current[id]?.status === "conflict") {
-      // Conflict retry: rebuild on the CURRENT local row version (onConflict
-      // already merged the fresh server copy) and mint a NEW idempotency key.
-      const latest = getLatestVersionRef.current?.(next.editId);
-      if (latest != null) next.baseVersion = latest;
-      next.idempotencyKey = null;
-      next.hadConflict = false;
-    }
-    // Network-failure retries reuse the same idempotency key — server dedupes
-    enqueue(next).catch(() => { /* failure re-registers the item via processNext */ });
-  }, [enqueue]);
+  const enqueue = useCallback(input => {
+    const record = { ...input, statusKey: input.isEdit ? input.editId : input.tempId,
+      pemilik: owner, satkerAktif: input.satkerAktif ?? getSatkerAktif(),
+      antreanId: operationId(), idempotencyKey: input.idempotencyKey || operationId(), queuedAt: new Date().toISOString() };
+    let resolve, reject;
+    const completion = new Promise((ok, fail) => { resolve = ok; reject = fail; });
+    completion.catch(() => {}); // callers may only await the local receipt
+    completions.current.set(record.antreanId, { resolve, reject });
+    volatile.current.set(record.antreanId, record);
+    pendingRef.current = [...pendingRef.current, record];
+    completion.persisted = (async () => {
+      try {
+        if (!owner) throw new Error("Masuk kembali sebelum menyimpan");
+        await appendOperation(record, worker.current);
+        volatile.current.delete(record.antreanId);
+      } catch (error) {
+        record.localFailed = true;
+        storageError(error);
+        reject(error);
+        throw error;
+      }
+      refresh().then(pump).catch(storageError);
+    })();
+    completion.persisted.catch(() => {});
+    // The caller still owns the form/draft when this receipt fails. Release
+    // only this uncommitted attempt before resubmitting, never a durable op.
+    completion.discardUncommitted = () => {
+      if (!record.localFailed) return;
+      volatile.current.delete(record.antreanId);
+      pendingRef.current = pendingRef.current.filter(item => item.antreanId !== record.antreanId);
+      completions.current.delete(record.antreanId);
+      if (!pendingRef.current.some(item => item.statusKey === record.statusKey)) {
+        setSyncStatuses(previous => { const next = { ...previous }; delete next[record.statusKey]; return next; });
+      }
+      if (!record.isEdit) callbacks.current.onItemDismissed?.(record.statusKey, record);
+    };
+    return completion;
+  }, [owner, refresh, pump, storageError]);
 
-  const dismiss = useCallback((id) => {
-    if (failTimersRef.current[id]) {
-      clearTimeout(failTimersRef.current[id]);
-      delete failTimersRef.current[id];
+  const retry = useCallback(statusKey => {
+    const blocked = pendingRef.current.find(item => item.statusKey === statusKey && item.state?.status === "conflict"
+      && hasMediaMutation(item.payload));
+    if (blocked) {
+      toast.error("Unduh cadangan terlebih dahulu. Tinjau versi terbaru, abaikan simpanan yang bentrok, lalu tambahkan ulang foto atau dokumen yang diperlukan.",
+        { duration: Infinity, action: { label: "Unduh cadangan", onClick: () => downloadPending(
+          pendingRef.current.filter(item => item.statusKey === statusKey)) } });
+      return;
     }
-    const item = failedItemsRef.current[id];
-    delete failedItemsRef.current[id];
-    // "Abaikan" harus benar-benar MEMBATALKAN (temuan audit G3). Dulu item
-    // yang masih MENGANTRE tetap di queueRef dan terkirim pada flush
-    // berikutnya — aset yang pengguna buang tetap tercipta di server.
-    const sisa = [];
-    for (const it of queueRef.current) {
-      const kunci = it.isEdit ? it.editId : it.tempId;
-      if (kunci === id) { it.resolve?.(null); continue; }
-      sisa.push(it);
+    retryOperations(owner, { statusKey, version: callbacks.current.getLatestVersion?.(statusKey) })
+      .then(refresh).then(pump).catch(storageError);
+  }, [owner, refresh, pump, storageError]);
+  const dismiss = useCallback(statusKey => {
+    const removed = pendingRef.current.filter(item => item.statusKey === statusKey);
+    const localOnly = removed.length && removed.every(item => item.localFailed);
+    if (!removed.length) return;
+    if (!localOnly && !window.confirm("Hapus simpanan tertunda beserta fotonya? Tindakan ini tidak dapat dibatalkan.")) return;
+    for (const item of removed) {
+      volatile.current.delete(item.antreanId);
+      active.current.get(item.antreanId)?.abort();
+      completions.current.get(item.antreanId)?.resolve(null);
+      completions.current.delete(item.antreanId);
     }
-    queueRef.current = sisa;
-    setQueueLength(queueRef.current.length);
-    // Permintaan yang SEDANG TERBANG tak bisa ditarik kembali dari jaringan —
-    // tandai supaya penyelesaiannya nanti tak menghidupkan status/baris yang
-    // sudah dibuang. (Server mungkin tetap menulis; refresh berikutnya yang
-    // menampilkan kebenaran — itu batas jujur pembatalan sisi klien.)
-    dismissedRef.current.add(id);
-    setTimeout(() => dismissedRef.current.delete(id), 5 * 60 * 1000);
-    // Tanpa antreanId: pembuangan oleh PENGGUNA memang disengaja atas baris itu,
-    // jadi rekaman siapa pun di kunci itu ikut dibuang.
-    removePersistedItem(id); // user explicitly discarded the change
-    clearStatus(id);
-    if (item?.isEdit && item?.editId) {
-      onItemSaved?.(item.editId);
-      // Induk juga diberi tahu untuk EDIT (temuan audit G3): nilai optimistis
-      // yang dibatalkan masih menempel di baris daftar & snapshot luring —
-      // induk memulihkannya dari kebenaran server (lihat DashboardPage).
-      onItemDismissed?.(id, item);
-    } else if (item) {
-      // Failed CREATE rows stay visible until dismissed — parent drops the temp row
-      onItemDismissed?.(id, item);
+    if (localOnly) {
+      pendingRef.current = pendingRef.current.filter(item => item.statusKey !== statusKey);
+      const item = removed[0];
+      if (item?.isEdit) callbacks.current.onItemSaved?.(item.editId);
+      if (item) callbacks.current.onItemDismissed?.(statusKey, item);
+      return;
     }
-    needsRefreshRef.current = true;
-  }, [clearStatus, onItemSaved, onItemDismissed]);
-
-  // Retry everything failed + kick the queue — used on reconnect, after
-  // rehydration, and by the header's manual sync button.
-  // auto=true → dipanggil otomatis (reconnect / rehydrasi saat buka kegiatan);
-  // auto=false → aksi eksplisit user (tombol Sinkronkan di header).
+    cancelOperations(owner, statusKey).then(refresh).then(() => {
+      needsRefresh.current = true;
+      pump();
+    }).catch(storageError);
+  }, [owner, refresh, pump, storageError]);
   const flushPending = useCallback((auto = false) => {
-    if (flushGuardRef.current) return; // throttle rapid online/offline flaps
-    flushGuardRef.current = true;
-    setTimeout(() => { flushGuardRef.current = false; }, 3000);
-    Object.keys(failedItemsRef.current).forEach((key) => {
-      const rec = failedItemsRef.current[key];
-      // 423 Locked (kegiatan disahkan): jangan retry — hasilnya pasti 423 lagi.
-      // Item tetap tersimpan; user memutuskan retry/dismiss manual per-baris.
-      if (rec?.locked) return;
-      // OCC 409 (bentrok) saat AUTO (reconnect/rehidrasi): lewati — menimpa
-      // perubahan orang lain secara pasif itu keliru. Tapi saat MANUAL (tombol
-      // Sinkronkan, auto=false): retry — onConflict sudah memuat versi server
-      // terbaru ke daftar, jadi retry membangun ulang di versi itu (last-write-
-      // wins dengan data user) dan BERHASIL, bukan 409 lagi. Ini yang membuat
-      // "sudah diklik sinkron tapi terus minta sinkron" akhirnya tuntas.
-      if (auto && rec?.hadConflict) return;
-      const st = statusesRef.current[key]?.status;
-      if (st === "failed" || (!auto && rec?.hadConflict)) retry(key);
-    });
-    processNext(); // anything still queued in memory (in-flight guard: activeCountRef)
-  }, [retry, processNext]);
+    // Global flush (also used by unload protection) must never resolve a
+    // conflict implicitly. Only the explicit per-row retry may rebase scalars.
+    const work = auto ? Promise.resolve() : retryOperations(owner, { auto: true });
+    work.then(refresh).then(pump).catch(storageError);
+  }, [owner, refresh, pump, storageError]);
 
-  const flushRef = useRef(flushPending);
-  useEffect(() => { flushRef.current = flushPending; });
-
-  // Auto-flush when connectivity returns. The 'online' event only means a
-  // network interface came up — verify the backend really answers first, or
-  // every queued save would fail again immediately. Retry after 10s while
-  // the browser says online but the server is unreachable.
   useEffect(() => {
-    let cancelled = false;
-    let retryTimer = null;
-
-    const verifyAndFlush = async () => {
-      const reachable = await checkReachable();
-      if (cancelled) return;
-      if (reachable) {
-        flushRef.current?.(true); // auto (reconnect) — lewati item bentrok
-      } else {
-        retryTimer = setTimeout(verifyAndFlush, REACHABILITY_RETRY_MS);
-      }
+    mounted.current = true;
+    const activeRequests = active.current;
+    let busy = false, cancelled = false;
+    const tick = async () => {
+      if (busy || cancelled || !owner || owner !== idPenggunaAktif()) return;
+      busy = true;
+      try {
+        await refresh();
+        if (!cancelled && pendingRef.current.length && await checkReachable()) await pump();
+      } catch (error) { storageError(error); }
+      finally { busy = false; }
     };
-
-    const handleOnline = () => {
-      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-      verifyAndFlush();
-    };
-    window.addEventListener("online", handleOnline);
+    tick();
+    const timer = setInterval(tick, REACHABILITY_RETRY_MS);
+    const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("aman-outbox-v2") : null;
+    if (channel) channel.onmessage = tick;
+    const online = () => { tick(); };
+    window.addEventListener("online", online);
+    window.addEventListener("focus", online);
+    const blocked = () => toast.error("Pembaruan penyimpanan menunggu tab AMAN lama. Simpan draf di tab tersebut lalu tutup tab lama; halaman ini akan melanjutkan otomatis.",
+      { id: "antrean-upgrade", duration: Infinity });
+    window.addEventListener("aman:outbox-upgrade-blocked", blocked);
     return () => {
       cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      window.removeEventListener("online", handleOnline);
+      mounted.current = false;
+      clearInterval(timer);
+      channel?.close();
+      window.removeEventListener("online", online);
+      window.removeEventListener("focus", online);
+      window.removeEventListener("aman:outbox-upgrade-blocked", blocked);
+      // Leave the persisted lease to expire. Aborting a request does not prove
+      // the server did not commit it; a new tab retries the exact same key.
+      for (const controller of activeRequests.values()) controller.abort();
     };
-  }, []);
+  }, [owner, refresh, pump, storageError]);
 
-  // Rehydrate persisted items once on mount: register them as 'failed' so the
-  // rows show the retry UI, hand them to the parent (pending CREATE rows must
-  // reappear in the list), then auto-retry if we're online. This also covers
-  // the 401-logout → re-login case (remount rehydrates).
-  useEffect(() => {
-    if (rehydratedRef.current) return;
-    rehydratedRef.current = true;
-    let cancelled = false;
-    (async () => {
-      const items = await loadPersistedItems();
-      if (cancelled || items.length === 0) return;
-      // Hanya rekaman MILIK AKUN INI yang di-replay (temuan audit G3):
-      // IndexedDB per-origin, dan perangkat dinas dipakai bergantian —
-      // tanpa saringan ini simpanan akun lain dikirim memakai token &
-      // identitas audit akun yang sedang login. Rekaman era lama tanpa
-      // stempel tetap lolos (lihat lib/pemilikAntrean.js).
-      const idAktif = idPenggunaAktif();
-      const toRegister = items.filter(rec =>
-        rec?.statusKey && rec?.payload && bolehReplay(rec, idAktif)
-        && !failedItemsRef.current[rec.statusKey] && !statusesRef.current[rec.statusKey]
-      );
-      if (toRegister.length === 0) return;
-      toRegister.forEach((rec) => {
-        failedItemsRef.current[rec.statusKey] = rec;
-        if (rec.locked) {
-          // 423 terkunci: perlu tindakan manual (retry/dismiss). {locked} agar
-          // tidak dihitung sebagai pending sinkron.
-          updateStatus(
-            rec.statusKey, "failed",
-            "Kegiatan sudah disahkan dan terkunci — perubahan tidak dapat disimpan",
-            { locked: true }
-          );
-        } else if (rec.hadConflict) {
-          // 409 konflik: kembalikan sebagai status "conflict" (perlu tindakan),
-          // BUKAN "failed" generik. Dulu direhidrasi sebagai "failed" → keliru
-          // dihitung pending → tanda sinkron MUNCUL LAGI tiap buka halaman
-          // padahal flush auto memang melewati item bentrok.
-          updateStatus(
-            rec.statusKey, "conflict",
-            "Versi berbeda dari server — tinjau lalu simpan ulang"
-          );
-        } else {
-          updateStatus(
-            rec.statusKey, "failed",
-            "Belum tersinkron — perubahan tersimpan di perangkat ini"
-          );
-        }
-      });
-      onRehydrateRef.current?.(toRegister);
-      if (navigator.onLine) flushRef.current?.(true); // auto (rehidrasi) — lewati item bentrok
-    })();
-    return () => { cancelled = true; };
-  }, [updateStatus]);
-
-  // Called by parent when editing session ends (form closed)
-  // Returns true if a deferred refresh should happen
-  const consumeRefreshFlag = useCallback(() => {
-    const needed = needsRefreshRef.current;
-    needsRefreshRef.current = false;
-    return needed;
-  }, []);
-
-  // Snapshot of unsynced items (queued/saving/failed/conflict) — lets the
-  // parent re-inject pending CREATE rows after a server refetch replaces the list.
-  const getPendingItems = useCallback(() => Object.values(failedItemsRef.current), []);
-
-  // Honest sync counters derived from real queue state (lihat
-  // summarizeSyncStatuses): pendingCount = bisa di-flush; actionCount = macet
-  // (konflik/terkunci) yang perlu tindakan manual per-baris.
-  const { pendingCount, isSyncing, actionCount } = useMemo(
-    () => summarizeSyncStatuses(syncStatuses),
-    [syncStatuses]
-  );
-
-  // Check if queue is completely idle (nothing queued or active)
-  const isIdle = activeCountRef.current === 0 && queueRef.current.length === 0;
-
-  return {
-    syncStatuses,
-    enqueue,
-    retry,
-    dismiss,
-    queueLength,
-    consumeRefreshFlag,
-    isIdle,
-    pendingCount,
-    isSyncing,
-    actionCount,
-    flushPending,
-    getPendingItems,
-  };
+  const consumeRefreshFlag = useCallback(() => { const needed = needsRefresh.current; needsRefresh.current = false; return needed; }, []);
+  const getPendingItems = useCallback(() => pendingRef.current, []);
+  const summary = useMemo(() => summarizeSyncStatuses(syncStatuses), [syncStatuses]);
+  return { syncStatuses, queueLength, enqueue, retry, dismiss, flushPending, consumeRefreshFlag,
+    getPendingItems, isIdle: !Object.values(syncStatuses).some(s => ["queued", "saving"].includes(s.status)), ...summary };
 }

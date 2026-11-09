@@ -905,7 +905,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // tempId aset yang ditambah via PETA → {adaFoto}, dipantau efek kegagalan sync.
   const petaAddRef = useRef(new Map());
 
-  const handleOptimisticSubmit = useCallback((payload, isEdit, editId, usePatch = false) => {
+  const handleOptimisticSubmit = useCallback(async (payload, isEdit, editId, usePatch = false) => {
     const assetId = isEdit ? editId : buatTempId();
     // Capture the version the user started editing from (for OCC / If-Match).
     // Aset hasil scan QR bisa TIDAK ada di halaman list saat ini — pakai versi
@@ -932,13 +932,18 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       setMobileAssets(prev => [tempAsset, ...prev]);
       setTotalItems(prev => prev + 1);
     }
-    setEditAssetForForm(null);
-    setIsSidebarOpen(false);
-    enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion, nama_kegiatan: activity?.nama_kegiatan }).catch(() => {
+    const saving = enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion, nama_kegiatan: activity?.nama_kegiatan });
+    saving.catch(() => {
       // Save failed — KEEP the optimistic row so the retry/dismiss UI stays
       // attached to it (syncStatuses[assetId] shows 'failed'). The temp row is
       // removed only via dismissSync → onItemDismissed.
     });
+    try { await saving.persisted; } catch (error) {
+      saving.discardUncommitted(); // form/draf masih memegang data; lepaskan hanya percobaan ini yang gagal commit
+      throw error;
+    }
+    setEditAssetForForm(null);
+    setIsSidebarOpen(false);
     toast.info(isEdit ? "Menyimpan perubahan..." : "Menambahkan aset...", { duration: 1500 });
     return assetId; // tempId — dipakai pemanggil (tambah via peta) memantau status
   }, [enqueueOptimistic, assets, activity?.id, activity?.nama_kegiatan]);
@@ -968,7 +973,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       thumbnail_index: 0,
       activity_id: activity?.id || null,
     };
-    const tempId = handleOptimisticSubmit(payload, false);
+    const tempId = await handleOptimisticSubmit(payload, false);
     // Pantau hasil simpan aset yang ditambah lewat PETA. Peta tak menampilkan
     // daftar chip sync, jadi bila gagal (mis. foto ke server) efek di bawah
     // memunculkan galat + tombol "Coba Lagi" agar TIDAK senyap.
@@ -1075,10 +1080,15 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     }
     // 2) Enqueue background save
     if (hasChanges) {
-      enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion, nama_kegiatan: activity?.nama_kegiatan }).catch(() => {
+      const saving = enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion, nama_kegiatan: activity?.nama_kegiatan });
+      saving.catch(() => {
         // Save failed — KEEP the optimistic row (retry/dismiss UI needs it);
         // removed only via dismissSync → onItemDismissed.
       });
+      try { await saving.persisted; } catch (error) {
+        saving.discardUncommitted(); // isian tetap di form; lepaskan hanya percobaan gagal commit
+        throw error;
+      }
       toast.info("Menyimpan di background...", { duration: 1200 });
     } else if (isEdit && editId && !isScan && !isStay) {
       // Tanpa perubahan tidak ada antrean yang akan melepas kunci baris
@@ -1224,7 +1234,12 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         setMobileAssets(prev => [tempAsset, ...prev]);
         setTotalItems(prev => prev + 1);
       }
-      enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion }).catch(() => {});
+      const saving = enqueueOptimistic({ tempId: assetId, payload, isEdit, editId: isEdit ? editId : undefined, usePatch, baseVersion });
+      saving.catch(() => {});
+      try { await saving.persisted; } catch (error) {
+        saving.discardUncommitted(); // isian tetap di form; lepaskan hanya percobaan gagal commit
+        throw error;
+      }
     }
     // Aset yang ditinjau = aset terbaru SEBELUM simpan ini (kalau tadi kita
     // meng-edit aset itu sendiri, ambil tetangga di atasnya).

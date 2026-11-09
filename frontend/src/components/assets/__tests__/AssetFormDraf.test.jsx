@@ -54,7 +54,7 @@ test("form yang tidak disentuh langsung tertutup tanpa dialog", async () => {
   expect(screen.queryByTestId("asset-form-dirty-badge")).not.toBeInTheDocument();
   fireEvent.click(screen.getByTestId("sheet-close"));
   expect(screen.queryByTestId("konfirmasi-keluar-form")).not.toBeInTheDocument();
-  expect(props.onClose).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(props.onClose).toHaveBeenCalledTimes(1));
 });
 
 test("perubahan ditandai, dialog muncul, 'Lanjut Edit' bertahan, 'Keluar' menyimpan draf", async () => {
@@ -69,7 +69,7 @@ test("perubahan ditandai, dialog muncul, 'Lanjut Edit' bertahan, 'Keluar' menyim
   expect(props.onClose).not.toHaveBeenCalled();
   fireEvent.click(screen.getByTestId("sheet-close"));
   fireEvent.click(screen.getByTestId("konfirmasi-keluar-draf"));
-  expect(props.onClose).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(props.onClose).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(mockToko.get(KUNCI)?.formData.location).toBe("Ruang Rapat 2"));
   expect(props.onOptimisticSubmit).not.toHaveBeenCalled();
 });
@@ -104,7 +104,7 @@ test("'Jangan tanya lagi' membuat keluar berikutnya tanpa dialog", async () => {
   fireEvent.click(screen.getByTestId("sheet-close"));
   fireEvent.click(screen.getByTestId("konfirmasi-keluar-jangan-tanya"));
   fireEvent.click(screen.getByTestId("konfirmasi-keluar-draf"));
-  expect(props.onClose).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(props.onClose).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(mockToko.get(KUNCI)?.formData.location).toBe("Lantai 3"));
   unmount();
   expect(mockToko.get(KUNCI)?.formData.location).toBe("Lantai 3");
@@ -112,7 +112,7 @@ test("'Jangan tanya lagi' membuat keluar berikutnya tanpa dialog", async () => {
   await waitFor(() => expect(document.querySelector('input[name="location"]').value).toBe("Lantai 3"));
   fireEvent.click(screen.getByTestId("sheet-close"));
   expect(screen.queryByTestId("konfirmasi-keluar-form")).not.toBeInTheDocument();
-  expect(kedua.props.onClose).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(kedua.props.onClose).toHaveBeenCalledTimes(1));
 });
 
 test("menyimpan menyerahkan perubahan ke antrean lalu menghapus draf", async () => {
@@ -147,6 +147,47 @@ test("gerbang keluar terekspos ke induk (tombol Back HP)", async () => {
   expect(screen.getByTestId("konfirmasi-keluar-form")).toBeInTheDocument();
   fireEvent.click(screen.getByTestId("konfirmasi-keluar-buang"));
   fireEvent.click(screen.getByTestId("konfirmasi-keluar-buang"));
-  expect(aksi).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(aksi).toHaveBeenCalledTimes(2));
   expect(props.onOptimisticSubmit).not.toHaveBeenCalled();
+});
+
+test("tutup menunggu commit draf; kegagalan disk mempertahankan isian", async () => {
+  const lib = require("../../../lib/drafAset");
+  const original = lib.simpanDraf;
+  let finish;
+  lib.simpanDraf = () => new Promise(resolve => { finish = resolve; });
+  try {
+    const { props } = await buka();
+    ubahLokasi("Belum commit");
+    fireEvent.click(screen.getByTestId("sheet-close"));
+    fireEvent.click(screen.getByTestId("konfirmasi-keluar-draf"));
+    await waitFor(() => expect(finish).toBeDefined());
+    expect(props.onClose).not.toHaveBeenCalled();
+    await act(async () => finish());
+    await waitFor(() => expect(props.onClose).toHaveBeenCalledTimes(1));
+  } finally { lib.simpanDraf = original; }
+});
+
+test("gagal menyerahkan ke antrean mempertahankan draf dan form untuk dicoba lagi", async () => {
+  const { props } = await buka({ onOptimisticSubmit: jest.fn().mockRejectedValue(new Error("disk penuh")) });
+  ubahLokasi("Draf yang aman");
+  await waitFor(() => expect(mockToko.get(KUNCI)?.formData.location).toBe("Draf yang aman"));
+  fireEvent.click(screen.getByTestId("sheet-submit-next"));
+  await waitFor(() => expect(props.onOptimisticSubmit).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByTestId("sheet-submit-next")).not.toBeDisabled());
+  expect(props.onClose).not.toHaveBeenCalled();
+  expect(mockToko.get(KUNCI)?.formData.location).toBe("Draf yang aman");
+  expect(document.querySelector('input[name="location"]').value).toBe("Draf yang aman");
+});
+
+test("disk gagal saat keluar menahan navigasi dan mempertahankan isian", async () => {
+  const lib = require("../../../lib/drafAset"), original = lib.simpanDraf;
+  lib.simpanDraf = async () => { throw new Error("disk penuh"); };
+  try {
+    const { props } = await buka(); ubahLokasi("Jangan hilang");
+    fireEvent.click(screen.getByTestId("sheet-close"));
+    await act(async () => fireEvent.click(screen.getByTestId("konfirmasi-keluar-draf")));
+    expect(props.onClose).not.toHaveBeenCalled();
+    expect(document.querySelector('input[name="location"]').value).toBe("Jangan hilang");
+  } finally { lib.simpanDraf = original; }
 });

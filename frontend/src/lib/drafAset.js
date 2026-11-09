@@ -20,6 +20,7 @@
 //
 // Bagian murni (tanpa DOM/IDB) diekspor terpisah agar teruji unit.
 import { openDB } from "idb";
+import { abortOnFailure } from "./idbTransaction";
 import { useSyncExternalStore } from "react";
 import { ASSET_FIELD_REGISTRY, ASSET_SCALAR_FIELDS } from "./assetFields";
 
@@ -219,6 +220,8 @@ function getDB() {
       upgrade(db) {
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "key" });
       },
+      blocking() { dbPromise?.then(db => db.close()); dbPromise = null; },
+      terminated() { dbPromise = null; },
     }).catch((e) => { dbPromise = null; throw e; });
   }
   return dbPromise;
@@ -236,29 +239,67 @@ function tandai(assetId, ada) {
   umumkan();
 }
 
-export async function simpanDraf(rec) {
-  const db = await getDB();
-  await db.put(STORE, rec);
-  tandai(rec.assetId, true);
+// Preserve the deployed database/key/schema; legacy records start at revision 0.
+const revisions = new Map(), writes = new Map();
+let persistenceRequested = false;
+function serial(key, action) {
+  const work = (writes.get(key) || Promise.resolve()).catch(() => {}).then(action);
+  writes.set(key, work);
+  work.finally(() => { if (writes.get(key) === work) writes.delete(key); }).catch(() => {});
+  return work;
+}
+function checkRevision(key, rec) {
+  if ((rec?.revision || 0) !== (revisions.get(key) || 0)) {
+    throw new Error("Draf berubah di tab lain. Unduh cadangan isian ini lalu muat ulang untuk meninjau draf terbaru.");
+  }
+}
+export function simpanDraf(rec) {
+  return serial(rec.key, async () => {
+    const db = await getDB();
+    const tx = db.transaction(STORE, "readwrite");
+    const revision = await abortOnFailure(tx, async () => {
+      const old = await tx.store.get(rec.key);
+      checkRevision(rec.key, old);
+      const next = (old?.revision || 0) + 1;
+      await tx.store.put({ ...rec, revision: next });
+      await tx.done;
+      return next;
+    });
+    revisions.set(rec.key, revision);
+    tandai(rec.assetId, true);
+    if (!persistenceRequested) {
+      persistenceRequested = true;
+      try { navigator.storage?.persist?.().catch(() => {}); } catch { /* best effort */ }
+    }
+  });
 }
 
 export async function muatDraf(key) {
   try {
+    await writes.get(key)?.catch(() => {});
     const db = await getDB();
     const rec = await db.get(STORE, key);
+    revisions.set(key, rec?.revision || 0);
     if (!rec) return null;
-    if (drafBasi(rec)) { await db.delete(STORE, key); tandai(rec.assetId, false); return null; }
+    if (drafBasi(rec)) { await hapusDraf(key); return null; }
     return rec;
   } catch { return null; }
 }
 
-export async function hapusDraf(key) {
-  try {
+export function hapusDraf(key) {
+  return serial(key, async () => {
     const db = await getDB();
-    const rec = await db.get(STORE, key);
-    await db.delete(STORE, key);
+    const tx = db.transaction(STORE, "readwrite");
+    const rec = await abortOnFailure(tx, async () => {
+      const old = await tx.store.get(key);
+      checkRevision(key, old);
+      await tx.store.delete(key);
+      await tx.done;
+      return old;
+    });
+    revisions.set(key, 0);
     if (rec?.assetId) tandai(rec.assetId, false);
-  } catch { /* diam — draf basi dibersihkan TTL */ }
+  });
 }
 
 /** Muat indeks chip "Draf" untuk pengguna ini (dipanggil saat dasbor dibuka). */

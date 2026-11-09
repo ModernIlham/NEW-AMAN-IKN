@@ -1,3 +1,5 @@
+import "../../../uji/indexedDB";
+import { deleteDB } from "idb";
 import React from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import AssetForm from "../AssetForm";
@@ -14,7 +16,8 @@ jest.mock("../FullCameraSheet", () => function Camera({ photos, thumbnails, onCl
 const asset = { id: "a1", asset_code: "3050105007", asset_name: "Laptop uji", category: "Komputer", NUP: "1", version: 7,
   activity_id: "k1", photo_count: 3, thumbnail_index: 2, stiker_photo_index: 1, inventory_status: "Belum Diinventarisasi" };
 beforeAll(() => { HTMLElement.prototype.scrollIntoView = () => {}; });
-beforeEach(() => {
+beforeEach(async () => {
+  await deleteDB("aman_draf_aset");
   Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: jest.fn() } });
   jest.clearAllMocks(); localStorage.setItem("aman_auto_inventarisasi", "off");
   axios.get.mockImplementation(url => Promise.resolve({ data: String(url).includes("/assets/") ? asset : { items: [] } }));
@@ -85,7 +88,7 @@ test("Tutup berada di kanan Simpan dan menutup tanpa mengirim draf", async () =>
   // Ada perubahan → dialog dulu; keluar menyimpan draf di perangkat, bukan mengirim.
   expect(props.onClose).not.toHaveBeenCalled();
   fireEvent.click(screen.getByTestId("konfirmasi-keluar-draf"));
-  expect(props.onClose).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(props.onClose).toHaveBeenCalledTimes(1));
   expect(props.onOptimisticSubmit).not.toHaveBeenCalled();
   expect(axios.patch).not.toHaveBeenCalled();
 });

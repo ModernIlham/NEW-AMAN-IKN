@@ -1,0 +1,13 @@
+{
+  "writeMs": 32.5,
+  "photoBytes": 2097175,
+  "restoredName": "Kursi offline",
+  "concurrentWrites": [
+    "fulfilled",
+    "rejected"
+  ],
+  "staleDeletePreserved": true,
+  "offlineWrites": true,
+  "reloadRecovery": true,
+  "exactPhotoMatch": true
+}

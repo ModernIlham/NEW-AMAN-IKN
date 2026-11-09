@@ -24,71 +24,35 @@
  * tadi susah payah dipertahankan.
  */
 
-// ——— Penyimpan in-memory yang bisa disuruh kehabisan kuota ———
-const mockSimpanan = {
-  meta: new Map(),
-  assets: new Map(),
-  // Setelah sekian kali `tx.store.put`, tulisan berikutnya melempar
-  // QuotaExceededError — meniru perangkat yang penuh di tengah jalan.
-  putSebelumPenuh: Infinity,
-  putTerjadi: 0,
-};
-
+import "../uji/indexedDB";
+import { openDB, deleteDB } from "idb";
+const mockSimpanan = { meta: new Map(), assets: new Map(), putSebelumPenuh: Infinity, putTerjadi: 0 };
 const mockHalaman = [];
 let mockAmbil = 0;
-
-jest.mock("axios", () => ({
-  get: (...a) => globalThis.__ambilHalaman(...a),
-}));
-
-// Fungsi POLOS, bukan jest.fn(): CRA menyetel resetMocks:true dan akan
-// membuang implementasinya sebelum tiap uji (pola sama dgn offlineSnapshot.test).
-jest.mock("idb", () => ({
-  openDB: async () => ({
-    get: async (store, key) =>
-      (store === "meta" ? mockSimpanan.meta : mockSimpanan.assets).get(key),
-    put: async (store, val) => {
-      const peta = store === "meta" ? mockSimpanan.meta : mockSimpanan.assets;
-      peta.set(store === "meta" ? val.activityId : val.id, val);
-    },
-    delete: async (store, key) =>
-      (store === "meta" ? mockSimpanan.meta : mockSimpanan.assets).delete(key),
-    getAll: async () => [],
-    getAllKeysFromIndex: async (_store, _index, activityId) =>
-      [...mockSimpanan.assets.values()]
-        .filter((r) => r.activity_id === activityId)
-        .map((r) => r.id),
-    transaction: store => {
-      if (store === "meta") return { store: {
-        get: async key => mockSimpanan.meta.get(key),
-        put: async meta => mockSimpanan.meta.set(meta.activityId, meta),
-      }, done: Promise.resolve() };
-      const tertunda = [];
-      return {
-        store: {
-          get: async id => mockSimpanan.assets.get(id),
-          put: (row) => {
-            mockSimpanan.putTerjadi += 1;
-            if (mockSimpanan.putTerjadi > mockSimpanan.putSebelumPenuh) {
-              const e = new Error("penyimpanan penuh");
-              e.name = "QuotaExceededError";
-              throw e;
-            }
-            tertunda.push(row);
-          },
-          delete: (id) => { mockSimpanan.assets.delete(id); },
-        },
-        // `await tx.done` dipakai kode produksi; barulah barisnya mengendap.
-        get done() {
-          for (const r of tertunda) mockSimpanan.assets.set(r.id, r);
-          return Promise.resolve();
-        },
-      };
-    },
-  }),
-}));
-
-import { syncSnapshot, snapshotMeta, isSnapshotExpired, SNAPSHOT_TTL_MS } from "./offlineSnapshot";
+jest.mock("axios", () => ({ get: (...args) => globalThis.__ambilHalaman(...args) }));
+import { syncSnapshot as syncReal, snapshotMeta, isSnapshotExpired, SNAPSHOT_TTL_MS } from "./offlineSnapshot";
+async function syncSnapshot(...args) {
+  const db = await openDB("aman_offline_snapshot", 3, { upgrade(db) {
+    db.createObjectStore("assets", { keyPath: "id" }).createIndex("by-activity", "activity_id");
+    db.createObjectStore("meta", { keyPath: "activityId" });
+    db.createObjectStore("query_rows", { keyPath: "id" }).createIndex("by-activity-id", ["activity_id", "id"]);
+  } });
+  for (const row of mockSimpanan.meta.values()) await db.put("meta", row);
+  for (const row of mockSimpanan.assets.values()) await db.put("assets", row);
+  const original = IDBObjectStore.prototype.put;
+  const fault = jest.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (...values) {
+    if (this.name === "assets" && ++mockSimpanan.putTerjadi > mockSimpanan.putSebelumPenuh) {
+      throw new DOMException("penyimpanan penuh", "QuotaExceededError");
+    }
+    return original.apply(this, values);
+  });
+  try {
+    const result = await syncReal(...args);
+    mockSimpanan.assets = new Map((await db.getAll("assets")).map(row => [row.id, row]));
+    mockSimpanan.meta = new Map((await db.getAll("meta")).map(row => [row.activityId, row]));
+    return result;
+  } finally { fault.mockRestore(); db.close(); }
+}
 
 /** Satu halaman jawaban /assets/offline-snapshot. */
 function halaman({ ids, serverTime, nextCursor = "", total }) {
@@ -104,7 +68,8 @@ function halaman({ ids, serverTime, nextCursor = "", total }) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await deleteDB("aman_offline_snapshot");
   mockSimpanan.meta.clear();
   mockSimpanan.assets.clear();
   mockSimpanan.putSebelumPenuh = Infinity;

@@ -33,7 +33,15 @@ function handlePopState() {
   seedSentinel();
   const top = handlerStack[handlerStack.length - 1];
   if (top) {
-    try { top(); } catch { /* handler tak boleh melumpuhkan penjaga */ }
+    const proceed = () => {
+      if (handlerStack.includes(top)) {
+        try { top(); } catch { /* handler tak boleh melumpuhkan penjaga */ }
+      }
+    };
+    // Form boleh menunda Back sampai draf benar-benar committed di perangkat.
+    const event = new CustomEvent("aman:before-back", { cancelable: true, detail: { proceed } });
+    window.dispatchEvent(event);
+    if (!event.defaultPrevented) proceed();
   }
 }
 
