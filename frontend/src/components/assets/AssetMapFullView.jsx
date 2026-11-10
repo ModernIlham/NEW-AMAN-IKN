@@ -58,7 +58,7 @@ const IKON_POPUP = {
   titik: svgIkon('<path d="M18 8c0 3.6-3.87 7.43-5.39 8.8a1 1 0 0 1-1.22 0C9.87 15.43 6 11.6 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.7 14H5a1 1 0 0 0-.95.68l-2 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .95-1.32l-2-6A1 1 0 0 0 19 14h-3.7"/>'),
   bidik: svgIkon('<line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/>'),
   pin: svgIkon('<path d="M20 10c0 5-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
-  luar: svgIkon('<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
+  rute: svgIkon('<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>'),
 };
 
 // Data pengguna barang LENGKAP = nama pengguna + NIP/NIK terisi + BAST
@@ -841,7 +841,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
       // popup hilang saat mulai mengetik nama.
       const popup = L.popup({ closeButton: true, autoClose: false,
                               closeOnClick: false, className: "aman-peta-tambah",
-                              autoPanPaddingTopLeft: L.point(56, 64) })
+                              autoPanPaddingTopLeft: L.point(56, 64),
+                              autoPanPaddingBottomRight: L.point(22, 10) })
         .setLatLng(ev.latlng).setContent(wrap).openOn(map);
       L.DomEvent.disableClickPropagation(wrap);
       L.DomEvent.disableScrollPropagation(wrap);
@@ -1112,7 +1113,22 @@ const AssetMapFullView = memo(function AssetMapFullView({
     title.style.cssText = "min-width:0;flex:1";
     title.innerHTML = `
       <div style="font-weight:700;font-size:12.5px;color:#0f172a;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(row.asset_name || "-")}</div>
-      <div style="font-size:10.5px;color:#64748b;margin-top:2px">${esc(row.asset_code || "-")}${row.NUP ? ` &bull; NUP ${esc(row.NUP)}` : ""}</div>`;
+      <div style="font-size:10.5px;color:#64748b;margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span>${esc(row.asset_code || "-")}${row.NUP ? ` &bull; NUP ${esc(row.NUP)}` : ""}</span></div>`;
+    // Ikon rute di samping NUP → Google Maps langsung menyusun rute dari
+    // lokasi perangkat ke titik aset ini (aplikasi Maps di HP, web di desktop).
+    if (lat !== null && lng !== null) {
+      const rute = document.createElement("a");
+      rute.href = urlGoogleMaps(lat, lng);
+      rute.target = "_blank";
+      rute.rel = "noopener noreferrer";
+      rute.className = "peta-popup-rute";
+      rute.title = "Buka rute ke aset ini di Google Maps";
+      rute.setAttribute("aria-label", "Rute ke aset ini di Google Maps");
+      rute.setAttribute("data-testid", "popup-rute-gmaps");
+      rute.innerHTML = IKON_POPUP.rute;
+      rute.addEventListener("click", (e) => e.stopPropagation());
+      title.lastElementChild.appendChild(rute);
+    }
     head.appendChild(title);
     el.appendChild(head);
 
@@ -1169,15 +1185,6 @@ const AssetMapFullView = memo(function AssetMapFullView({
         baris.appendChild(set);
       }
       el.appendChild(baris);
-      if (jarak > 300) {
-        const gm = document.createElement("a");
-        gm.href = urlGoogleMaps(lat, lng);
-        gm.target = "_blank";
-        gm.rel = "noopener noreferrer";
-        gm.className = "peta-popup-gmaps";
-        gm.innerHTML = `${IKON_POPUP.luar}<span>Rute Google Maps</span>`;
-        el.appendChild(gm);
-      }
     }
 
     // ── Pill status inventarisasi + kondisi + kelengkapan pengguna ──
@@ -1375,7 +1382,10 @@ const AssetMapFullView = memo(function AssetMapFullView({
       // bawah (buang auto-open bawaan leaflet agar tak bentrok).
       // Padding kiri/atas: popup tak boleh tertutup kolom tombol zoom/lokasi
       // maupun panel lapangan di atas.
-      marker.bindPopup(() => buildPopupEl(entry), { autoPanPaddingTopLeft: L.point(56, 64) });
+      marker.bindPopup(() => buildPopupEl(entry), {
+        autoPanPaddingTopLeft: L.point(56, 64),
+        autoPanPaddingBottomRight: L.point(22, 10), // × mengambang 14 px di luar tepi kanan
+      });
       if (marker._openPopup) marker.off("click", marker._openPopup, marker);
       marker.on("click", () => {
         if (selectModeRef.current && toggleOneRef.current) toggleOneRef.current(entry.row.id);

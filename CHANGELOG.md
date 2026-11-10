@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1119] Popup pin: margin simetris, × mengambang di sudut, ikon rute Google Maps di samping NUP — 2026-11-10
+
+- **Sisi kanan popup tak lagi lebih lebar**: margin isi kini simetris (18 px).
+  Penyebab lama: ruang kanan 44 px untuk tombol ×, ditambah CSS Leaflet (dimuat
+  belakangan, spesifisitas sama) yang menimpa posisi × sehingga tetap di dalam
+  sudut.
+- **Tombol ×** lingkaran 32 px putih bersayap bayangan, mengambang di sudut
+  kanan-atas di luar area isi — tak menimpa judul; selektor dipertegas agar tak
+  kalah dari leaflet.css. Auto-pan diberi ruang kanan agar × tak terpotong.
+- **Ikon rute di samping NUP**: ketuk → Google Maps langsung menyusun rute dari
+  lokasi perangkat ke titik aset (tersedia untuk semua pin berkoordinat, tanpa
+  harus menyalakan Lokasi Anda). Tautan "Rute Google Maps" di bawah popup dihapus.
+- e2e Chromium 20/20 (margin kiri = kanan 19 px, × di luar area isi, href rute).
+
 ## [#1118] Panel lapangan: daftar aset sekitar digulir sampai habis, ikon SVG, popup rapi — 2026-11-10
 
 - **Daftar aset terdekat dimuat bertahap**: 10 baris pertama, gulir ke dasar

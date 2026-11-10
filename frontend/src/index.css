@@ -291,19 +291,33 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
 
 /* ── Popup peta: tombol tutup (×) & aksi lapangan ───────────────────────────
    Tombol × bawaan Leaflet adalah <a> 24 px di pojok; aturan 44 px global di HP
-   membengkakkannya jadi kotak 44×44 yang menimpa judul popup dan × melayang
-   di pojok kiri-atas kotak itu. Kini lingkaran 30 px yang rapi di dalam tepi
-   popup, dan judul diberi ruang di kanannya (lihat .leaflet-popup-content). */
-.leaflet-container a.leaflet-popup-close-button {
-  top: 8px; right: 8px;
-  width: 30px; height: 30px; min-width: 30px; min-height: 30px;
+   membengkakkannya jadi kotak 44×44 yang menimpa judul. Kini lingkaran 32 px
+   yang MENGAMBANG di sudut kanan-atas popup (di luar area isi), sehingga isi
+   popup tetap bermargin SIMETRIS kiri-kanan dan tak ada teks yang tertimpa.
+   Selektor sengaja lebih spesifik dari leaflet.css: CSS Leaflet dimuat
+   BELAKANGAN (chunk peta) dan berspesifisitas sama, jadi top/right-nya dulu
+   menang dan × tetap menempel di dalam sudut. */
+.leaflet-container .leaflet-popup a.leaflet-popup-close-button {
+  top: -14px; right: -14px;
+  width: 32px; height: 32px; min-width: 32px; min-height: 32px;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 9999px; background: #f1f5f9; color: #475569;
-  font: 600 18px/1 system-ui, sans-serif; text-decoration: none;
+  border-radius: 9999px; background: #fff; color: #475569;
+  border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(15, 23, 42, .22);
+  font: 600 18px/1 system-ui, sans-serif; text-decoration: none; z-index: 1;
 }
-.leaflet-container a.leaflet-popup-close-button:hover { background: #e2e8f0; color: #0f172a; }
-.leaflet-container a.leaflet-popup-close-button span { line-height: 1; margin-top: -2px; }
-.leaflet-container .leaflet-popup-content { margin-right: 44px; }
+.leaflet-container .leaflet-popup a.leaflet-popup-close-button:hover { background: #f1f5f9; color: #0f172a; }
+.leaflet-container .leaflet-popup a.leaflet-popup-close-button span { line-height: 1; margin-top: -2px; }
+.leaflet-container .leaflet-popup-content { margin: 14px 18px; }
+
+/* Ikon rute Google Maps di samping NUP. */
+.leaflet-container a.peta-popup-rute {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; min-width: 26px; min-height: 26px;
+  border-radius: 9999px; background: #eff6ff; color: #2563eb !important;
+  border: 1px solid #bfdbfe;
+}
+.leaflet-container a.peta-popup-rute:hover { background: #dbeafe; }
+.leaflet-container a.peta-popup-rute svg { width: 14px; height: 14px; }
 
 .peta-popup-jarak {
   display: flex; align-items: center; gap: 5px; margin-top: 7px;
@@ -325,12 +339,6 @@ aside .overflow-x-auto::-webkit-scrollbar-thumb:hover, .category-dropdown-scroll
 .peta-popup-btn--titik:hover { background: #ecfdf5; }
 .peta-popup-btn--yakin { color: #fff; background: #059669 !important; border-color: #059669; }
 .peta-popup-btn--tunggu { color: #94a3b8; border-style: dashed; cursor: help; }
-.peta-popup-gmaps {
-  display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 6px;
-  font-size: 10.5px; font-weight: 600; color: #2563eb !important;
-}
-.peta-popup-gmaps svg { width: 12px; height: 12px; }
-
 /* ── Kontrol Leaflet DIKECUALIKAN dari aturan 44px di layar sempit ──────────
    Tombol kontrol Leaflet & geoman adalah <a> di dalam .leaflet-bar, jadi
    aturan global di atas ikut memaksanya jadi 44x44. Di editor denah itu berarti
