@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowUp, ChevronDown, CircleCheck, Compass, ExternalLink, LocateFixed, MapPinned, PencilLine, Plus, X } from "lucide-react";
 import {
-  AKURASI_TITIK_M, cariTerdekat, cukupPresisi, jumlahDalamRadius, mataAngin, statusPandu, urlGoogleMaps,
+  AKURASI_TITIK_M, cukupPresisi, denganArah, mataAngin, semuaDalamRadius, statusPandu, urlGoogleMaps,
 } from "../../lib/asetTerdekat";
 import { parseKoordinat } from "../../lib/koordinatAset";
 import { formatJarak } from "../../lib/ukurPeta";
@@ -21,6 +21,8 @@ export function buatTokoPosisi() {
 }
 
 const RADIUS_RINGKAS = 50; // meter — "N aset di sekitar Anda"
+const RADIUS_DAFTAR = 5000; // meter — cakupan daftar yang bisa digulir
+const PER_MUAT = 10; // baris yang ditambahkan tiap kali gulir mencapai dasar
 const JARAK_GOOGLE_MAPS = 300; // lebih jauh dari ini → tawarkan navigasi jalan
 const KUNCI_FILTER = "aman_peta_terdekat_belum";
 
@@ -60,8 +62,23 @@ export default function PanelLapanganPeta({ toko, titik, tujuan, onPandu, onFoku
     try { localStorage.setItem(KUNCI_FILTER, hanyaBelum ? "1" : "0"); } catch { /* diam */ }
   }, [hanyaBelum]);
 
-  const daftar = useMemo(() => cariTerdekat(titik, posisi, { n: 5, hanyaBelum }), [titik, posisi, hanyaBelum]);
-  const dekat = useMemo(() => jumlahDalamRadius(titik, posisi, RADIUS_RINGKAS, { hanyaBelum }), [titik, posisi, hanyaBelum]);
+  // Semua aset ≤ 5 km terurut jarak (satu pindai), lalu ditampilkan bertahap:
+  // gulir sampai dasar daftar → PER_MUAT baris berikutnya, hingga habis.
+  const semua = useMemo(() => semuaDalamRadius(titik, posisi, { hanyaBelum, maksMeter: RADIUS_DAFTAR }), [titik, posisi, hanyaBelum]);
+  const dekat = useMemo(() => {
+    let n = 0;
+    while (n < semua.length && semua[n].jarak <= RADIUS_RINGKAS) n += 1;
+    return n;
+  }, [semua]);
+  const [batas, setBatas] = useState(PER_MUAT);
+  useEffect(() => { setBatas(PER_MUAT); }, [hanyaBelum]);
+  const daftar = useMemo(() => denganArah(semua.slice(0, batas), posisi), [semua, batas, posisi]);
+  const adaLagi = batas < semua.length;
+  const muatLagi = () => setBatas((b) => Math.min(b + PER_MUAT, semua.length));
+  const gulirDaftar = (e) => {
+    const el = e.currentTarget;
+    if (adaLagi && el.scrollTop + el.clientHeight >= el.scrollHeight - 24) muatLagi();
+  };
 
   const titikTujuan = useMemo(() => {
     if (!tujuan) return null;
@@ -185,7 +202,8 @@ export default function PanelLapanganPeta({ toko, titik, tujuan, onPandu, onFoku
             {daftar.length === 0 ? (
               <p className="text-[10px] text-muted-foreground py-1">Tidak ada aset {hanyaBelum ? "belum didata " : ""}dalam 5 km.</p>
             ) : (
-              <ul className="space-y-0.5">
+              <ul className="space-y-0.5 max-h-[min(32vh,20rem)] overflow-y-auto overscroll-contain -mr-1 pr-1"
+                onScroll={gulirDaftar} data-testid="panel-lapangan-daftar">
                 {daftar.map((t) => (
                   <li key={t.row.id} className="flex items-center gap-0.5">
                     {/* Daftar dilipat dulu: popup pin dibuka di bawah panel ini dan
@@ -217,10 +235,21 @@ export default function PanelLapanganPeta({ toko, titik, tujuan, onPandu, onFoku
                     )}
                   </li>
                 ))}
+                <li className="pt-1 pb-0.5 text-center text-[9.5px] text-muted-foreground" data-testid="panel-lapangan-jumlah">
+                  {adaLagi ? (
+                    <button type="button" onClick={muatLagi} className="underline hover:text-foreground min-h-0" data-testid="panel-lapangan-muat-lagi">
+                      Menampilkan {daftar.length} dari {semua.length} · gulir / ketuk untuk memuat lagi
+                    </button>
+                  ) : (
+                    <>Semua {semua.length} aset{hanyaBelum ? " belum didata" : ""} dalam 5 km ditampilkan</>
+                  )}
+                </li>
               </ul>
             )}
-            <p className="text-[9.5px] text-muted-foreground mt-1 leading-snug">
-              ◎ ketuk = kembali ke lokasi Anda · 🧭 = pandu ke aset (garis ungu). Ketuk pin untuk mengatur titiknya ke lokasi Anda.
+            <p className="text-[9.5px] text-muted-foreground mt-1 leading-snug flex flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="panel-lapangan-petunjuk">
+              <span className="inline-flex items-center gap-0.5 whitespace-nowrap"><LocateFixed className="w-3 h-3 text-blue-600 dark:text-blue-400" aria-hidden="true" />kembali ke lokasi Anda</span>
+              <span className="inline-flex items-center gap-0.5 whitespace-nowrap"><Compass className="w-3 h-3 text-violet-600 dark:text-violet-400" aria-hidden="true" />pandu ke aset</span>
+              <span className="inline-flex items-center gap-0.5 whitespace-nowrap"><MapPinned className="w-3 h-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />ketuk pin → titik di sini</span>
             </p>
           </div>
         )}

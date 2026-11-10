@@ -57,6 +57,28 @@ export function cariTerdekat(titik, posisi, { n = 5, hanyaBelum = false, maksMet
   return terbaik.map((t) => ({ ...t, arah: arahDerajat(posisi, t) }));
 }
 
+/**
+ * SEMUA aset dalam radius, terurut dari yang terdekat — untuk daftar yang
+ * dimuat bertahap saat digulir. Satu kali pindai + satu sort; arah dihitung
+ * belakangan hanya untuk baris yang benar-benar ditampilkan (`denganArah`).
+ * → [{ row, lat, lng, jarak }]
+ */
+export function semuaDalamRadius(titik, posisi, { hanyaBelum = false, maksMeter = 5000 } = {}) {
+  if (!posisi || !Number.isFinite(posisi.lat) || !Number.isFinite(posisi.lng)) return [];
+  const hasil = [];
+  for (const t of titik || []) {
+    if (hanyaBelum && (t.row.inventory_status || "Belum Diinventarisasi") !== "Belum Diinventarisasi") continue;
+    const jarak = jarakMeter(posisi, t);
+    if (jarak <= maksMeter) hasil.push({ ...t, jarak });
+  }
+  return hasil.sort((a, b) => a.jarak - b.jarak);
+}
+
+/** Tambahkan arah (azimut) ke baris hasil `semuaDalamRadius`. */
+export function denganArah(baris, posisi) {
+  return baris.map((t) => ({ ...t, arah: arahDerajat(posisi, t) }));
+}
+
 /** Jumlah aset dalam radius tertentu (untuk ringkasan "N dalam 50 m"). */
 export function jumlahDalamRadius(titik, posisi, meter, { hanyaBelum = false } = {}) {
   if (!posisi) return 0;

@@ -86,3 +86,31 @@ test("gerbang presisi 8 m: tambah & set titik nonaktif dengan alasan saat GPS ka
   expect(screen.queryByTestId("terdekat-1")).not.toBeInTheDocument();
   expect(localStorage.getItem("aman_peta_terdekat_belum")).toBe("1");
 });
+
+test("daftar dimuat bertahap saat digulir sampai semua aset ≤ 5 km tampil", () => {
+  const banyak = siapkanTitikAset(Array.from({ length: 25 }, (_, i) => row(`b${i}`, 0.00005 * (i + 1))));
+  const toko = buatTokoPosisi();
+  toko.set(P);
+  render(<PanelLapanganPeta toko={toko} titik={banyak} tujuan={null} onPandu={() => {}} onFokus={() => {}} />);
+  fireEvent.click(screen.getByTestId("panel-lapangan-toggle"));
+  const hitung = () => screen.getAllByTestId(/^terdekat-b\d+$/).length;
+  expect(hitung()).toBe(10);
+  expect(screen.getByTestId("panel-lapangan-jumlah")).toHaveTextContent("Menampilkan 10 dari 25");
+  const daftar = screen.getByTestId("panel-lapangan-daftar");
+  // Simulasikan gulir sampai dasar.
+  Object.defineProperty(daftar, "scrollHeight", { configurable: true, value: 400 });
+  Object.defineProperty(daftar, "clientHeight", { configurable: true, value: 200 });
+  daftar.scrollTop = 190;
+  fireEvent.scroll(daftar);
+  expect(hitung()).toBe(20);
+  // Belum di dasar → tidak memuat.
+  daftar.scrollTop = 0;
+  fireEvent.scroll(daftar);
+  expect(hitung()).toBe(20);
+  fireEvent.click(screen.getByTestId("panel-lapangan-muat-lagi"));
+  expect(hitung()).toBe(25);
+  expect(screen.getByTestId("panel-lapangan-jumlah")).toHaveTextContent("Semua 25 aset dalam 5 km ditampilkan");
+  expect(screen.queryByTestId("panel-lapangan-muat-lagi")).not.toBeInTheDocument();
+  // Urut jarak tetap terjaga.
+  expect(screen.getAllByTestId(/^terdekat-b\d+$/).slice(0, 3).map((b) => b.dataset.testid)).toEqual(["terdekat-b0", "terdekat-b1", "terdekat-b2"]);
+});

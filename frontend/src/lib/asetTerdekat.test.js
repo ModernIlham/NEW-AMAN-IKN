@@ -74,3 +74,12 @@ test("arah gerak hanya sah saat benar-benar bergerak", () => {
   expect(arahGerakSah({ heading: null, speed: 2 })).toBe(false);
   expect(arahGerakSah(null)).toBe(false);
 });
+
+test("semuaDalamRadius terurut & menyaring radius/filter; denganArah menambah azimut", async () => {
+  const { semuaDalamRadius, denganArah } = await import("./asetTerdekat");
+  const titik = siapkanTitikAset([row("c", 0.0003, 0), row("a", 0.0001, 0), row("b", 0.0002, 0, "Ditemukan"), row("jauh", 0.1, 0)]);
+  expect(semuaDalamRadius(titik, P).map((t) => t.row.id)).toEqual(["a", "b", "c"]);
+  expect(semuaDalamRadius(titik, P, { hanyaBelum: true }).map((t) => t.row.id)).toEqual(["a", "c"]);
+  expect(Math.round(denganArah(semuaDalamRadius(titik, P), P)[0].arah)).toBe(0);
+  expect(semuaDalamRadius(titik, null)).toEqual([]);
+});
