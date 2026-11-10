@@ -629,3 +629,32 @@ def test_tinggi_catatan_kaki_DITERUSKAN_ke_perencana(dbx):
     # atas benar-benar membedakan keduanya.
     abai = lkl.rencana_kolom(d["pengguna_hier"], lkl.tinggi_pengguna)
     assert abai["halaman"] != seharusnya["halaman"]
+
+
+def test_nama_TANPA_nomor_berlabel_belum_terdaftar_seperti_nomor_tak_terdaftar(dbx):
+    """Laporan pemilik: nama tanpa NIP/NIK (mis. "Akhmad Jazuli") tercetak
+    TANPA label "(belum terdaftar)", padahal ia sama-sama belum ada di Master
+    Pegawai — sementara nama ber-NIP tak terdaftar berlabel. Labelnya kini
+    menandai keduanya; baris "Tanpa Pengguna / NIP" dan pegawai terdaftar tidak.
+    """
+    _jalan(_seed(dbx, tanpa_nip=3, tak_terdaftar=1))
+    _jalan(dbx.assets.update_one({"id": "t0"}, {"$set": {"user": "Akhmad Jazuli"}}))
+    _jalan(dbx.assets.update_one({"id": "t1"}, {"$set": {"user": "Amin Susilo"}}))
+    d = _jalan(rp._build_executive_summary_data("k1", with_asset_rows=False))
+    html = rp._jinja_env().get_template("executive_summary.html").render(preview=False, **d)
+    awal = html.index("<h1>Distribusi Per Pengguna")
+    blok = html[awal:html.index("<h1>Analisis Lanjutan", awal)]
+
+    def berlabel(nama):
+        i = blok.index(nama)
+        return "(belum terdaftar)" in blok[i:blok.index("</td>", i)]
+
+    assert berlabel("Akhmad Jazuli")
+    assert berlabel("Amin Susilo")
+    assert berlabel("Pegawai Luar Master")           # NIP tak terdaftar (perilaku lama)
+    assert not berlabel("Tanpa Pengguna / NIP")
+    terdaftar = next(b["name"] for b in d["pengguna_hier"] if b.get("daun") and b.get("terdaftar"))
+    assert not berlabel(terdaftar)
+    assert d["pengguna_ringkas"]["jumlah_tanpa_nomor"] == 2
+    assert "2 di antaranya tanpa NIP/NIK" in blok
+    assert "1 di antaranya memiliki nomor yang belum terdaftar" in blok
