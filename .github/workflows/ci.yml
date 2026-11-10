@@ -285,8 +285,12 @@ jobs:
           --mongo mongodb://127.0.0.1:27017/
           --chromium google-chrome
           --output "${RUNNER_TEMP}/browser-evidence"
+      # Dijalankan juga saat uji gagal: tahap dan baris tempat uji berhenti
+      # tercetak di log job. Tanpa ini keduanya hanya ada di artefak, dan
+      # setiap kegagalan harus diunduh dulu sebelum bisa didiagnosis.
       - name: Ringkasan browser tanpa fixture
         id: result
+        if: ${{ !cancelled() }}
         run: python scripts/ci_verification.py browser "$RUNNER_TEMP/browser-evidence/hasil.json"
       - name: Simpan bukti tanpa akun, token, atau runtime.env
         if: always()
