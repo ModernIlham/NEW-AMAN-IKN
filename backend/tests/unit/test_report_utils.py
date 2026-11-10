@@ -54,7 +54,8 @@ def test_distribusi_pengguna_key_nip_nama_dari_master():
 def test_distribusi_pengguna_kosong():
     rows, ringkas = distribusi_pengguna([], {})
     assert rows == []
-    assert ringkas == {"jumlah_pengguna": 0, "jumlah_tak_terdaftar": 0, "ada_tanpa_nip": False}
+    assert ringkas == {"jumlah_pengguna": 0, "jumlah_tak_terdaftar": 0,
+                       "jumlah_tanpa_nomor": 0, "ada_tanpa_nip": False}
 
 
 def test_nama_tanpa_nomor_ditampilkan_dan_tidak_digabung_dengan_tanpa_pengguna():
@@ -72,3 +73,17 @@ def test_nama_tanpa_nomor_ditampilkan_dan_tidak_digabung_dengan_tanpa_pengguna()
     assert ringkas["jumlah_pengguna"] == 3
     assert sum(r["count"] for r in rows) == 5
     assert sum(r["value"] for r in rows) == 150
+
+
+def test_nama_tanpa_nomor_dihitung_belum_terdaftar_tanpa_menyertakan_tanpa_pengguna():
+    rows, ringkas = distribusi_pengguna([
+        {"user": "Akhmad Jazuli", "purchase_price": 100},
+        {"user": "akhmad  jazuli", "purchase_price": 100},   # nama sama → satu baris
+        {"user": "Amin Susilo", "purchase_price": 100},
+        {"purchase_price": 100},                              # Tanpa Pengguna / NIP
+        {"pengguna_nip": "1001", "user": "Budi", "purchase_price": 100},
+    ], {"1001": {"nama": "Budi Santoso"}})
+    assert ringkas["jumlah_tanpa_nomor"] == 2
+    assert ringkas["jumlah_tak_terdaftar"] == 0
+    tanpa = [r for r in rows if r["tanpa_nip"] and not r["tanpa_pengguna"]]
+    assert all(r["terdaftar"] is False for r in tanpa)

@@ -18,6 +18,17 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1120] Laporan Eksekutif: label "(belum terdaftar)" juga untuk nama tanpa NIP/NIK — 2026-11-10
+
+- Distribusi Per Pengguna: nama yang tercatat **tanpa NIP/NIK** (mis. "Akhmad
+  Jazuli", "Direktorat PED") kini berlabel **(belum terdaftar)** seperti nama
+  ber-NIP yang tak ada di Master Pegawai. Dulu label hanya muncul bila nomornya
+  ada. Baris "Tanpa Pengguna / NIP" dan pegawai terdaftar tetap tanpa label.
+- Catatan kaki menyebut kedua kelompok: "… N di antaranya memiliki nomor yang
+  belum terdaftar …, serta M di antaranya tanpa NIP/NIK sehingga belum dapat
+  dicocokkan dengan Master Pegawai — ditandai (belum terdaftar)".
+- `distribusi_pengguna` menambah `jumlah_tanpa_nomor` pada ringkasan.
+
 ## [#1119] Popup pin: margin simetris, × mengambang di sudut, ikon rute Google Maps di samping NUP — 2026-11-10
 
 - **Sisi kanan popup tak lagi lebih lebar**: margin isi kini simetris (18 px).

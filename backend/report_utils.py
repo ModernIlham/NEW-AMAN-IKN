@@ -63,7 +63,8 @@ def distribusi_pengguna(assets, pegawai_by_nip=None):
       dibawa apa adanya — pemanggil yang memutuskan jenjang mana dipakai,
       sebab itu bergantung tingkat satkernya.
     Kembalikan `(rows, ringkas)` — rows terurut nilai desc → count desc → nama;
-    ringkas = {jumlah_pengguna, jumlah_tak_terdaftar, ada_tanpa_nip}. MURNI.
+    ringkas = {jumlah_pengguna, jumlah_tak_terdaftar, jumlah_tanpa_nomor,
+    ada_tanpa_nip}. MURNI.
     """
     peg = pegawai_by_nip or {}
     grup = {}
@@ -106,6 +107,9 @@ def distribusi_pengguna(assets, pegawai_by_nip=None):
     ringkas = {
         "jumlah_pengguna": sum(1 for r in rows if not r["tanpa_pengguna"]),
         "jumlah_tak_terdaftar": sum(1 for r in rows if r["nip"] and not r["terdaftar"]),
+        # Nama tanpa NIP/NIK: tak bisa dicocokkan ke Master Pegawai (nama tak
+        # pernah ditebak), jadi juga BELUM terdaftar — dicetak berlabel sama.
+        "jumlah_tanpa_nomor": sum(1 for r in rows if r["tanpa_nip"] and not r["tanpa_pengguna"]),
         "ada_tanpa_nip": any(r["tanpa_nip"] for r in rows),
     }
     return rows, ringkas

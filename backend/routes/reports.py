@@ -5673,16 +5673,24 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # dengan yang mengukurnya. Cacah "NIP belum terdaftar" dulu tercetak di kop
     # halaman ini; kop kini dipakai bersama ketiga distribusi, dan angka itu
     # satu-satunya di halaman ini yang menyebut pekerjaan yang masih tersisa.
+    _tak_terdaftar = pengguna_ringkas["jumlah_tak_terdaftar"]
+    _tanpa_nomor = pengguna_ringkas.get("jumlah_tanpa_nomor", 0)
+    _rincian_belum = ""
+    if _tak_terdaftar:
+        _rincian_belum += (f", {_tak_terdaftar} di antaranya memiliki nomor yang "
+                           "belum terdaftar di Master Pegawai")
+    if _tanpa_nomor:
+        _rincian_belum += (f", {'serta ' if _tak_terdaftar else ''}{_tanpa_nomor} "
+                           "di antaranya tanpa NIP/NIK sehingga belum dapat dicocokkan "
+                           "dengan Master Pegawai")
+    if _rincian_belum:
+        _rincian_belum += " \u2014 ditandai \u201c(belum terdaftar)\u201d"
     catatan_pengguna = (
         "Pengelompokan menurut NIP/NIK; jika nomor kosong, menurut nama. "
         "Nama dan jabatan mengikuti Master Pegawai bila nomor terdaftar, "
         "selain itu memakai catatan aset. Tanpa nama dan nomor: "
         "\u201cTanpa Pengguna / NIP\u201d. "
-        f"{pengguna_ringkas['jumlah_pengguna']} pengguna tercatat"
-        + (f", {pengguna_ringkas['jumlah_tak_terdaftar']} di antaranya memiliki "
-           "nomor yang belum terdaftar di Master Pegawai"
-           if pengguna_ringkas["jumlah_tak_terdaftar"] else "")
-        + ".")
+        f"{pengguna_ringkas['jumlah_pengguna']} pengguna tercatat{_rincian_belum}.")
 
     # Status pie chart data (for SVG donut)
     status_pie = []
