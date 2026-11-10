@@ -7,7 +7,7 @@
 > **Nomor baris** di bawah adalah petunjuk pada baseline. Baris bergeser;
 > **nama fungsi** yang menjadi pegangan. Revalidasi sebelum menyunting.
 
-> **Revisi 3 (10 November 2026) — menggantikan revisi sebelumnya.**
+> **Revisi 4 (10 November 2026) — menggantikan revisi sebelumnya.**
 > Arahan pemilik yang membentuknya, berurutan:
 > 1. Master Pegawai internal **tidak berubah**; kelompok luar memakai
 >    **struktur yang sama** (instansi → satker → unit kerja → pegawai).
@@ -22,6 +22,21 @@
 >    aplikasi — **kecuali persuratan**, demi keresmian naskah.
 > 6. Pengelompokan menjadi dasar **kebijakan dan pasal yang berbeda** per
 >    jenis penerima.
+> 7. Catatan bersama boleh ditambah dan diubah **semua admin**, tercatat di
+>    audit.
+> 8. Naskah cetak **tanpa ikon**, kecuali **Laporan Eksekutif**: penggunanya
+>    diberi ikon kelompok.
+> 9. Data pribadi **tidak dikumpulkan** untuk instansi eksternal maupun pihak
+>    ketiga.
+> 10. Instansi dan satkernya **tidak boleh tercampur** satu dengan yang lain.
+> 11. Tujuannya **mengelompokkan pegawai agar mudah dilihat**: layar dibuka
+>     dengan memilih kelompok dulu — internal, instansi eksternal, atau pihak
+>     ketiga — dan pilihan itu langsung menjadi saringan.
+>
+> Butir 11 juga menjadi batas lingkup: direktori ini memuat **identitas**
+> (siapa orangnya, di instansi dan satker mana). Fakta hubungan satker dengan
+> pihak tertentu — perjanjian, masa berlaku, tarif — tetap di transaksinya
+> (BAST, Pemanfaatan, Penggunaan), tidak disalin ke direktori.
 
 ## 0. Cara memakai dokumen ini
 
@@ -93,9 +108,12 @@ uji anti-drift menagihnya — bila begitu, sebutkan di deskripsi PR.
 | Instansi | tersirat (instansi sendiri) | `instansi_luar` | `instansi_luar` — "Badan/Pihak" |
 | Satker | `satker` | `satker_luar` | `satker_luar` — "Unit/Cabang" |
 | Unit kerja | `unit_kerja` (Eselon I–V) | `unit_kerja_luar` (Eselon I–V) | `unit_kerja_luar` — "Tingkat I–V" |
-| Orang | `pegawai` | `pegawai_luar` — field sama | `pegawai_luar` — disesuaikan (3.7) |
+| Orang | `pegawai` | `pegawai_luar` — field sama, tanpa data pribadi | `pegawai_luar` — disesuaikan (3.7) |
 | Cakupan | per satker | **seluruh instansi** | **seluruh instansi** |
 | Ikon | kartu pegawai | gedung pemerintah | jabat tangan |
+
+Layar Master Pegawai dibuka dengan **memilih kelompok** lebih dulu; pilihan
+itu langsung menjadi saringan dan diingat untuk kunjungan berikutnya (3.10).
 
 Kemampuan yang sama di ketiga kelompok: tambah/ubah, cari, saring, urut,
 OCC, audit, foto, kartu tap, impor/ekspor/template Excel pulang-pergi,
@@ -265,6 +283,35 @@ dengan satu satker-wadah. Keduanya dibuat sistem saat pertama dibutuhkan,
 tidak bisa dihapus atau diganti nama, dan pohon unitnya dinonaktifkan. Ini
 struktur, bukan data contoh.
 
+**Tidak tercampur — aturan penampungan.** Banyak instansi, masing-masing
+dengan banyak satker, hanya tetap terbaca bila tiap tingkat tertutup rapat
+di dalam induknya:
+
+1. Satu satker milik **tepat satu** instansi. `instansi_id` sebuah satker
+   tidak bisa diubah setelah dibuat — salah tempat diperbaiki dengan membuat
+   satker di instansi yang benar lalu memindahkan orangnya, bukan menggeser
+   satkernya.
+2. Satu orang berada di **tepat satu** satker. `kelompok` dan `instansi_id`
+   orang selalu **diturunkan server** dari satkernya, tidak pernah dikirim
+   klien — sehingga orang tidak bisa "nyasar" ke instansi yang bukan induk
+   satkernya.
+3. Satu unit kerja berada di **tepat satu** satker. Ganti nama, hapus, dan
+   bangun-unit selalu dibatasi satker itu; unit senama di satker atau
+   instansi lain tidak tersentuh.
+4. Kelompok tidak bercampur: instansi `eksternal` tidak bisa berisi satker
+   atau orang pihak ketiga, dan `kelompok` sebuah instansi tidak bisa diubah
+   setelah ia punya satker.
+5. Internal tidak bercampur dengan luar: kode satker **internal** tidak
+   boleh didaftarkan sebagai `satker_luar`; NIP pegawai internal tidak boleh
+   didaftarkan sebagai orang luar.
+6. Nama satker boleh sama di dua instansi (unik **per instansi**), jadi di
+   layar mana pun yang menampilkan lebih dari satu instansi, satker selalu
+   ditulis bersama instansinya: "Kementerian X — Sekretariat".
+7. Pemilih selalu berjenjang: kelompok → instansi → satker. Daftar satker
+   hanya memuat satker instansi terpilih; mengganti instansi mengosongkan
+   pilihan satker.
+8. Impor ke satu satker tidak pernah menulis ke satker lain.
+
 ### 3.4 Satu direktori untuk seluruh instansi
 
 Keputusan pemilik. Keempat koleksi luar **tidak** distempel `kode_satker`
@@ -273,7 +320,7 @@ dan **tidak** dibungkus `scope_query_field_satker`.
 | Tindakan | Siapa | Catatan |
 |---|---|---|
 | Lihat | semua pengguna login, semua satker | |
-| Tambah, ubah | admin satker mana pun, super-admin | OCC `If-Match`; audit memuat satker pengubah (K2a) |
+| Tambah, ubah | admin satker mana pun, super-admin (keputusan pemilik, K2a) | OCC `If-Match`; **setiap** tulis tercatat di audit dengan nama pengguna, satkernya, dan — untuk ubah — field apa yang berubah dari apa menjadi apa |
 | Nonaktifkan | admin satker mana pun | `aktif: false` — tersembunyi dari pemilih, riwayat utuh |
 | Hapus permanen | **super-admin saja** | Ditolak bila masih dirujuk di satker mana pun |
 
@@ -288,6 +335,15 @@ hanya pemeriksaan "masih dirujuk?" sebelum hapus permanen yang lintas satker,
 dan pesannya tidak merinci satker lain.
 
 Kode satker milik instansi lain disimpan di `satker_luar.kode_luar`.
+
+**Direktori hanya memuat identitas.** Uji yang dipakai untuk tiap field:
+*"kalau dua satker mengisinya berbeda, apakah keduanya benar?"* Nama, nomor
+identitas, jabatan, badan dan satkernya — tidak; hanya ada satu yang benar,
+maka itu milik direktori bersama. Perjanjian kami dengan mereka, masa
+berlakunya, narahubung untuk urusan kami — ya; maka itu **bukan** isi
+direktori, melainkan isi transaksi di satker masing-masing. Menaruhnya di
+catatan bersama membuat satker B menimpa perjanjian satker A tanpa ada yang
+salah mengetik.
 
 ### 3.5 Logika murni dipakai bersama; rute luar modul tersendiri
 
@@ -338,14 +394,18 @@ untuk dan atas nama … berdasarkan …" atau "bertindak untuk diri sendiri".
 `petugas` (mis. teknisi) **bukan** pihak yang sah menandatangani atas nama
 badan; layar memperingatkannya saat ia dipilih sebagai penanda tangan.
 
+Kapasitas dan dasar kewenangan di direktori adalah **bawaan**: ia mengisi
+form BAST, dan di sanalah nilainya **dibekukan** untuk naskah itu. Surat
+kuasa bisa berbeda dari satu perjanjian ke perjanjian lain; yang berlaku
+secara hukum adalah yang tertulis di naskahnya, bukan yang kebetulan
+terakhir disimpan di direktori.
+
 **b. Field lama yang dimanfaatkan ulang (nama field tetap, sebutan berubah)**
 
 | Field | Sebutan internal | Sebutan pihak ketiga |
 |---|---|---|
 | `nip` | NIP/NIK/NRP | NIK (opsional, K5) |
 | `jabatan` | Jabatan | Jabatan pada badan |
-| `nomor_kontrak` | Nomor kontrak | Nomor dokumen dasar hubungan (perjanjian/persetujuan) |
-| `tgl_mulai_kontrak`, `tgl_selesai_kontrak` | Mulai/selesai kontrak | Berlaku mulai/sampai — tetap menggerakkan peringatan "masih memegang aset" |
 | `alamat` | Alamat | Alamat korespondensi |
 | `eselon1..5`, `unit_kerja` | Eselon I–V | Tingkat I–V (K9) |
 
@@ -365,13 +425,31 @@ server, tak berkolom di Excel pihak ketiga)
   ganti kerugian pegawai negeri; berlaku tidaknya bagi pihak ketiga belum
   diriset (PGW-00). `status: meninggal` + tanggalnya **tetap ada** karena
   itulah yang memblokir penugasan baru.
+- Fakta hubungan dengan satu satker: `nomor_kontrak`, `tgl_mulai_kontrak`,
+  `tgl_selesai_kontrak`. Bagi pihak ketiga ini perjanjian dengan satker
+  tertentu, bukan identitas orangnya (3.4); tempatnya di BAST dan modul
+  Pemanfaatan/Penggunaan. Peringatan "masih memegang aset" untuk pihak
+  ketiga karenanya bertumpu pada `status` orangnya dan jangka waktu di
+  naskah serah terimanya, bukan pada direktori.
 
 `status_kepegawaian` dipaksa `non_asn` oleh server, sehingga aturan yang
 sudah ada untuk Non-ASN — NIK tidak dicetak di blok tanda tangan, tanpa
 perkiraan pensiun — berlaku tanpa menyentuh pemanggilnya.
 
-**Instansi eksternal tidak mengalami satu pun dari ini**: field, sebutan,
-dan Excel-nya sama persis dengan internal.
+**d. Instansi eksternal: sama dengan internal, tanpa data pribadi**
+(keputusan pemilik, K8)
+
+Field, sebutan, struktur unit, dan aturan kepegawaiannya sama persis dengan
+internal — termasuk kontrak, yang bagi mereka adalah kontrak kerja pada
+instansinya sendiri. Satu-satunya beda: tujuh field pribadi berikut
+dinonaktifkan, karena direktori ini terlihat seluruh satker dan tak ada
+keperluan BMN atasnya: `tempat_lahir`, `agama`, `status_perkawinan`,
+`pendidikan_terakhir`, `npwp`, `nama_bank`, `no_rekening`. Empat field
+khusus pihak ketiga (3.7a) juga kosong.
+
+`tanggal_lahir` dan `jenis_kelamin` **tetap ada** di kedua kelompok luar:
+keduanya terbaca dari NIP/NIK itu sendiri, dan tanggal lahir dipakai kunci
+anti-ganda saat impor.
 
 ### 3.8 Ikon per kelompok — satu komponen, di semua layar kecuali persuratan
 
@@ -385,21 +463,31 @@ dan Excel-nya sama persis dengan internal.
 - Dibedakan **bentuk**, bukan hanya warna; tiap ikon punya nama yang bisa
   dibaca pembaca layar dan tooltip yang bisa diketuk (`TooltipKetuk`). Warna
   saja tidak boleh menjadi satu-satunya pembawa arti.
-- **Satu sumber**: `components/pegawai/IkonKelompok.jsx` +
-  `lib/kelompokOrang.js`. Tak ada berkas lain yang memilih ikon/warna
-  kelompok sendiri.
+- **Satu sumber gambar**: `backend/data/ikon_kelompok.json` — untuk tiap
+  kelompok: label, teks alternatif, warna, dan gambar SVG-nya. Salinannya di
+  `frontend/src/lib/ikonKelompok.json` dijaga uji agar **identik**. Layar
+  merendernya lewat `components/pegawai/IkonKelompok.jsx`; Laporan Eksekutif
+  merendernya sebagai SVG sebaris dari berkas yang sama. Tak ada berkas lain
+  yang memilih ikon/warna kelompok sendiri. Gambar SVG diambil dari paket
+  ikon yang sudah dipakai repo (`lucide`), dengan catatan lisensinya.
 - **Dari mana kelompoknya diketahui:** (1) salinan `kelompok` pada catatan
   itu sendiri bila ada (BAST, penerima persediaan — ditulis sejak PGW-06);
-  (2) selain itu, dicocokkan lewat **nomor identitas** ke indeks ringan
-  `GET /direktori-pegawai/indeks`. Tidak pernah ditebak dari nama.
-- **Luring:** indeks terakhir disimpan di perangkat; tanpa indeks, ikon tidak
-  tampil dan tak ada yang rusak.
-- **Tanpa ikon** (K10): persuratan (`PersuratanPage.jsx`,
-  `components/persuratan/*`), semua naskah cetak (PDF/Word/Excel), halaman
-  verifikasi publik TTD, dan email. Di sana kelompok — bila perlu disebut —
-  ditulis sebagai kata.
+  (2) selain itu, layar menanyakan **nomor identitas yang sedang tampil** ke
+  `POST /direktori-pegawai/kelompok` — bertumpuk, sekali per sekumpulan
+  nomor, hasilnya diingat. Tidak pernah ditebak dari nama. Server hanya
+  menjawab nomor yang ditanyakan; seluruh isi direktori tidak pernah dikirim
+  ke perangkat demi ikon.
+- **Luring:** jawaban yang pernah diterima disimpan di perangkat; nomor yang
+  belum pernah ditanyakan tampil tanpa ikon dan tak ada yang rusak.
+- **Naskah cetak** (keputusan pemilik, K10): **tanpa ikon** — persuratan
+  (`PersuratanPage.jsx`, `components/persuratan/*`), BAST, dan seluruh
+  PDF/Word/Excel lain, halaman verifikasi publik TTD, dan email. Di sana
+  kelompok — bila perlu disebut — ditulis sebagai kata.
+  **Satu-satunya pengecualian: Laporan Eksekutif**, yang menampilkan ikon
+  kelompok di samping tiap pengguna pada bagian Distribusi Per Pengguna,
+  disertai keterangan (legenda) tiga ikon itu.
 - Ketiga nama ikon sudah dipakai di berkas lain repo ini; periksa
-  ketersediaannya pada versi `lucide-react` terpasang sebelum memakai.
+  ketersediaannya pada versi paket terpasang sebelum memakai.
 
 ### 3.9 Kebijakan per jenis penerima sebagai data, bukan `if` yang tersebar
 
@@ -409,6 +497,57 @@ dirujuk, siapa yang layak menandatangani, rezim ganti rugi mana, dan butir
 pasal mana yang dipakai. Modul lain **bertanya** kepadanya. Isi awalnya
 diturunkan dari tabel 2.9 dan baru dikunci setelah PGW-00.
 
+### 3.10 Pilih kelompok dulu; lalu instansi; lalu satker
+
+**Pintu masuk.** Master Pegawai dibuka pada layar pilih kelompok: tiga
+pilihan besar berikon — Pegawai Internal, Pegawai Instansi Eksternal, Pihak
+Ketiga — masing-masing dengan cacahnya. Memilih satu langsung memuat daftar
+tersaring kelompok itu; tidak ada tombol "terapkan". Pilihan terakhir
+diingat di perangkat, jadi kunjungan berikutnya langsung membuka kelompok
+yang sama; ketiga pilihan tetap terlihat di kepala halaman untuk berpindah.
+Daftar "semua kelompok bercampur" **tidak disediakan** di layar ini.
+
+**Pemilih di modul lain** (aset, BAST, persediaan, dan seterusnya) memakai
+tiga pilihan yang sama sebagai saringan di kepala pemilih. Bawaannya
+Internal — pemakaian tersering dan perilaku hari ini.
+
+**Praktik untuk banyak instansi, masing-masing dengan banyak satker:**
+
+1. **Catat saat dibutuhkan, bukan dimuat semua.** Jangan mengisi direktori
+   dengan seluruh K/L, pemda, dan satkernya. Yang dicatat hanya instansi dan
+   satker yang orangnya benar-benar berurusan dengan BMN instansi ini.
+   Direktori yang kecil dan terpakai lebih mudah dijaga bersih daripada
+   salinan separuh benar dari daftar nasional.
+2. **Kode resmi sebagai pengenal, nama sebagai cadangan.** Instansi
+   pemerintah punya kode resmi (kode bagian anggaran K/L, kode wilayah pemda,
+   kode satker). Bila diisi, kode itulah yang menentukan "ini instansi/satker
+   yang sama" — bukan ejaan namanya. `instansi_luar.kode_referensi` dan
+   `satker_luar.kode_luar` unik bila terisi; `nama_kunci` baru dipakai bila
+   kodenya kosong. Kode tidak ditebak dan tidak dibenihkan dari ingatan;
+   diketik dari dokumen resmi pihak tersebut.
+3. **Cari dulu sebelum menambah.** Form tambah instansi/satker menampilkan
+   yang mirip saat mengetik, dan server menolak kembaran dengan menunjuk
+   catatan yang sudah ada. Di direktori bersama, kembaran adalah kerusakan
+   yang paling cepat menumpuk.
+4. **Pencarian dan pemotongan halaman di server.** Daftar instansi, satker,
+   dan orang luar dicari dan dipotong halamannya oleh server; layar tidak
+   pernah memuat seluruh direktori lalu menyaringnya sendiri. Ini menjaga
+   kecepatan saat direktori tumbuh dan mencegah seluruh nomor identitas
+   orang luar terkirim ke setiap perangkat.
+5. **Selalu tampil bersama induknya.** Di luar lingkup satu instansi, satker
+   ditulis "instansi — satker" dan orang ditulis dengan keduanya (3.3
+   butir 6). Nama satker saja tidak cukup untuk mengenali.
+6. **Nonaktifkan, jangan hapus.** Instansi dilebur, satker dibubarkan, orang
+   pindah: catatannya dinonaktifkan supaya hilang dari pemilih tetapi naskah
+   lama yang merujuknya tetap terbaca.
+7. **Setiap suntingan meninggalkan jejak.** Karena semua admin boleh
+   mengubah, jejak audit — siapa, dari satker mana, apa yang berubah —
+   adalah satu-satunya alat untuk menelusuri dan memulihkan suntingan yang
+   keliru. Riwayat itu dapat dibuka dari catatan yang bersangkutan.
+
+Butir 1–7 adalah praktik umum pengelolaan data induk bersama, dirumuskan
+penyusun untuk keadaan repo ini; bukan kutipan dari satu sumber tertentu.
+
 ---
 
 ## 4. Keputusan yang milik pemilik
@@ -417,15 +556,15 @@ diturunkan dari tabel 2.9 dan baru dikunci setelah PGW-00.
 |---|---|---|---|
 | K1 | BUMN/BUMD masuk kelompok mana? | Pihak ketiga | **Dijawab:** pihak ketiga |
 | K2 | Master luar per satker atau se-instansi? | — | **Dijawab:** satu direktori untuk seluruh instansi |
-| K2a | Siapa boleh mengubah catatan bersama? | Semua admin boleh tambah/ubah/nonaktifkan; hapus permanen hanya super-admin; semua ber-audit. Pilihan lain: hanya pencatat + super-admin yang boleh mengubah | |
+| K2a | Siapa boleh mengubah catatan bersama? | — | **Dijawab:** semua admin, dan tercatat di audit. (Hapus permanen tetap hanya super-admin — bawaan penyusun, belum disanggah) |
 | K3 | Orang luar mendapat akses portal BMN Saya? | Tidak | |
 | K4 | Tenaga alih daya yang sudah tercatat internal dipindah ke pihak ketiga? | Tidak | |
 | K5 | NIK orang pihak ketiga wajib? | Opsional; tanpa nomor ia tak bisa jadi pemegang aset tertaut dan ikonnya tak bisa dicocokkan pada catatan lama | |
 | K6 | Urutan modul yang ditautkan ke master instansi (PGW-11) | Pemanfaatan → Penggunaan (PSP) → Pemeliharaan → Pengadaan → Pemindahtanganan → Persediaan | |
 | K7 | Orang luar boleh jadi pejabat di Referensi Pejabat? | Tidak | |
-| K8 | Tab data pribadi untuk **instansi eksternal**? | Tampil — mengikuti "struktur sama"; semuanya opsional. Rekomendasi penyusun: sembunyikan, karena direktori ini kini terlihat seluruh satker | |
+| K8 | Data pribadi untuk **instansi eksternal**? | — | **Dijawab:** tidak dikumpulkan (3.7d) |
 | K9 | Sebutan tingkat unit pihak ketiga | "Tingkat I–V" | |
-| K10 | Ikon di naskah cetak (PDF/Word) dan halaman verifikasi publik? | Tidak — sama seperti persuratan; kelompok ditulis sebagai kata | |
+| K10 | Ikon di naskah cetak (PDF/Word) dan halaman verifikasi publik? | — | **Dijawab:** tidak, kecuali Laporan Eksekutif — penggunanya diberi ikon |
 | K11 | Perorangan/masyarakat dicatat di bawah satu wadah "Masyarakat (Perorangan)"? | Ya (3.3) | |
 
 ---
@@ -443,9 +582,9 @@ Semua koleksi di bawah: `id` UUID unik, `version` (OCC), `created_at`,
 | `jenis` | Lihat 5.6; harus cocok dengan `kelompok`. Menentukan kebijakan (3.9) |
 | `nama` | Wajib |
 | `nama_kunci` | Turunan server: huruf kecil, tanda baca dibuang, spasi tunggal, bentuk badan dinormalkan (`PT. Telkom` = `Telkom, PT`) |
-| `singkatan`, `kode_referensi`, `alamat`, `kota`, `telepon`, `email` | Opsional. `kode_referensi` = kode BA/kode pemda, teks bebas |
-| `narahubung_nama`, `narahubung_jabatan`, `narahubung_kontak` | Opsional |
-| `peran` | List kode (5.6) — petunjuk, bukan pembatas; peran sesungguhnya ada di tiap transaksi |
+| `kode_referensi` | Kode resmi instansi (kode bagian anggaran K/L, kode wilayah pemda). Opsional, teks bebas; **unik per kelompok bila terisi** dan menjadi pengenal utama (3.10 butir 2) |
+| `singkatan`, `alamat`, `kota`, `telepon`, `email` | Opsional — kontak **umum** instansi, bukan narahubung urusan satu satker |
+| `peran` | List kode (5.6) — gabungan dari semua satker; petunjuk, bukan pembatas. Peran sesungguhnya ada di tiap transaksi |
 | `nomor_induk`, `npwp`, `dasar_pendirian_nomor`, `dasar_pendirian_tanggal`, `badan_penyelenggara` | Hanya pihak ketiga (3.7a); dikosongkan untuk eksternal |
 | `wadah` | `true` hanya pada "Masyarakat (Perorangan)" — tak bisa diubah/hapus |
 
@@ -453,12 +592,12 @@ Semua koleksi di bawah: `id` UUID unik, `version` (OCC), `created_at`,
 
 | Field `satker` internal | Di `satker_luar` |
 |---|---|
-| `kode_satker` (identitas) | **`kode_luar`** — kode milik satker itu; opsional; teks bebas |
+| `kode_satker` (identitas) | **`kode_luar`** — kode milik satker itu; opsional; teks bebas; **unik per instansi bila terisi**; ditolak bila sama dengan kode satker internal |
 | `nama_satker`, `nama_unit_organisasi`, `nama_sub_unit`, `alamat`, `telepon`, `email`, `aktif` | sama |
 | `kode_satker_lengkap` | sama (kode lokasi BMN milik mereka; hanya eksternal) |
 | `eselon_satker` | sama — puncak pohon unitnya; kosong = 1 |
 | setelan kop & laporan (`logo_url`, `judul_laporan`, `penandatangan`, …) | **tidak dibawa** |
-| — | tambahan: `instansi_id`, `kelompok` dan `jenis` (salinan dari instansinya), `nama_kunci` |
+| — | tambahan: `instansi_id` (**tak bisa diubah** setelah dibuat), `instansi_nama`, `kelompok` dan `jenis` (salinan dari instansinya), `nama_kunci` |
 
 ### 5.3 `unit_kerja_luar` — bentuk sama dengan `unit_kerja`
 
@@ -487,6 +626,15 @@ for kol in ("instansi_luar", "satker_luar", "unit_kerja_luar", "pegawai_luar"):
     await _idx(db[kol], "id", unique=True)
 await _idx(db.instansi_luar, [("kelompok", 1), ("nama_kunci", 1)], unique=True)
 await _idx(db.satker_luar, [("instansi_id", 1), ("nama_kunci", 1)], unique=True)
+# kode resmi: unik bila terisi (indeks parsial, seperti NIP di bawah)
+await db.instansi_luar.create_index(
+    [("kelompok", 1), ("kode_referensi", 1)], unique=True,
+    name="unique_kode_instansi_luar",
+    partialFilterExpression={"kode_referensi": {"$gt": ""}})
+await db.satker_luar.create_index(
+    [("instansi_id", 1), ("kode_luar", 1)], unique=True,
+    name="unique_kode_satker_luar",
+    partialFilterExpression={"kode_luar": {"$gt": ""}})
 await _idx(db.unit_kerja_luar, "satker_luar_id")
 await _idx(db.pegawai_luar, [("kelompok", 1), ("satker_luar_id", 1), ("nama", 1)])
 # NIP unik se-direktori; string kosong dikecualikan lewat indeks parsial
@@ -570,7 +718,8 @@ ingatan.
 1. Setiap `pegawai_luar` menunjuk `satker_luar` yang ada; `kelompok`,
    `jenis_instansi`, `instansi_id` selalu sama dengan milik satkernya.
 2. `kelompok == "pihak_ketiga"` ⇒ `status_kepegawaian == "non_asn"` dan
-   seluruh field 3.7c kosong. `kelompok == "eksternal"` ⇒ field 3.7a kosong.
+   seluruh field 3.7c kosong. `kelompok == "eksternal"` ⇒ field 3.7a dan
+   tujuh field pribadi 3.7d kosong.
 3. `jenis_instansi == "perorangan"` ⇒ `kapasitas_bertindak == "diri_sendiri"`
    dan `eselon1..5` kosong.
 4. NIP unik se-direktori luar (indeks), dan tidak boleh sama dengan NIP
@@ -583,6 +732,15 @@ ingatan.
    pemeriksaan "masih dirujuk?" sebelum hapus permanen.
 7. Tak ada jalur di modul luar yang menulis ke `pegawai`, `unit_kerja`,
    `satker`, atau `assets`.
+8. **Penampungan** (3.3): `satker_luar.instansi_id` tidak pernah berubah;
+   `instansi_luar.kelompok` tidak berubah setelah punya satker; setiap unit
+   kerja luar menunjuk satker yang ada; induk sebuah unit selalu berada di
+   satker yang sama.
+9. Orang luar hanya dapat dipindah ke satker lain yang **sekelompok**.
+   Pindah lintas kelompok ditolak — penyesuaian field-nya berbeda dan akan
+   menghapus data tanpa disadari.
+10. `satker_luar.kode_luar` tidak pernah sama dengan `satker.kode_satker`
+    mana pun; `kode_referensi` dan `kode_luar` unik bila terisi.
 
 ---
 
@@ -594,14 +752,23 @@ Semua rute di bawah **baru**. Tak satu pun rute yang ada berubah.
 
 | Rute | Penjaga | Catatan |
 |---|---|---|
-| `GET /luar/referensi` | `require_user` | Semua kode 5.6 + `field_nonaktif_pihak_ketiga` + `label_field` (3.7b) — layar membaca ini, tidak menyalin daftar |
-| `GET /luar/instansi?kelompok=&jenis=&q=&aktif=` | `require_user` | + `jumlah_satker`, `jumlah_orang` (agregasi) |
+| `GET /luar/referensi` | `require_user` | Semua kode 5.6 + `field_nonaktif` per kelompok + `label_field` (3.7b) + `ikon` (isi `ikon_kelompok.json`) — layar membaca ini, tidak menyalin daftar |
+| `GET /luar/instansi?kelompok=&jenis=&q=&aktif=&page=` | `require_user` | `kelompok` wajib. Dicari dan dipotong halamannya di server; + `jumlah_satker`, `jumlah_orang` (agregasi) |
+| `GET /luar/riwayat/{jenis}/{id}` | `require_user` | Jejak audit satu catatan (instansi/satker/orang): siapa, satker mana, kapan, field apa berubah |
 | `POST /luar/instansi` | `require_admin` | Payload memuat `satker_pertama`; 400 bila `nama_kunci` sudah ada — jawaban menyertakan id yang sudah ada agar layar menawarkan "pakai yang ini" |
 | `PUT /luar/instansi/{id}` | `require_admin` + `If-Match` | Ganti nama → rambatkan `instansi_nama` |
 | `DELETE /luar/instansi/{id}` | `require_super_admin` | 409 bila masih punya satker berorang atau dirujuk transaksi |
-| `GET/POST /luar/satker`, `PUT`, `DELETE /luar/satker/{id}` | seperti instansi | Hapus 409 bila masih berorang/ber-unit |
+| `GET/POST /luar/satker`, `PUT`, `DELETE /luar/satker/{id}` | seperti instansi | `instansi_id` wajib pada daftar dan tidak diterima pada `PUT`. `kode_luar` yang sama dengan kode satker internal → 400. Hapus 409 bila masih berorang/ber-unit |
 
-Tiap tulis ber-`log_audit` dengan `kode_satker=kode_satker_user(user)`.
+Tiap tulis ber-`log_audit` dengan `kode_satker=kode_satker_user(user)`, id
+catatan di argumen `asset_id` (pola `buat_pegawai`), dan — untuk ubah —
+`changes=[{field, from, to}]`, parameter yang sudah disediakan `log_audit`.
+Karena audit di sini adalah alat pertanggungjawaban (K2a), panggil dengan
+`strict=True`: kegagalan mencatat tidak boleh lewat diam-diam.
+
+`GET /luar/riwayat` membaca `audit_logs` untuk id itu **tanpa** scope satker
+— catatannya milik bersama, jadi jejaknya pun terlihat semua satker. Halaman
+audit umum tetap ter-scope seperti hari ini.
 
 ### 6.2 Unit kerja luar (`backend/routes/unit_kerja_luar.py`)
 
@@ -618,14 +785,14 @@ daftar), `instansi_id`, `satker_luar_id`.
 
 | Rute internal | Padanan luar | Catatan |
 |---|---|---|
-| `GET /pegawai` | `GET /pegawai-luar` | + field 5.4; `info_masa` sama |
+| `GET /pegawai` | `GET /pegawai-luar` | + field 5.4; `info_masa` sama. Beda yang disengaja: menerima `q` dan `page` — dicari dan dipotong halamannya di server (3.10 butir 4) |
 | `GET /pegawai/rekap-unit` | `GET /pegawai-luar/rekap-unit` | `satker_luar_id` wajib |
 | — | `GET /pegawai-luar/rekap-lingkup?kelompok=` | Baru: cacah per instansi & satker |
 | `GET /pegawai/perlu-serah-terima` | padanan | Cacah aset **ter-scope satker pemanggil** |
 | `GET /pegawai/{id}/aset` | padanan | Hanya aset satker pemanggil |
 | `POST`, `PUT /pegawai…` | `POST`, `PUT /pegawai-luar…` | `require_admin`; `_bersih` + `validate_pegawai`, lalu `sesuaikan_orang_luar` |
 | `DELETE /pegawai/{id}` | `DELETE /pegawai-luar/{id}` | `require_super_admin`; admin memakai nonaktifkan |
-| template, ekspor, impor | padanan | Ekspor & impor wajib `satker_luar_id`; header per kelompok (PGW-04) |
+| template, ekspor, impor | padanan | Ekspor & impor wajib `satker_luar_id` (satu berkas = satu satker); header per kelompok (PGW-04) |
 | foto, foto-asli | padanan | `jenis` GridFS berbeda (5.5) |
 | kartu daftar/lepas | padanan | Cek silang kartu ke `pegawai` |
 
@@ -641,8 +808,8 @@ daftar), `instansi_id`, `satker_luar_id`.
 
 | Rute | Catatan |
 |---|---|
-| `GET /direktori-pegawai?kelompok=semua\|internal\|eksternal\|pihak_ketiga` | Hanya baca. Bagian internal **ter-scope satker pemanggil** (persis `GET /pegawai`); bagian luar se-instansi, hanya yang `aktif`. Field ringkas: `id`, `ranah`, `kelompok`, `jenis_instansi`, `nama`, `nip`, `jabatan`, `unit_kerja`, `email`, `alamat`, `status`, `status_kepegawaian`, `foto_file_id`, `instansi_nama`, `satker_luar_nama`, `kapasitas_bertindak` |
-| `GET /direktori-pegawai/indeks` | `{nomor_identitas: kelompok}` — bahan ikon. Cakupan sama dengan baris di atas. Ber-`ETag`; layar menyimpannya untuk luring |
+| `GET /direktori-pegawai?kelompok=internal\|eksternal\|pihak_ketiga&q=&instansi_id=&satker_luar_id=&page=` | Hanya baca; `kelompok` wajib (bawaan pemilih: `internal`). Internal **ter-scope satker pemanggil** (persis `GET /pegawai`); luar se-instansi, hanya yang `aktif`, dicari dan dipotong halamannya di server. Field ringkas: `id`, `ranah`, `kelompok`, `jenis_instansi`, `nama`, `nip`, `jabatan`, `unit_kerja`, `email`, `alamat`, `status`, `status_kepegawaian`, `foto_file_id`, `instansi_nama`, `satker_luar_nama`, `kapasitas_bertindak` |
+| `POST /direktori-pegawai/kelompok` | Bahan ikon. Badan `{nomor: [...]}` (maks. 500) → `{nomor: kelompok}` hanya untuk nomor yang dikenal. Cakupan sama dengan baris di atas. Ber-batas laju. Server tidak pernah mengembalikan nomor yang tidak ditanyakan |
 | `POST /direktori-pegawai/kartu/identifikasi` | Cari di `pegawai` dulu, lalu `pegawai_luar`; batas laju dan audit sama dengan rute internal |
 
 ```python
@@ -713,10 +880,11 @@ berkas di sini mengimpor `IkonKelompok` (PGW-08).
 | `pages/PemanfaatanPage.jsx`, `PemindahtangananPage.jsx`, `PengadaanPage.jsx` | Di samping mitra/pihak yang tertaut ke `instansi_luar` (PGW-11) |
 | `pages/WasdalPage.jsx` | Temuan pemegang berisiko |
 | `components/pegawai/KartuTapDialog.jsx` | Hasil tap |
+| **Laporan Eksekutif** (`backend/templates/executive_summary.html`) | Tiap pengguna pada Distribusi Per Pengguna + legenda — satu-satunya naskah cetak berikon (K10) |
 
 **Tanpa ikon** (`LARANGAN_IKON`, juga ditagih uji): `pages/PersuratanPage.jsx`,
 `components/persuratan/*`, `pages/TtdPublikPage.jsx`, dan seluruh keluaran
-backend (PDF/Word/Excel/email).
+backend (PDF/Word/Excel/email) **selain** templat Laporan Eksekutif.
 
 Nama berkas di tabel ini dicocokkan ulang dengan repo saat PGW-08 dimulai;
 yang tidak ada dicoret, yang terlewat ditambahkan.
@@ -735,7 +903,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-03 | Orang luar (backend) | 02 | belum | |
 | PGW-04 | Impor/ekspor/template orang luar | 03 | belum | |
 | PGW-05 | Unit kerja luar (backend) | 03 | belum | |
-| PGW-06 | Direktori gabungan, indeks kelompok, pembaca backend | 03 | belum | |
+| PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | belum | |
 | PGW-07 | Layar Master Pegawai | 03, 04, 05 | belum | |
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | belum | |
 | PGW-09 | Laporan & dokumen | 06 | belum | |
@@ -768,7 +936,7 @@ pengguna tidak melihat perubahan apa pun.
    - Siapa yang sah menandatangani penyerahan BMN kepada pihak di luar
      satker, dan siapa yang sah menerima atas nama badan (kapasitas & dasar
      kewenangan, 3.7a).
-   - Batas pengumpulan data pribadi orang luar menurut UU 27/2022 — bahan K8.
+   - Batas pengumpulan data pribadi orang luar menurut UU 27/2022 — menguji keputusan K8.
 3. Tambah kontrak di `docs/MASTERPLAN-SIKLUS-BMN.md`.
 4. Kunci daftar kode 5.6 dan isi `kebijakan_penerima` (6.6).
 5. Daftarkan sitasi yang akan tercetak ke `backend/sitasi_regulasi.py`
@@ -787,12 +955,15 @@ atau bertanda "perlu verifikasi" dengan bawaan konservatif yang dipakai.
 
 ```python
 # kode referensi 5.6
-FIELD_NONAKTIF_PIHAK_KETIGA = (...)        # persis daftar 3.7c
+FIELD_PRIBADI_LUAR = ("tempat_lahir", "agama", "status_perkawinan",
+                      "pendidikan_terakhir", "npwp", "nama_bank", "no_rekening")
+FIELD_NONAKTIF = {"eksternal": FIELD_PRIBADI_LUAR,      # 3.7d
+                  "pihak_ketiga": (...)}                # persis daftar 3.7c
 FIELD_KHUSUS_PIHAK_KETIGA = ("kapasitas_bertindak", "dasar_kewenangan_jenis",
                              "dasar_kewenangan_nomor", "dasar_kewenangan_tanggal")
 FIELD_KHUSUS_BADAN = ("nomor_induk", "npwp", "dasar_pendirian_nomor",
                       "dasar_pendirian_tanggal", "badan_penyelenggara")
-LABEL_FIELD = {"pihak_ketiga": {"nip": "NIK", "nomor_kontrak": "...", ...}}
+LABEL_FIELD = {"pihak_ketiga": {"nip": "NIK", "jabatan": "Jabatan pada badan", ...}}
 
 def nama_kunci(nama) -> str
 def validate_instansi_luar(doc) -> list[str]
@@ -800,11 +971,13 @@ def validate_satker_luar(doc) -> list[str]
 def bersihkan_instansi_luar(payload) -> dict     # kosongkan FIELD_KHUSUS_BADAN utk eksternal
 def bersihkan_satker_luar(payload) -> dict
 def sesuaikan_orang_luar(doc, kelompok, jenis_instansi) -> dict
-    # eksternal: kosongkan FIELD_KHUSUS_PIHAK_KETIGA; sisanya APA ADANYA
-    # pihak_ketiga: status_kepegawaian="non_asn"; kosongkan FIELD_NONAKTIF_…
+    # eksternal: kosongkan FIELD_KHUSUS_PIHAK_KETIGA + FIELD_NONAKTIF["eksternal"]
+    # pihak_ketiga: status_kepegawaian="non_asn"; kosongkan FIELD_NONAKTIF[...]
     # perorangan: kapasitas="diri_sendiri"; eselon1..5 kosong
 def validate_orang_luar(doc, kelompok, jenis_instansi) -> list[str]
     # pengurus_berwenang/penerima_kuasa tanpa dasar_kewenangan → peringatan
+def periksa_penampungan(satker_lama, satker_baru) -> list[str]
+    # pindah satker hanya dalam kelompok yang sama (invarian 9)
 def label_unit_orang(doc) -> str
     # internal: unit_kerja; luar: "instansi_nama — satker_luar_nama — unit"
 ```
@@ -812,11 +985,14 @@ def label_unit_orang(doc) -> str
 **Uji minimum:**
 - `nama_kunci("PT. Telkom Indonesia") == nama_kunci("Telkom  Indonesia, PT")`.
 - `sesuaikan_orang_luar` eksternal: dokumen penuh keluar sama dengan masuk,
-  kecuali empat field khusus pihak ketiga kosong.
-- Pihak ketiga: `non_asn`; setiap field 3.7c kosong; `nama`, `nip`,
-  `jabatan`, `nomor_kontrak`, `eselon2`, `tanggal_meninggal` utuh.
-- Kesetaraan skema: `set(_bersih(PegawaiIn(nama="x")))` ⊇
-  `FIELD_NONAKTIF_PIHAK_KETIGA` — salah ketik nama field gagal di sini.
+  kecuali tujuh field pribadi dan empat field khusus pihak ketiga kosong;
+  `nomor_kontrak`, `pangkat_golongan`, `eselon3` **utuh**.
+- Pihak ketiga: `non_asn`; setiap field 3.7c kosong (termasuk
+  `nomor_kontrak`); `nama`, `nip`, `jabatan`, `eselon2`, `tanggal_lahir`,
+  `tanggal_meninggal` utuh.
+- Kesetaraan skema: `set(_bersih(PegawaiIn(nama="x")))` ⊇ gabungan
+  `FIELD_NONAKTIF` — salah ketik nama field gagal di sini.
+- `periksa_penampungan` menolak pindah ke satker berkelompok lain.
 - `jenis` yang tak cocok `kelompok` ditolak; perorangan dipaksa
   `diri_sendiri`.
 
@@ -838,7 +1014,7 @@ Wadah perorangan dibuat lewat pembantu idempoten `pastikan_wadah_perorangan`.
 **Uji minimum** (pola `mongomock_motor` di `test_unit_kerja_route.py`):
 - Catatan buatan admin satker A **terlihat** oleh pengguna satker B.
 - Admin B dapat mengubahnya; `diubah_oleh.kode_satker == B`; audit tercatat
-  dengan satker B (K2a bawaan).
+  dengan satker B dan memuat `changes` field yang berubah (K2a).
 - `DELETE` oleh admin → 403; oleh super-admin → berhasil bila tak dirujuk,
   409 bila dirujuk.
 - Nama kembar beda tanda baca → 400 dengan id yang sudah ada.
@@ -847,6 +1023,15 @@ Wadah perorangan dibuat lewat pembantu idempoten `pastikan_wadah_perorangan`.
 - Tak satu pun dokumen tersimpan memuat kunci `kode_satker`.
 - Wadah perorangan tak bisa diubah/dihapus; pembuatannya idempoten.
 - Field khusus badan pada instansi eksternal tersimpan kosong.
+- **Tidak tercampur** (3.3): `PUT /luar/satker/{id}` yang mengirim
+  `instansi_id` lain → 400 dan dokumen tak berubah; `kelompok` instansi
+  yang sudah punya satker tak bisa diubah; daftar satker tanpa
+  `instansi_id` → 400; nama satker yang sama diterima di dua instansi
+  berbeda dan ditolak di instansi yang sama; `kode_luar` sama dengan kode
+  satker internal → 400; `kode_referensi` kembar dalam satu kelompok → 400.
+- `GET /luar/riwayat` menampilkan suntingan admin B kepada pengguna satker A.
+- Daftar instansi dipotong halaman; `q` mencari pada nama, singkatan, kode;
+  daftar tanpa `kelompok` → 400.
 
 ---
 
@@ -863,11 +1048,15 @@ Wadah perorangan dibuat lewat pembantu idempoten `pastikan_wadah_perorangan`.
 2. Pembantu `_stempel(doc, satker)`: mengisi `satker_luar_id`,
    `satker_luar_nama`, `instansi_id`, `instansi_nama`, `kelompok`,
    `jenis_instansi` dari master; memaksa `kode_satker = ""`. Satker tidak
-   ada/nonaktif → 400.
+   ada/nonaktif → 400. Nilai `kelompok`/`instansi_id` kiriman klien
+   **diabaikan**. Pada ubah, satker tujuan yang berkelompok lain → 400
+   (`periksa_penampungan`).
 3. Buat/ubah: `_bersih` → `validate_pegawai` + `validate_orang_luar` →
    `sesuaikan_orang_luar` → `_stempel` → cek NIP (invarian 4) → tulis
    ber-OCC → `log_audit`. `DuplicateKeyError` pada indeks NIP → 400.
-4. Daftar: `info_masa_pegawai` yang sama; hanya `aktif` kecuali diminta.
+4. Daftar: `kelompok` wajib; `q` dan `page` di server; `info_masa_pegawai`
+   yang sama; hanya `aktif` kecuali diminta. Tiap baris membawa
+   `instansi_nama` dan `satker_luar_nama`.
 5. Hapus (`require_super_admin`): hitung rujukan **lintas satker** — aset
    (`pengguna_nip`), BAST (`pihak_*.pegawai_id`), tautan modul. Dirujuk → 409
    "masih dirujuk; nonaktifkan saja", tanpa rincian satker.
@@ -892,7 +1081,10 @@ Wadah perorangan dibuat lewat pembantu idempoten `pastikan_wadah_perorangan`.
 
 **Uji rute minimum:** tiap invarian 5.7 satu uji; pihak ketiga dengan
 `status_kepegawaian: "pns"` dan `agama` terisi → tersimpan `non_asn`, agama
-kosong; eksternal dengan payload penuh tersimpan sama dengan `_bersih`-nya;
+kosong; eksternal dengan payload penuh tersimpan sama dengan `_bersih`-nya
+kecuali tujuh field pribadi; payload yang mengirim `kelompok` atau
+`instansi_id` berbeda dari satkernya → tersimpan milik satkernya; pindah ke
+satker berkelompok lain → 400;
 NIP milik pegawai internal satker **lain** → 400 dan pesannya tidak memuat
 nama orang itu; dua satker memegang aset atas orang yang sama → masing-masing
 hanya melihat asetnya.
@@ -913,7 +1105,7 @@ lulus tanpa disunting; `git diff --stat` tidak memuat `routes/pegawai.py`.
 1. `pegawai_utils.py` tidak disunting. Di modul luar:
    ```python
    def header_impor_luar(kelompok) -> list
-   # eksternal    → HEADER_IMPOR (identik)
+   # eksternal    → HEADER_IMPOR tanpa tujuh kolom field pribadi (3.7d)
    # pihak_ketiga → HEADER_IMPOR tanpa kolom field 3.7c, dengan sebutan
    #                3.7b, + "Kapasitas Bertindak", "Dasar Kewenangan",
    #                "Nomor Dasar Kewenangan", "Tgl Dasar Kewenangan"
@@ -922,11 +1114,11 @@ lulus tanpa disunting; `git diff --stat` tidak memuat `routes/pegawai.py`.
    ```
    `baris_impor_luar` memetakan sebutan pihak ketiga kembali ke header baku
    lalu memanggil `baris_impor_ke_pegawai` — satu penormal, bukan dua.
-2. Ekspor: `satker_luar_id` wajib — satu berkas = satu satker. Eksternal
-   memakai `_build_pegawai_xlsx` apa adanya; pihak ketiga memakai pembangun
-   yang sama dengan header dan baris dari langkah 1 (bila pembangun itu
-   mengeraskan `HEADER_IMPOR`, bungkus dengan pembangun kecil di modul luar —
-   jangan menyunting yang internal).
+2. Ekspor: `satker_luar_id` wajib — satu berkas = satu satker, dan nama
+   berkasnya memuat instansi serta satkernya. Kedua kelompok memakai header
+   dan baris dari langkah 1. `_build_pegawai_xlsx` mengeraskan
+   `HEADER_IMPOR`, jadi modul luar memakai pembangun kecilnya sendiri dengan
+   gaya yang sama — jangan menyunting yang internal.
 3. Impor: `satker_luar_id` wajib (`Form`). Parsing di thread. Per baris:
    `baris_impor_luar` → validasi (keluhan NIP disaring, seperti internal) →
    `sesuaikan_orang_luar` → `kunci_dedup_pegawai` → `gabung_baris_pegawai`.
@@ -939,8 +1131,10 @@ lulus tanpa disunting; `git diff --stat` tidak memuat `routes/pegawai.py`.
      `$setOnInsert`.
 
 **Uji minimum:** pulang-pergi untuk eksternal dan pihak ketiga; header
-eksternal **identik** dengan `HEADER_IMPOR`; header pihak ketiga tidak
-memuat satu pun kolom field 3.7c; impor ulang tidak menggandakan; berkas
+eksternal = `HEADER_IMPOR` dikurangi tepat tujuh kolom pribadi dengan
+urutan sisanya sama; header pihak ketiga tidak memuat satu pun kolom field
+3.7c; impor ke satker X tidak mengubah satu pun dokumen satker lain; impor
+ulang tidak menggandakan; berkas
 berisi NIP pegawai internal → internal tak berubah; ekspor/impor tanpa
 `satker_luar_id` → 400.
 
@@ -963,7 +1157,7 @@ menolak semua operasi unit.
 
 ---
 
-### PGW-06 — Direktori gabungan, indeks kelompok, pembaca backend
+### PGW-06 — Direktori gabungan, penjawab kelompok, pembaca backend
 
 **Berkas:** `backend/direktori_pegawai.py`,
 `backend/routes/direktori_pegawai.py`, `backend/server.py`, sembilan titik di
@@ -971,16 +1165,20 @@ menolak semua operasi unit.
 `test_penerima_persediaan.py`.
 
 1. `cari_orang`, `cari_orang_banyak` — urutan menang: internal dulu.
-2. `GET /direktori-pegawai`, `/indeks`, identifikasi kartu gabungan.
+2. `GET /direktori-pegawai` (dicari dan dipotong halamannya di server),
+   `POST /direktori-pegawai/kelompok`, identifikasi kartu gabungan.
 3. Sunting sembilan pembaca, **satu komit per berkas**, masing-masing dengan
    uji "orang luar terdaftar kini dikenali" dan uji "perilaku untuk orang
    internal tidak berubah".
 4. `enforce_pegawai_terdaftar`: hari ini tanpa scope satker; pertahankan
    semantik itu.
 
-**Uji minimum:** indeks untuk pengguna satker A memuat pegawai internal A
-dan seluruh orang luar aktif, **tidak** memuat pegawai internal B; NIP yang
-ada di internal dan luar → kelompok internal.
+**Uji minimum:** penjawab kelompok untuk pengguna satker A mengenali nomor
+pegawai internal A dan orang luar aktif, **tidak** mengenali nomor pegawai
+internal B, dan tidak pernah mengembalikan nomor yang tidak ditanyakan;
+lebih dari 500 nomor → 400; NIP yang ada di internal dan luar → kelompok
+internal; direktori tanpa `kelompok` → 400; hasil luar selalu membawa
+`instansi_nama` dan `satker_luar_nama`.
 
 ---
 
@@ -988,6 +1186,7 @@ ada di internal dan luar → kelompok internal.
 
 **Berkas:** `frontend/src/pages/PegawaiPage.jsx`,
 `frontend/src/lib/ranahPegawai.js` (+ uji),
+`frontend/src/components/pegawai/PilihKelompok.jsx`,
 `frontend/src/components/pegawai/BilahLingkupLuar.jsx`,
 `frontend/src/components/pegawai/KelolaOrganisasiLuar.jsx`,
 `frontend/src/pages/__tests__/PegawaiKelompok.test.jsx`.
@@ -999,26 +1198,39 @@ ada di internal dan luar → kelompok internal.
 2. Ganti 22 literal `${API}/pegawai` dan 5 literal `${API}/unit-kerja` di
    `PegawaiPage.jsx` dengan jalur dari ranah aktif. Untuk ranah internal
    hasilnya string yang sama persis.
-3. **Pemilih kelompok** berikon (3.8): Internal · Instansi Eksternal · Pihak
-   Ketiga. `data-testid="pegawai-kelompok-<kunci>"`; tinggi ≥ 44px di
-   ≤ 1023px; ranah dan lingkup masuk deps efek muat ulang.
-4. **Bilah lingkup** (tab luar): instansi → satker, dengan cacah dari
-   `rekap-lingkup`, saringan `jenis`, tombol "Kelola". Tombol Tambah, Impor,
-   Ekspor, Struktur Organisasi, Kelola Unit nonaktif sampai satu satker
-   dipilih (dengan keterangan).
+3. **Pintu masuk pilih kelompok** (3.10), `PilihKelompok.jsx`: tiga pilihan
+   besar berikon dengan cacahnya. Belum ada pilihan tersimpan → hanya layar
+   ini yang tampil dan **belum ada daftar yang dimuat**. Memilih satu →
+   daftar kelompok itu langsung dimuat, tanpa tombol "terapkan". Pilihan
+   disimpan di perangkat (baca/tulis dalam try/catch; tanpa simpanan,
+   layar pilih yang tampil). Sesudahnya ketiga pilihan menjadi bilah di
+   kepala halaman. `data-testid="pegawai-kelompok-<kunci>"`; tinggi ≥ 44px
+   di ≤ 1023px; ranah dan lingkup masuk deps efek muat ulang. Tidak ada
+   pilihan "semua".
+4. **Bilah lingkup** (tab luar): instansi → satker, dicari di server, dengan
+   cacah dari `rekap-lingkup`, saringan `jenis`, tombol "Kelola". Daftar
+   satker hanya memuat satker instansi terpilih; **mengganti instansi
+   mengosongkan pilihan satker**; mengganti kelompok mengosongkan keduanya.
+   Tombol Tambah, Impor, Ekspor, Struktur Organisasi, Kelola Unit nonaktif
+   sampai satu satker dipilih (dengan keterangan). Di atas daftar selalu
+   tertulis lingkup yang sedang dilihat: "Kementerian X — Sekretariat".
 5. `KelolaOrganisasiLuar.jsx` — komponen level modul, dua tingkat. Saat
    mengetik nama, tampilkan yang mirip dari direktori ("sudah ada — pakai
    yang ini") **sebelum** simpan: direktori bersama cepat kotor oleh
    kembaran. Form badan pihak ketiga memuat field 3.7a dengan label
    `nomor_induk` mengikuti jenis. Hapus permanen hanya tampak bagi
    super-admin; yang lain melihat "Nonaktifkan".
-6. **Form orang.** `EMPTY` tidak berubah. Eksternal: form sama persis.
+6. **Form orang.** `EMPTY` tidak berubah. Kepala form menuliskan instansi
+   dan satker tempat orang itu dicatat; keduanya tidak bisa diketik, hanya
+   berasal dari lingkup aktif. Eksternal: form sama dengan internal
+   dikurangi tujuh field pribadi (3.7d).
    Pihak ketiga: field 3.7c tidak dirender; sebutan 3.7b; Status Kepegawaian
    terkunci Non-ASN; bagian baru "Kapasitas & Dasar Kewenangan". Perorangan:
    bagian unit tidak dirender, kapasitas terkunci "diri sendiri".
 7. Karena direktori bersama, kepala tab luar memuat keterangan satu baris:
-   "Direktori ini dipakai bersama seluruh satker." Baris daftar menampilkan
-   satker pencatat pada rincian.
+   "Direktori ini dipakai bersama seluruh satker." Rincian tiap catatan
+   punya tautan "Riwayat perubahan" (`GET /luar/riwayat`) yang menyebut
+   siapa mengubah apa, dari satker mana.
 8. Tab luar: tanpa "Sinkron aset"; tanpa jam ahli waris.
 9. Daftar dirender dua kali (kartu HP dan tabel desktop) — ubah keduanya.
 10. `hover:bg-muted`; uji terang dan gelap; jangan memperkecil tombol.
@@ -1028,7 +1240,13 @@ ada di internal dan luar → kelompok internal.
   sebelum paket (daftar URL dibekukan di uji).
 - Tab pihak ketiga tidak merender field agama, pangkat, rekening; merender
   Kapasitas Bertindak.
-- Tab eksternal merender form yang sama dengan internal.
+- Tab eksternal tidak merender agama dan rekening; tetap merender pangkat
+  dan kontrak.
+- Tanpa pilihan tersimpan: layar pilih kelompok tampil dan tak satu pun
+  daftar pegawai diminta ke server. Dengan pilihan tersimpan: kelompok itu
+  langsung dimuat.
+- Mengganti instansi mengosongkan satker terpilih; daftar satker hanya
+  berisi satker instansi itu.
 - Tanpa satker terpilih, tombol Tambah nonaktif.
 - Tombol hapus permanen tidak ada untuk admin biasa.
 - `PegawaiAkarEselon.test.jsx` dan backend `test_pegawai_cakupan_ekspor.py`
@@ -1041,42 +1259,52 @@ ada di internal dan luar → kelompok internal.
 
 ### PGW-08 — Ikon kelompok & pemilih lintas modul
 
-Boleh dipecah: 08a (komponen + indeks + aset + BAST), 08b (layar lain).
+Boleh dipecah: 08a (komponen + penjawab kelompok + aset + BAST), 08b (layar
+lain).
 
 **Berkas inti:** `frontend/src/components/pegawai/IkonKelompok.jsx`,
 `frontend/src/lib/kelompokOrang.js` (+ uji),
-`frontend/src/hooks/useIndeksKelompok.js`,
+`frontend/src/lib/ikonKelompok.json`,
+`frontend/src/hooks/useKelompokOrang.js`,
 `frontend/src/lib/__tests__/permukaanIkon.test.js`.
 
-1. `lib/kelompokOrang.js`: `KELOMPOK` (ikon, kelas warna terang/gelap, teks
-   alternatif), `PERMUKAAN_IKON`, `LARANGAN_IKON`,
-   `kelompokDari(catatan, indeks)` — salinan pada catatan menang atas indeks.
+1. `lib/kelompokOrang.js`: membaca `ikonKelompok.json` (gambar, warna, teks
+   alternatif — salinan identik `backend/data/ikon_kelompok.json`),
+   `PERMUKAAN_IKON`, `LARANGAN_IKON`, `kelompokDari(catatan, jawaban)` —
+   salinan pada catatan menang atas jawaban server.
 2. `IkonKelompok`: prop `kelompok` atau `nomor`; `ukuran`; `denganLabel`.
    `role="img"` + `aria-label`; tooltip lewat `TooltipKetuk`; `min-w-0
    min-h-0` supaya aturan tap-target global tidak membengkakkannya di dalam
    baris. Kelompok tak dikenal → tidak merender apa pun.
-3. `useIndeksKelompok`: memuat `/direktori-pegawai/indeks` sekali per sesi
-   (ber-`ETag`), menyimpannya di perangkat untuk luring (baca/tulis dalam
-   try/catch; halaman harus tetap benar tanpa simpanan itu), dan
-   menyegarkannya saat kembali daring. **Satu** pemuatan dibagi semua layar
-   — jangan memuat per baris.
-4. Pemilih di tiap berkas 7.2-frontend berpindah ke
-   `GET /direktori-pegawai?kelompok=semua` dan menampilkan ikon + instansi.
+3. `useKelompokOrang`: mengumpulkan nomor identitas yang sedang tampil,
+   menanyakannya ke `POST /direktori-pegawai/kelompok` **sekali per
+   tumpukan** (ditunda sebentar, tanpa nomor kembar, maks. 500), dan
+   mengingat jawabannya — termasuk "tak dikenal" — di memori dan di
+   perangkat untuk luring (baca/tulis dalam try/catch; halaman harus tetap
+   benar tanpa simpanan itu). Satu penampung dibagi semua layar — jangan
+   bertanya per baris.
+4. Pemilih di tiap berkas 7.2-frontend berpindah ke `GET /direktori-pegawai`
+   dengan tiga pilihan kelompok di kepala pemilih (bawaan Internal) dan
+   pencarian di server; hasil menampilkan ikon, instansi, dan satkernya.
+   Peringatan "belum terdaftar" di form aset bertanya ke penjawab kelompok,
+   bukan ke daftar yang termuat.
    `pihakDariPegawai`: untuk orang luar `alamat` = alamat orangnya, jatuh ke
    "instansi — satker". Memilih orang ber-kapasitas `petugas` sebagai pihak
    BAST/penanda tangan memunculkan peringatan lunak.
 5. Pasang `IkonKelompok` di tiap layar `PERMUKAAN_IKON` (7.3).
    - Di dalam `FullCameraSheet` tetap elemen native.
-   - Daftar aset: jangan menambah permintaan jaringan per baris; ikon hanya
-     membaca indeks yang sudah di memori.
+   - Daftar aset: jangan menambah permintaan jaringan per baris; nomor yang
+     tampil ditanyakan bersama lewat `useKelompokOrang`.
    - `PejabatPage.jsx` dan `PortalPemegangPanel.jsx` tetap memuat `/pegawai`.
 6. Uji `permukaanIkon.test.js` (pembaca-sumber): tiap berkas di
    `PERMUKAAN_IKON` mengimpor `IkonKelompok`; tak satu pun berkas di
    `LARANGAN_IKON` mengimpornya; tak ada berkas selain `kelompokOrang.js`
-   yang memetakan kelompok → nama ikon.
+   yang memetakan kelompok → gambar ikon; `ikonKelompok.json` di frontend
+   sama byte demi byte dengan `backend/data/ikon_kelompok.json`.
 
 **Uji minimum:** ikon punya nama terakses yang berbeda per kelompok; nomor
-tak dikenal → tak ada ikon; gagal memuat indeks → layar tetap tampil; lima
+tak dikenal → tak ada ikon; penjawab kelompok gagal → layar tetap tampil;
+seratus baris dengan sepuluh nomor berbeda → satu permintaan; lima
 berkas uji Jest yang me-mock URL `/pegawai` diperbarui bila berkasnya
 disentuh.
 
@@ -1087,22 +1315,39 @@ warnanya); periksa terang/gelap, HP/desktop; halaman Persuratan tanpa ikon.
 
 ### PGW-09 — Laporan & dokumen
 
-1. **Tanpa ikon** di seluruh keluaran (K10). Kelompok ditulis sebagai kata
-   hanya bila menambah keterangan.
-2. **Laporan Eksekutif — Distribusi Per Pengguna**: pengguna luar membawa
-   jalur eselon organisasi lain — jangan dilebur ke pohon satker sendiri.
-   Pembagi tersendiri sesudah pengguna internal: "Instansi Eksternal" →
-   instansi → satker, lalu "Pihak Ketiga" → badan → unit. Baris pengguna
-   internal tidak berubah.
+1. **Tanpa ikon** di seluruh keluaran (K10) — BAST, daftar pemegang, laporan
+   lain, Excel. Kelompok ditulis sebagai kata hanya bila menambah
+   keterangan. **Kecuali Laporan Eksekutif** (butir 2).
+2. **Laporan Eksekutif — Distribusi Per Pengguna**
+   (`backend/templates/executive_summary.html`, `routes/reports.py` sekitar
+   `peg_master`, `report_utils.distribusi_pengguna`,
+   `laporan_jenjang.baris_hierarki_pengguna`):
+   - Tiap baris pengguna yang terdaftar mendapat **ikon kelompoknya**,
+     dirender sebagai SVG sebaris dari `backend/data/ikon_kelompok.json`
+     dengan `<title>` berisi teks alternatifnya. Pengguna tak terdaftar
+     tetap berlabel "(belum terdaftar)" tanpa ikon.
+   - Satu baris **keterangan ikon** (legenda) di atas tabel, supaya laporan
+     yang dicetak hitam-putih tetap terbaca.
+   - Pastikan penyusun PDF laporan ini merender SVG sebaris pada templat
+     itu (uji render nyata, bukan hanya HTML-nya); bila tidak, pakai gambar
+     yang sama sebagai data-URI.
+   - Pengguna luar membawa jalur eselon organisasi lain — jangan dilebur ke
+     pohon satker sendiri. Pembagi tersendiri sesudah pengguna internal:
+     "Instansi Eksternal" → instansi → satker, lalu "Pihak Ketiga" → badan
+     → unit. Urutan dan isi baris pengguna internal tidak berubah selain
+     ikonnya.
 3. **Rekap pemegang / daftar per pemegang PDF:** kolom unit memakai
    `label_unit_orang`.
-4. **Wasdal:** temuan "pemegang berisiko" menyebut kelompok + instansi; untuk
-   orang luar "kontrak berakhir" berbunyi "masa hubungan berakhir".
+4. **Wasdal:** temuan "pemegang berisiko" menyebut kelompok + instansi.
+   Untuk pihak ketiga temuan bertumpu pada `status` orangnya, karena field
+   kontraknya nonaktif (3.7c).
 5. Aturan blok tanda tangan tidak berubah: tetap `baris_identitas_ttd`.
 
 **Uji:** `test_laporan_eksekutif_pengguna_jenjang.py` diperluas; total tidak
 berubah; laporan yang seluruh penggunanya internal menghasilkan baris yang
-sama persis dengan sebelum paket. Smoke-render PDF dengan harness FakeDB.
+sama dengan sebelum paket selain ikon dan legendanya; tiap ikon di HTML
+punya `<title>`; tak ada templat lain di `backend/templates/` yang memuat
+gambar ikon kelompok. Smoke-render PDF dengan harness FakeDB.
 
 ---
 
@@ -1220,8 +1465,10 @@ Pemanfaatan dan Penggunaan (PSP) memanggil `periksa_penyerahan` sebagai
    dan `nama_kunci`, tiap satker mencatat "Kementerian X" versinya sendiri.
 6. **Pesan galat adalah kebocoran.** "NIP sudah dipakai pegawai internal"
    tidak boleh menyebut nama atau satkernya.
-7. **Indeks kelompok dimuat sekali.** Memuatnya per baris daftar aset
-   mengubah satu layar menjadi ribuan permintaan.
+7. **Kelompok ditanyakan bertumpuk, bukan per baris** — dan server hanya
+   menjawab nomor yang ditanyakan. Bertanya per baris mengubah satu layar
+   menjadi ribuan permintaan; mengirim seluruh direktori ke perangkat
+   menyebarkan nomor identitas semua orang luar ke setiap pengguna.
 8. **Ikon bukan pengganti teks.** Tanpa nama terakses dan bentuk yang
    berbeda, pembaca layar dan pengguna buta warna tidak mendapat apa-apa.
 9. **Satu orang di dua master.** Sisi luar menolak NIP milik internal;
@@ -1265,16 +1512,20 @@ daftar berkas di `test_gerbang_media.py`, `test_penjaga_senyap.py`,
 
 ### Uji terima akhir (setelah PGW-10, di lingkungan uji — bukan produksi)
 
+0. Membuka Master Pegawai pertama kali → layar pilih kelompok; memilih satu
+   langsung menampilkan daftar kelompok itu; membuka lagi → kelompok yang
+   sama langsung tampil.
 1. Tab internal: tambah, ubah, impor, ekspor — sama dengan sebelum fitur ini.
 2. Admin satker A membuat "Kementerian X" + satker, dan "PT Z" + unit.
    Admin satker B langsung melihat keduanya dan tidak bisa menghapusnya.
 3. Mengetik "PT. Z" saat menambah badan → ditawari yang sudah ada.
 4. Form pihak ketiga: tanpa agama/pangkat/rekening; ada Kapasitas & Dasar
-   Kewenangan. Form eksternal: sama dengan internal.
+   Kewenangan. Form eksternal: seperti internal tanpa agama/rekening.
 5. Ekspor satu satker luar → ubah satu sel → impor → hanya sel itu berubah.
 6. Di daftar aset, pengguna internal, eksternal, dan pihak ketiga tampil
    dengan tiga ikon berbeda; pengguna tak terdaftar tanpa ikon.
-7. Halaman Persuratan dan PDF BAST: tanpa ikon.
+7. Halaman Persuratan dan PDF BAST: tanpa ikon. Laporan Eksekutif: tiap
+   pengguna terdaftar berikon, ada legendanya.
 8. Satker A dan B masing-masing menyerahkan aset ke orang luar yang sama →
    masing-masing hanya melihat aset miliknya pada orang itu.
 9. BAST "pinjam pakai" kepada badan usaha → ditolak dengan skema yang
@@ -1283,6 +1534,14 @@ daftar berkas di `test_gerbang_media.py`, `test_penjaga_senyap.py`,
     tanda tangan nama saja; tak ada klausul hukuman disiplin.
 11. BAST kepada pegawai internal: naskah identik dengan sebelum fitur ini.
 12. Pemilih pejabat dan panel portal tidak menampilkan orang luar.
+13. Tidak tercampur: dua instansi masing-masing punya satker "Sekretariat"
+    — keduanya tampil dengan nama instansinya; memilih instansi pertama
+    hanya menawarkan satkernya sendiri; orang yang ditambahkan di sana
+    tidak muncul di instansi kedua; ganti nama unit di satu satker tidak
+    mengubah satker lain.
+14. Admin B mengubah jabatan seseorang yang dicatat admin A → "Riwayat
+    perubahan" pada catatan itu menyebut admin B, satkernya, dan nilai
+    lama–baru.
 
 ### Definisi selesai
 
@@ -1298,8 +1557,8 @@ tanpa diff.
 |---|---|---|---|
 | R1 | Naskah serah terima kepada pihak ketiga dibuat tanpa dasar hukum yang benar (mis. disebut "pinjam pakai") | Tinggi bahwa naskah di repo membatasi pinjam pakai pada pemda/pemdes; sedang atas keberlakuannya hari ini | PGW-00 lalu PGW-10; `periksa_penyerahan`; sitasi terdaftar |
 | R2 | Skema untuk sekolah swasta, yayasan, kelompok masyarakat belum jelas | **Rendah — belum diriset** | PGW-00; sampai itu, jenis-jenis ini bisa dicatat tetapi BAST penyerahannya ditahan |
-| R3 | Direktori bersama rusak oleh suntingan satker lain atau kembaran | Sedang | Audit dengan satker pengubah; hapus hanya super-admin; pencarian-saat-mengetik; K2a |
-| R4 | Data pribadi orang luar terlihat seluruh satker | Sedang | Field pribadi pihak ketiga dinonaktifkan; K8 untuk eksternal |
+| R3 | Direktori bersama rusak oleh suntingan satker lain atau kembaran | Sedang | Audit ketat dengan satker pengubah + riwayat per catatan; hapus hanya super-admin; kode resmi dan pencarian-saat-mengetik |
+| R4 | Data pribadi orang luar terlihat seluruh satker | Sedang | Field pribadi dinonaktifkan untuk kedua kelompok luar; daftar dicari di server; penjawab kelompok hanya menjawab nomor yang ditanyakan |
 | R5 | Penangan rute luar menyimpang dari internal seiring waktu | Tinggi bahwa ini harga desain koleksi sejajar | Uji kesetaraan; logika murni dipakai bersama |
 | R6 | Ikon tak muncul pada catatan lama tanpa nomor identitas | Tinggi (sifat desain) | Disebut terang; tak pernah menebak dari nama |
 | R7 | `PegawaiPage.jsx` (1.954 baris) sulit disunting aman | Tinggi | Penggantian jalur mekanis + uji regresi URL |
