@@ -51,6 +51,16 @@ const MAX_SELECTED_EXPORT = 200;
 // daftar aset tak bisa berbeda pendapat tentang "aset ini sudah berkoordinat".
 const parseCoord = parseKoordinat;
 
+// Ikon SVG (garis, gaya lucide) untuk aksi lapangan di popup pin.
+const svgIkon = (isi) => `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${isi}</svg>`;
+const IKON_POPUP = {
+  kompas: svgIkon('<circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.8 5.41a2 2 0 0 1-1.27 1.27L7.76 16.24l1.8-5.41a2 2 0 0 1 1.27-1.27z"/>'),
+  titik: svgIkon('<path d="M18 8c0 3.6-3.87 7.43-5.39 8.8a1 1 0 0 1-1.22 0C9.87 15.43 6 11.6 6 8a6 6 0 0 1 12 0"/><circle cx="12" cy="8" r="2"/><path d="M8.7 14H5a1 1 0 0 0-.95.68l-2 6A1 1 0 0 0 3 22h18a1 1 0 0 0 .95-1.32l-2-6A1 1 0 0 0 19 14h-3.7"/>'),
+  bidik: svgIkon('<line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/>'),
+  pin: svgIkon('<path d="M20 10c0 5-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>'),
+  luar: svgIkon('<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
+};
+
 // Data pengguna barang LENGKAP = nama pengguna + NIP/NIK terisi + BAST
 // sudah terunggah → pin diberi border hijau.
 function isPenggunaComplete(row) {
@@ -1108,45 +1118,53 @@ const AssetMapFullView = memo(function AssetMapFullView({
 
     // ── Lapangan: jarak dari Anda + Pandu / Titik = lokasi saya ──
     // Hanya saat Lokasi Anda aktif. Aksi dibaca ulang dari toko saat diketuk
-    // (popup bisa terbuka lama sementara posisi terus bergerak).
+    // (popup bisa terbuka lama sementara posisi terus bergerak). Ikon = SVG
+    // (bukan emoji): emoji tampil beda-beda per HP dan merusak perataan tombol.
     const saya = tokoPosisiRef.current?.get();
     if (saya && lat !== null && lng !== null) {
       const jarak = jarakMeterTitik(saya, { lat, lng });
       const dari = document.createElement("div");
       dari.setAttribute("data-testid", "popup-jarak-saya");
-      dari.style.cssText = "margin-top:6px;font-size:10.5px;color:#1d4ed8;font-weight:600";
-      dari.textContent = `📍 ${formatJarak(jarak)} dari Anda · ${mataAngin(arahDerajat(saya, { lat, lng }))}`
-        + ` (GPS ±${Math.round(saya.accuracy)} m)`;
+      dari.className = "peta-popup-jarak";
+      dari.innerHTML = `${IKON_POPUP.pin}<span>${esc(formatJarak(jarak))} dari Anda · ${esc(mataAngin(arahDerajat(saya, { lat, lng })))}`
+        + ` <span style="font-weight:500;color:#64748b">(GPS ±${Math.round(saya.accuracy)} m)</span></span>`;
       el.appendChild(dari);
       const baris = document.createElement("div");
-      baris.style.cssText = "display:flex;gap:5px;margin-top:5px";
-      const gayaBtn = (warna) => `flex:1;min-width:0;padding:6px 4px;border-radius:8px;font-size:10.5px;font-weight:700;cursor:pointer;background:#fff;border:1.5px solid ${warna};color:${warna}`;
+      baris.className = "peta-popup-aksi";
       const pandu = document.createElement("button");
       pandu.type = "button";
-      pandu.textContent = "🧭 Pandu ke sini";
+      pandu.className = "peta-popup-btn peta-popup-btn--pandu";
+      pandu.title = "Garis pandu & jarak langsung dari lokasi Anda ke aset ini";
+      pandu.innerHTML = `${IKON_POPUP.kompas}<span>Pandu ke sini</span>`;
       pandu.setAttribute("data-testid", "popup-pandu");
-      pandu.style.cssText = gayaBtn("#7c3aed");
       pandu.addEventListener("click", () => { entry.marker.closePopup(); panduRef.current?.(entry.row); });
       baris.appendChild(pandu);
       if (onSaveRef.current && canEditRef.current) {
         const set = document.createElement("button");
         set.type = "button";
         set.setAttribute("data-testid", "popup-set-titik");
-        set.style.cssText = gayaBtn("#059669");
         let yakin = false;
-        const label = () => {
+        const segarkan = () => {
           const kini = tokoPosisiRef.current?.get();
-          if (!kini) return "📍 Lokasi mati";
-          if (!cukupPresisi(kini)) return `📍 Tunggu GPS ≤ ${AKURASI_TITIK_M} m`;
-          return yakin ? `Ketuk lagi: pindah ${formatJarak(jarakMeterTitik(kini, { lat: entry.lat, lng: entry.lng }))}` : "📍 Titik = lokasi saya";
+          let ikon = IKON_POPUP.titik; let teks; let jenis = "titik";
+          if (!kini) { ikon = IKON_POPUP.bidik; teks = "Lokasi mati"; jenis = "tunggu"; }
+          else if (!cukupPresisi(kini)) { ikon = IKON_POPUP.bidik; teks = `Tunggu GPS ≤${AKURASI_TITIK_M} m`; jenis = "tunggu"; }
+          else if (yakin) { teks = `Ketuk lagi · ${formatJarak(jarakMeterTitik(kini, { lat: entry.lat, lng: entry.lng }))}`; jenis = "yakin"; }
+          else teks = "Titik di sini";
+          set.className = `peta-popup-btn peta-popup-btn--${jenis}`;
+          set.title = jenis === "tunggu"
+            ? `Titik aset hanya bisa diambil dari GPS dengan akurasi ≤ ${AKURASI_TITIK_M} m (kini ${kini ? `±${Math.round(kini.accuracy)} m` : "lokasi mati"})`
+            : "Pindahkan titik aset ini ke lokasi Anda sekarang (dua ketuk)";
+          set.innerHTML = `${ikon}<span>${esc(teks)}</span>`;
         };
-        set.textContent = label();
+        segarkan();
         set.addEventListener("click", () => {
           const kini = tokoPosisiRef.current?.get();
-          if (!kini || !cukupPresisi(kini)) { set.textContent = label(); setTitikRef.current?.(entry.row); return; }
-          if (!yakin) { yakin = true; set.textContent = label(); return; }
+          if (!kini || !cukupPresisi(kini)) { segarkan(); setTitikRef.current?.(entry.row); return; }
+          if (!yakin) { yakin = true; segarkan(); return; }
           if (setTitikRef.current?.(entry.row)) entry.marker.closePopup();
           yakin = false;
+          segarkan();
         });
         baris.appendChild(set);
       }
@@ -1156,8 +1174,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
         gm.href = urlGoogleMaps(lat, lng);
         gm.target = "_blank";
         gm.rel = "noopener noreferrer";
-        gm.textContent = "Rute Google Maps ↗";
-        gm.style.cssText = "display:block;margin-top:4px;font-size:10.5px;color:#2563eb;text-align:center";
+        gm.className = "peta-popup-gmaps";
+        gm.innerHTML = `${IKON_POPUP.luar}<span>Rute Google Maps</span>`;
         el.appendChild(gm);
       }
     }

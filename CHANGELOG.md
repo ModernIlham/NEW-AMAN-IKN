@@ -18,6 +18,21 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1118] Panel lapangan: daftar aset sekitar digulir sampai habis, ikon SVG, popup rapi — 2026-11-10
+
+- **Daftar aset terdekat dimuat bertahap**: 10 baris pertama, gulir ke dasar
+  (atau ketuk "muat lagi") menambah 10 berikutnya sampai **semua aset ≤ 5 km**
+  tampil; kaki daftar menunjukkan "Menampilkan X dari Y" / "Semua Y aset …".
+  Daftar bergulir di dalam panel (tinggi dibatasi agar tak melewati peta).
+- **Ikon SVG** menggantikan emoji (🧭 📍 ↗) di popup pin dan petunjuk panel —
+  emoji tampil berbeda di tiap HP dan merusak perataan.
+- **Dua tombol popup** (Pandu ke sini · Titik di sini) kini satu baris, lebar &
+  tinggi sama; keadaan "Tunggu GPS ≤8 m" bergaris putus abu-abu (tak lagi hijau
+  seolah aktif); konfirmasi kedua berwarna penuh.
+- **Tombol tutup (×) popup** lingkaran 30 px rapi di dalam tepi popup — dulu
+  dibengkakkan aturan 44 px jadi kotak yang menimpa judul.
+- Diuji end-to-end di Chromium (30 aset, GPS simulasi, terang & gelap): 18/18 lulus.
+
 ## [#1117] Lokasi Anda dirancang ulang untuk kerja lapangan: pandu, titik = lokasi saya, tambah di sini — 2026-11-09
 
 - **Dihapus** (umpan balik pemilik: kurang bermanfaat): jejak perjalanan, tombol
