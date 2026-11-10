@@ -7,7 +7,7 @@
 > **Nomor baris** di bawah adalah petunjuk pada baseline. Baris bergeser;
 > **nama fungsi** yang menjadi pegangan. Revalidasi sebelum menyunting.
 
-> **Revisi 5 (10 November 2026) — menggantikan revisi sebelumnya.**
+> **Revisi 6 (10 November 2026) — menggantikan revisi sebelumnya.**
 > Arahan pemilik yang membentuknya, berurutan:
 > 1. Master Pegawai internal **tidak berubah**; kelompok luar memakai
 >    **struktur yang sama** (instansi → satker → unit kerja → pegawai).
@@ -34,7 +34,9 @@
 >     ketiga — dan pilihan itu langsung menjadi saringan.
 >
 > 12. Instansi eksternal dipilah lagi: **pusat** (kementerian/lembaga) atau
->     **daerah** (pemerintah provinsi/kabupaten/kota).
+>     **daerah** (pemda: provinsi/kabupaten/kota), masing-masing dengan
+>     **ikonnya sendiri**.
+> 13. Kabupaten/kota **ditautkan ke provinsinya**.
 >
 > Butir 11 juga menjadi batas lingkup: direktori ini memuat **identitas**
 > (siapa orangnya, di instansi dan satker mana). Fakta hubungan satker dengan
@@ -113,7 +115,7 @@ uji anti-drift menagihnya — bila begitu, sebutkan di deskripsi PR.
 | Unit kerja | `unit_kerja` (Eselon I–V) | `unit_kerja_luar` (Eselon I–V) | `unit_kerja_luar` — "Tingkat I–V" |
 | Orang | `pegawai` | `pegawai_luar` — field sama, tanpa data pribadi | `pegawai_luar` — disesuaikan (3.7) |
 | Cakupan | per satker | **seluruh instansi** | **seluruh instansi** |
-| Ikon | kartu pegawai | gedung pemerintah | jabat tangan |
+| Ikon | kartu pegawai | gedung pemerintah (pusat) · peta wilayah (daerah) | jabat tangan |
 
 Layar Master Pegawai dibuka dengan **memilih kelompok** lebih dulu; pilihan
 itu langsung menjadi saringan dan diingat untuk kunjungan berikutnya (3.10).
@@ -278,7 +280,31 @@ instansi_luar ─┬─ satker_luar ─┬─ unit_kerja_luar (pohon Eselon/Ting
 
 Orang luar **wajib** berada di satu `satker_luar`. Instansi dibuat bersama
 satker pertamanya (untuk pihak ketiga, layar mengisi nama satker pertama =
-nama badan, bisa diubah).
+nama badan, bisa diubah). Pengecualian: pemda boleh dicatat tanpa perangkat
+daerah dulu, karena provinsi sering dicatat hanya sebagai induk
+kabupaten/kotanya.
+
+**Jenjang daerah.** Pemda saling bertaut lewat `induk_id`:
+
+```
+Pemprov ─┬─ (perangkat daerah provinsi)
+         └─ Pemkab/Pemkot ─┬─ (perangkat daerah kabupaten/kota)
+                           └─ Pemdes ── (perangkat desa)
+```
+
+- Provinsi tidak berinduk. Kabupaten/kota **wajib** berinduk satu provinsi.
+  Desa **wajib** berinduk satu kabupaten/kota.
+- Provinsi (dan, untuk desa, kabupaten/kotanya) disalin ke tiap pemda di
+  bawahnya dan ke satker serta orangnya, sehingga "semua di Provinsi X"
+  dapat disaring tanpa menelusuri jenjang.
+- Induk harus sudah tercatat. Mencatat Pemkab Y saat Provinsi X belum ada →
+  layar menawarkan mencatat provinsinya dulu (cukup nama dan kodenya).
+- Induk dapat diganti (pemekaran wilayah), tercatat di audit, dan salinan
+  provinsinya ikut merambat. Pemda yang masih punya anak tidak bisa
+  dihapus atau diganti jenisnya.
+- Di layar, kabupaten/kota selalu ditulis bersama provinsinya: "Kab. Y,
+  Prov. X — Dinas Z".
+- K/L dan pihak ketiga tidak berjenjang: `induk_id` selalu kosong.
 
 **Perorangan/masyarakat** tidak punya badan. Agar strukturnya tetap satu,
 ada satu instansi-wadah berjenis `perorangan` — "Masyarakat (Perorangan)" —
@@ -464,7 +490,8 @@ anti-ganda saat impor.
 | Kelompok | Ikon (lucide-react) | Warna | Teks alternatif |
 |---|---|---|---|
 | Internal | `IdCard` | sky | "Pegawai internal" |
-| Instansi eksternal | `Landmark` | amber | "Pegawai instansi eksternal" |
+| Instansi eksternal — pusat | `Landmark` | amber | "Pegawai kementerian/lembaga" |
+| Instansi eksternal — daerah | `MapPinned` | violet | "Pegawai pemda" |
 | Pihak ketiga | `Handshake` | emerald | "Pihak ketiga" |
 | Tak terdaftar di master mana pun | *(tanpa ikon)* | — | — |
 
@@ -493,8 +520,8 @@ anti-ganda saat impor.
   kelompok — bila perlu disebut — ditulis sebagai kata.
   **Satu-satunya pengecualian: Laporan Eksekutif**, yang menampilkan ikon
   kelompok di samping tiap pengguna pada bagian Distribusi Per Pengguna,
-  disertai keterangan (legenda) tiga ikon itu.
-- Ketiga nama ikon sudah dipakai di berkas lain repo ini; periksa
+  disertai keterangan (legenda) keempat ikon itu.
+- Keempat nama ikon sudah dipakai di berkas lain repo ini; periksa
   ketersediaannya pada versi paket terpasang sebelum memakai.
 
 ### 3.9 Kebijakan per jenis penerima sebagai data, bukan `if` yang tersebar
@@ -518,12 +545,24 @@ Daftar "semua kelompok bercampur" **tidak disediakan** di layar ini.
 **Instansi eksternal: pusat atau daerah.** Memilih Instansi Eksternal
 memunculkan pilihan kedua — **Pusat (Kementerian/Lembaga)** atau **Daerah
 (Pemerintah Provinsi/Kabupaten/Kota)** — juga dengan cacahnya, juga langsung
-menyaring, juga diingat. Di bawah Daerah ada saringan jenis: Provinsi ·
-Kabupaten/Kota · Desa. Urutannya menjadi: kelompok → pusat/daerah →
-instansi → satker. Sebutan mengikuti tatarannya: pusat memakai
-"Kementerian/Lembaga" dan "Satker"; daerah memakai "Pemerintah Daerah" dan
-"Perangkat Daerah" (K12). Ikonnya tetap satu untuk seluruh instansi
-eksternal; pembedanya tulisan "Pusat" atau "Daerah" di samping ikon.
+menyaring, juga diingat, dan masing-masing dengan ikonnya sendiri (K14).
+
+- **Pusat:** kelompok → Pusat → kementerian/lembaga → satker.
+- **Daerah:** kelompok → Daerah → **provinsi** → pemprov itu sendiri atau
+  salah satu kabupaten/kotanya (→ desanya, bila ada) → perangkat daerah.
+  Daftar kabupaten/kota hanya memuat yang berinduk provinsi terpilih.
+
+Sebutan mengikuti tatarannya: pusat memakai "Kementerian/Lembaga" dan
+"Satker"; daerah memakai "Pemda" dan "Perangkat Daerah" (K12).
+
+**Pusat atau daerah ditentukan oleh milik siapa instansinya, bukan letak
+kantornya** (K13). Kantor vertikal kementerian/lembaga di daerah — kantor
+wilayah, kantor pelayanan, Polres, Kodim, kejaksaan negeri, kantor
+Kemenag — adalah **satker dari kementerian/lembaganya**, jadi tercatat di
+Pusat. Dinas, badan, sekretariat daerah, RSUD, kecamatan, dan kelurahan
+adalah **perangkat daerah dari pemdanya**, jadi tercatat di Daerah. Layar
+tambah-instansi memuat keterangan ini, karena inilah salah tempat yang
+paling mungkin terjadi.
 
 Pemilahan ini bukan sekadar tampilan: skema penyerahan BMN-nya memang
 berbeda (2.9) — kepada K/L berupa penggunaan sementara, kepada pemda berupa
@@ -589,9 +628,10 @@ penyusun untuk keadaan repo ini; bukan kutipan dari satu sumber tertentu.
 | K9 | Sebutan tingkat unit pihak ketiga | "Tingkat I–V" | |
 | K10 | Ikon di naskah cetak (PDF/Word) dan halaman verifikasi publik? | — | **Dijawab:** tidak, kecuali Laporan Eksekutif — penggunanya diberi ikon |
 | K11 | Perorangan/masyarakat dicatat di bawah satu wadah "Masyarakat (Perorangan)"? | Ya (3.3) | |
-| K12 | Sebutan untuk daerah | "Pemerintah Daerah" dan "Perangkat Daerah" menggantikan "Instansi" dan "Satker"; nama field tetap | |
-| K13 | Pemerintah desa dan lembaga negara non-kementerian masuk mana? | Desa di bawah Daerah; lembaga negara lain di bawah Pusat | |
-| K14 | Ikon terpisah untuk pusat dan daerah? | Tidak — satu ikon instansi eksternal + tulisan "Pusat"/"Daerah" | |
+| K12 | Sebutan untuk daerah | — | **Dijawab:** "Pemda" (dan "Perangkat Daerah" untuk satkernya — bawaan penyusun); nama field tetap |
+| K13 | Batas pusat/daerah untuk kasus pinggir | **Rekomendasi penyusun, dipakai sebagai bawaan:** (a) semua lembaga non-kementerian pengguna anggaran negara — lembaga negara, LPNK, lembaga nonstruktural, TNI/Polri — masuk **Pusat** dan digabung dalam satu jenis "Kementerian/Lembaga"; (b) kantor vertikal K/L di daerah dicatat sebagai **satker K/L-nya**, bukan sebagai instansi daerah; (c) pemerintah desa masuk **Daerah**, berinduk kabupaten/kotanya | |
+| K14 | Ikon terpisah untuk pusat dan daerah? | — | **Dijawab:** ya — masing-masing punya ikon sendiri (3.8) |
+| K15 | Jenjang daerah | — | **Dijawab:** kabupaten/kota ditautkan ke provinsinya. (Desa ditautkan ke kabupaten/kotanya — perluasan penyusun, mengikuti K13c) |
 
 ---
 
@@ -607,6 +647,8 @@ Semua koleksi di bawah: `id` UUID unik, `version` (OCC), `created_at`,
 | `kelompok` | `eksternal` \| `pihak_ketiga`. Tak boleh diubah bila sudah punya satker |
 | `jenis` | Lihat 5.6; harus cocok dengan `kelompok`. Menentukan kebijakan (3.9) |
 | `tataran` | `pusat` \| `daerah` — **hanya eksternal**, diturunkan server dari `jenis` (5.6), tidak dikirim klien; kosong untuk pihak ketiga |
+| `induk_id` | **Hanya daerah.** Kab/kota → id provinsinya (wajib); desa → id kab/kotanya (wajib); provinsi, K/L, dan pihak ketiga → kosong |
+| `provinsi_id`, `provinsi_nama`, `kabkota_id`, `kabkota_nama` | Salinan jenjang, diisi server dari `induk_id`; ikut tersalin ke satker dan orangnya; merambat saat induk diganti nama atau dipindah |
 | `nama` | Wajib |
 | `nama_kunci` | Turunan server: huruf kecil, tanda baca dibuang, spasi tunggal, bentuk badan dinormalkan (`PT. Telkom` = `Telkom, PT`) |
 | `kode_referensi` | Kode resmi instansi (kode bagian anggaran K/L, kode wilayah pemda). Opsional, teks bebas; **unik per kelompok bila terisi** dan menjadi pengenal utama (3.10 butir 2) |
@@ -666,6 +708,9 @@ await _idx(db.unit_kerja_luar, "satker_luar_id")
 await _idx(db.pegawai_luar, [("kelompok", 1), ("satker_luar_id", 1), ("nama", 1)])
 await _idx(db.instansi_luar, [("kelompok", 1), ("tataran", 1), ("jenis", 1), ("nama", 1)])
 await _idx(db.pegawai_luar, [("kelompok", 1), ("tataran", 1), ("nama", 1)])
+await _idx(db.instansi_luar, "induk_id")
+await _idx(db.instansi_luar, [("provinsi_id", 1), ("jenis", 1), ("nama", 1)])
+await _idx(db.pegawai_luar, [("provinsi_id", 1), ("nama", 1)])
 # NIP unik se-direktori; string kosong dikecualikan lewat indeks parsial
 await db.pegawai_luar.create_index(
     "nip", unique=True, name="unique_nip_luar",
@@ -687,20 +732,26 @@ await db.pegawai_luar.create_index(
 KELOMPOK_LUAR = {"eksternal": "Instansi Eksternal", "pihak_ketiga": "Pihak Ketiga"}
 TATARAN_EKSTERNAL = {
     "pusat": "Pusat (Kementerian/Lembaga)",
-    "daerah": "Daerah (Pemerintah Provinsi/Kabupaten/Kota)",
+    "daerah": "Daerah (Pemda)",
 }
 TATARAN_DARI_JENIS = {                       # satu-satunya penentu tataran
-    "kementerian_lembaga": "pusat", "lembaga_negara_lain": "pusat",      # K13
+    "kementerian_lembaga": "pusat",                                      # K13a
     "pemerintah_provinsi": "daerah", "pemerintah_kabkota": "daerah",
-    "pemerintah_desa": "daerah",                                         # K13
+    "pemerintah_desa": "daerah",                                         # K13c
 }
+INDUK_DAERAH = {                             # jenis → jenis induk yang sah
+    "pemerintah_provinsi": None,
+    "pemerintah_kabkota": "pemerintah_provinsi",
+    "pemerintah_desa": "pemerintah_kabkota",
+}
+KUNCI_IKON = ("internal", "eksternal_pusat", "eksternal_daerah", "pihak_ketiga")
 JENIS_INSTANSI = {
     "eksternal": {
+        # mencakup lembaga negara, LPNK, lembaga nonstruktural, TNI/Polri (K13a)
         "kementerian_lembaga": "Kementerian/Lembaga",
         "pemerintah_provinsi": "Pemerintah Provinsi",
         "pemerintah_kabkota": "Pemerintah Kabupaten/Kota",
         "pemerintah_desa": "Pemerintah Desa",
-        "lembaga_negara_lain": "Lembaga Negara/Pemerintah Lainnya",
     },
     "pihak_ketiga": {
         "bumn": "Badan Usaha Milik Negara",
@@ -743,7 +794,7 @@ DASAR_KEWENANGAN = {
 LABEL_TINGKAT = {
     "eksternal_pusat": {"instansi": "Kementerian/Lembaga", "satker": "Satker",
                         "level": "Eselon"},
-    "eksternal_daerah": {"instansi": "Pemerintah Daerah",                # K12
+    "eksternal_daerah": {"instansi": "Pemda",                            # K12
                          "satker": "Perangkat Daerah", "level": "Eselon"},
     "pihak_ketiga": {"instansi": "Badan/Pihak", "satker": "Unit/Cabang",
                      "level": "Tingkat"},
@@ -786,6 +837,11 @@ ingatan.
     dan kosong untuk pihak ketiga, pada instansi, satker, dan orangnya;
     `jenis` instansi yang sudah punya satker tidak bisa diganti ke jenis
     bertataran lain.
+12. **Jenjang daerah** (3.3): `induk_id` terisi **jika dan hanya jika**
+    `INDUK_DAERAH[jenis]` bukan kosong, dan menunjuk instansi berjenis itu;
+    tidak ada lingkaran; `provinsi_id`/`kabkota_id` selalu sama dengan yang
+    diturunkan dari rantai induknya, pada pemda, satker, dan orangnya; pemda
+    yang masih punya anak tidak bisa dihapus atau diganti jenisnya.
 
 ---
 
@@ -798,9 +854,9 @@ Semua rute di bawah **baru**. Tak satu pun rute yang ada berubah.
 | Rute | Penjaga | Catatan |
 |---|---|---|
 | `GET /luar/referensi` | `require_user` | Semua kode 5.6 + `field_nonaktif` per kelompok + `label_field` (3.7b) + `ikon` (isi `ikon_kelompok.json`) — layar membaca ini, tidak menyalin daftar |
-| `GET /luar/instansi?kelompok=&tataran=&jenis=&q=&aktif=&page=` | `require_user` | `kelompok` wajib; `tataran` hanya bermakna untuk eksternal. Dicari dan dipotong halamannya di server; + `jumlah_satker`, `jumlah_orang` (agregasi) |
+| `GET /luar/instansi?kelompok=&tataran=&jenis=&provinsi_id=&induk_id=&q=&aktif=&page=` | `require_user` | `kelompok` wajib; `tataran` hanya bermakna untuk eksternal. Dicari dan dipotong halamannya di server; + `jumlah_satker`, `jumlah_orang` (agregasi) |
 | `GET /luar/riwayat/{jenis}/{id}` | `require_user` | Jejak audit satu catatan (instansi/satker/orang): siapa, satker mana, kapan, field apa berubah |
-| `POST /luar/instansi` | `require_admin` | Payload memuat `satker_pertama`; 400 bila `nama_kunci` sudah ada — jawaban menyertakan id yang sudah ada agar layar menawarkan "pakai yang ini" |
+| `POST /luar/instansi` | `require_admin` | Payload memuat `satker_pertama` (wajib kecuali pemda) dan, untuk kab/kota dan desa, `induk_id`; induk yang salah jenis atau tak ada → 400; 400 bila `nama_kunci` sudah ada — jawaban menyertakan id yang sudah ada agar layar menawarkan "pakai yang ini" |
 | `PUT /luar/instansi/{id}` | `require_admin` + `If-Match` | Ganti nama → rambatkan `instansi_nama` |
 | `DELETE /luar/instansi/{id}` | `require_super_admin` | 409 bila masih punya satker berorang atau dirujuk transaksi |
 | `GET/POST /luar/satker`, `PUT`, `DELETE /luar/satker/{id}` | seperti instansi | `instansi_id` wajib pada daftar dan tidak diterima pada `PUT`. `kode_luar` yang sama dengan kode satker internal → 400. Hapus 409 bila masih berorang/ber-unit |
@@ -854,7 +910,7 @@ daftar), `instansi_id`, `satker_luar_id`.
 | Rute | Catatan |
 |---|---|
 | `GET /direktori-pegawai?kelompok=internal\|eksternal\|pihak_ketiga&tataran=&q=&instansi_id=&satker_luar_id=&page=` | Hanya baca; `kelompok` wajib (bawaan pemilih: `internal`). Internal **ter-scope satker pemanggil** (persis `GET /pegawai`); luar se-instansi, hanya yang `aktif`, dicari dan dipotong halamannya di server. Field ringkas: `id`, `ranah`, `kelompok`, `jenis_instansi`, `nama`, `nip`, `jabatan`, `unit_kerja`, `email`, `alamat`, `status`, `status_kepegawaian`, `foto_file_id`, `instansi_nama`, `satker_luar_nama`, `kapasitas_bertindak` |
-| `POST /direktori-pegawai/kelompok` | Bahan ikon. Badan `{nomor: [...]}` (maks. 500) → `{nomor: kelompok}` hanya untuk nomor yang dikenal. Cakupan sama dengan baris di atas. Ber-batas laju. Server tidak pernah mengembalikan nomor yang tidak ditanyakan |
+| `POST /direktori-pegawai/kelompok` | Bahan ikon. Badan `{nomor: [...]}` (maks. 500) → `{nomor: kunci_ikon}` (`internal`, `eksternal_pusat`, `eksternal_daerah`, `pihak_ketiga`) hanya untuk nomor yang dikenal. Cakupan sama dengan baris di atas. Ber-batas laju. Server tidak pernah mengembalikan nomor yang tidak ditanyakan |
 | `POST /direktori-pegawai/kartu/identifikasi` | Cari di `pegawai` dulu, lalu `pegawai_luar`; batas laju dan audit sama dengan rute internal |
 
 ```python
@@ -982,6 +1038,11 @@ pengguna tidak melihat perubahan apa pun.
      satker, dan siapa yang sah menerima atas nama badan (kapasitas & dasar
      kewenangan, 3.7a).
    - Batas pengumpulan data pribadi orang luar menurut UU 27/2022 — menguji keputusan K8.
+   - Bentuk kode resmi yang dipakai sebagai pengenal: kode bagian anggaran
+     K/L, kode satker, dan kode wilayah pemda (apakah kode kab/kota memang
+     berawalan kode provinsinya). Sampai terjawab, kode hanya diperiksa
+     keunikannya — bukan bentuknya, dan bukan kecocokan awalan dengan
+     induknya.
 3. Tambah kontrak di `docs/MASTERPLAN-SIKLUS-BMN.md`.
 4. Kunci daftar kode 5.6 dan isi `kebijakan_penerima` (6.6).
 5. Daftarkan sitasi yang akan tercetak ke `backend/sitasi_regulasi.py`
@@ -1012,6 +1073,9 @@ LABEL_FIELD = {"pihak_ketiga": {"nip": "NIK", "jabatan": "Jabatan pada badan", .
 
 def nama_kunci(nama) -> str
 def tataran_dari_jenis(kelompok, jenis) -> str     # "" utk pihak ketiga
+def periksa_jenjang_daerah(doc, induk) -> list[str]   # invarian 12
+def salinan_jenjang(doc, induk) -> dict     # provinsi_*/kabkota_* turunan
+def kunci_ikon(kelompok, tataran) -> str    # salah satu KUNCI_IKON
 def validate_instansi_luar(doc) -> list[str]
 def validate_satker_luar(doc) -> list[str]
 def bersihkan_instansi_luar(payload) -> dict     # kosongkan FIELD_KHUSUS_BADAN utk eksternal
@@ -1042,6 +1106,10 @@ def label_unit_orang(doc) -> str
 - `tataran_dari_jenis`: tiap jenis eksternal punya tepat satu tataran;
   setiap kunci `JENIS_INSTANSI["eksternal"]` ada di `TATARAN_DARI_JENIS`
   (jenis baru tanpa tataran gagal di sini); pihak ketiga → kosong.
+- `periksa_jenjang_daerah`: kab/kota tanpa induk ditolak; kab/kota berinduk
+  kab/kota ditolak; provinsi berinduk ditolak; K/L berinduk ditolak; desa
+  berinduk kab/kota diterima. `salinan_jenjang` desa memuat kab/kota **dan**
+  provinsinya.
 - `jenis` yang tak cocok `kelompok` ditolak; perorangan dipaksa
   `diri_sendiri`.
 
@@ -1067,7 +1135,8 @@ Wadah perorangan dibuat lewat pembantu idempoten `pastikan_wadah_perorangan`.
 - `DELETE` oleh admin → 403; oleh super-admin → berhasil bila tak dirujuk,
   409 bila dirujuk.
 - Nama kembar beda tanda baca → 400 dengan id yang sudah ada.
-- `POST /luar/instansi` tanpa `satker_pertama` → 400.
+- `POST /luar/instansi` tanpa `satker_pertama` → 400 untuk K/L dan pihak
+  ketiga; diterima untuk pemda.
 - `PUT` dengan `If-Match` usang → 409.
 - Tak satu pun dokumen tersimpan memuat kunci `kode_satker`.
 - Wadah perorangan tak bisa diubah/dihapus; pembuatannya idempoten.
@@ -1081,8 +1150,13 @@ Wadah perorangan dibuat lewat pembantu idempoten `pastikan_wadah_perorangan`.
 - **Pusat/daerah:** instansi berjenis `pemerintah_kabkota` tersimpan
   `tataran: "daerah"` walau klien mengirim `"pusat"`; daftar dengan
   `tataran=pusat` tidak memuatnya; mengganti jenis instansi yang sudah punya
-  satker dari K/L ke pemprov → 400; mengganti dari provinsi ke kab/kota
-  (sama-sama daerah) diterima dan merambat ke satker serta orangnya.
+  satker dari K/L ke pemprov → 400.
+- **Jenjang daerah:** kab/kota tanpa `induk_id` → 400; berinduk K/L atau
+  kab/kota lain → 400; daftar dengan `provinsi_id=X` memuat pemprov X,
+  kab/kotanya, dan desa di bawahnya — tidak memuat milik provinsi lain;
+  mengganti nama provinsi merambat ke `provinsi_nama` kab/kota, satker, dan
+  orangnya; memindah kab/kota ke provinsi lain memperbarui salinan itu dan
+  tercatat di audit; menghapus provinsi yang masih punya kab/kota → 409.
 - `GET /luar/riwayat` menampilkan suntingan admin B kepada pengguna satker A.
 - Daftar instansi dipotong halaman; `q` mencari pada nama, singkatan, kode;
   daftar tanpa `kelompok` → 400.
@@ -1268,7 +1342,11 @@ internal; direktori tanpa `kelompok` → 400; hasil luar selalu membawa
    pilihan "semua".
 4. **Bilah lingkup** (tab luar): instansi → satker, dicari di server, dengan
    cacah dari `rekap-lingkup`, saringan `jenis` (di tataran Daerah:
-   Provinsi · Kabupaten/Kota · Desa), tombol "Kelola". Daftar instansi hanya
+   Provinsi · Kabupaten/Kota · Desa), tombol "Kelola". Di tataran Daerah
+   pemilih instansinya bertingkat: **provinsi dulu**, lalu pemprov itu atau
+   kab/kotanya (lalu desanya); mengganti provinsi mengosongkan pilihan di
+   bawahnya. Form tambah kab/kota meminta provinsinya dan menawarkan
+   mencatat provinsi yang belum ada. Daftar instansi hanya
    memuat tataran terpilih; mengganti tataran mengosongkan instansi dan
    satker. Form tambah instansi membatasi pilihan `jenis` pada tataran
    aktif. Daftar
@@ -1313,6 +1391,9 @@ internal; direktori tanpa `kelompok` → 400; hasil luar selalu membawa
 - Memilih Instansi Eksternal menampilkan pilihan Pusat/Daerah; memilih
   Daerah meminta `tataran=daerah` ke server dan memakai sebutan "Perangkat
   Daerah"; berpindah ke Pusat mengosongkan instansi terpilih.
+- Di Daerah: memilih provinsi meminta `provinsi_id` ke server dan hanya
+  kab/kota provinsi itu yang ditawarkan; kab/kota tampil bersama nama
+  provinsinya.
 - Tanpa satker terpilih, tombol Tambah nonaktif.
 - Tombol hapus permanen tidak ada untuk admin biasa.
 - `PegawaiAkarEselon.test.jsx` dan backend `test_pegawai_cakupan_ekspor.py`
@@ -1339,8 +1420,8 @@ lain).
    `PERMUKAAN_IKON`, `LARANGAN_IKON`, `kelompokDari(catatan, jawaban)` —
    salinan pada catatan menang atas jawaban server.
 2. `IkonKelompok`: prop `kelompok` atau `nomor`; `ukuran`; `denganLabel`;
-   `tataran` (opsional) menambah tulisan "Pusat"/"Daerah" — ikonnya tetap
-   satu (K14).
+   untuk eksternal, `tataran` memilih ikon pusat atau ikon daerah (K14) —
+   empat ikon, satu per `KUNCI_IKON`.
    `role="img"` + `aria-label`; tooltip lewat `TooltipKetuk`; `min-w-0
    min-h-0` supaya aturan tap-target global tidak membengkakkannya di dalam
    baris. Kelompok tak dikenal → tidak merender apa pun.
@@ -1378,7 +1459,7 @@ seratus baris dengan sepuluh nomor berbeda → satu permintaan; lima
 berkas uji Jest yang me-mock URL `/pegawai` diperbarui bila berkasnya
 disentuh.
 
-**Terima:** tiga ikon terbedakan dalam skala abu-abu (bentuknya, bukan
+**Terima:** empat ikon terbedakan dalam skala abu-abu (bentuknya, bukan
 warnanya); periksa terang/gelap, HP/desktop; halaman Persuratan tanpa ikon.
 
 ---
@@ -1403,7 +1484,8 @@ warnanya); periksa terang/gelap, HP/desktop; halaman Persuratan tanpa ikon.
      yang sama sebagai data-URI.
    - Pengguna luar membawa jalur eselon organisasi lain — jangan dilebur ke
      pohon satker sendiri. Pembagi tersendiri sesudah pengguna internal:
-     "Instansi Eksternal" → instansi → satker, lalu "Pihak Ketiga" → badan
+     "Instansi Eksternal — Pusat" → K/L → satker; "Instansi Eksternal —
+     Daerah" → provinsi → pemda → perangkat daerah; lalu "Pihak Ketiga" → badan
      → unit. Urutan dan isi baris pengguna internal tidak berubah selain
      ikonnya.
 3. **Rekap pemegang / daftar per pemegang PDF:** kolom unit memakai
@@ -1435,7 +1517,7 @@ hanya boleh membangun kerangka dan uji, **bukan** teks pasal.
    | Jenis penerima | Skema sah | Dokumen dasar | Butir pasal |
    |---|---|---|---|
    | pegawai internal | penggunaan (yang ada) | — | `internal` (tak berubah) |
-   | `kementerian_lembaga`, `lembaga_negara_lain` | penggunaan sementara | persetujuan Pengelola Barang | `antar_pemerintah` |
+   | `kementerian_lembaga` | penggunaan sementara | persetujuan Pengelola Barang | `antar_pemerintah` |
    | `pemerintah_provinsi`, `_kabkota`, `_desa` | pinjam pakai | persetujuan + perjanjian | `antar_pemerintah` |
    | `bumn`, `bumd`, `bumdes`, `badan_usaha_swasta` | sewa; KSP; BGS/BSG; KSPI; KETUPI; dioperasikan pihak lain | persetujuan + perjanjian | `pihak_ketiga` |
    | `perorangan` | sewa | persetujuan + perjanjian | `pihak_ketiga` |
@@ -1595,7 +1677,8 @@ daftar berkas di `test_gerbang_media.py`, `test_penjaga_senyap.py`,
    Kewenangan. Form eksternal: seperti internal tanpa agama/rekening.
 5. Ekspor satu satker luar → ubah satu sel → impor → hanya sel itu berubah.
 6. Di daftar aset, pengguna internal, eksternal, dan pihak ketiga tampil
-   dengan tiga ikon berbeda; pengguna tak terdaftar tanpa ikon.
+   dengan ikon berbeda — eksternal pusat dan eksternal daerah pun berbeda;
+   pengguna tak terdaftar tanpa ikon.
 7. Halaman Persuratan dan PDF BAST: tanpa ikon. Laporan Eksekutif: tiap
    pengguna terdaftar berikon, ada legendanya.
 8. Satker A dan B masing-masing menyerahkan aset ke orang luar yang sama →
@@ -1614,6 +1697,13 @@ daftar berkas di `test_gerbang_media.py`, `test_penjaga_senyap.py`,
 14. Admin B mengubah jabatan seseorang yang dicatat admin A → "Riwayat
     perubahan" pada catatan itu menyebut admin B, satkernya, dan nilai
     lama–baru.
+15. Daerah: memilih Provinsi X hanya menawarkan pemprov X dan kab/kotanya;
+    mencatat kabupaten tanpa provinsi ditolak; kabupaten tampil sebagai
+    "Kab. Y, Prov. X"; mengganti nama provinsi langsung terlihat pada
+    kab/kota dan orang-orangnya.
+16. Polres atau kantor wilayah sebuah kementerian dicatat sebagai satker di
+    bawah K/L-nya (Pusat) dan tampil berikon pusat; dinas kabupaten dicatat
+    sebagai perangkat daerah (Daerah) dan tampil berikon daerah.
 
 ### Definisi selesai
 
