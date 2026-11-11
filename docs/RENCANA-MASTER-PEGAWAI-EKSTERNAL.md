@@ -1047,7 +1047,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | Paket | Isi | Bergantung | Status | PR |
 |---|---|---|---|---|
 | PGW-00 | Regulasi & kontrak modul | — | **selesai** | #1114 |
-| PGW-01 | Fondasi murni | 00 | belum | |
+| PGW-01 | Fondasi murni | 00 | **selesai** | #1115 |
 | PGW-02 | Master instansi & satker luar (backend) | 01 | belum | |
 | PGW-03 | Orang luar (backend) | 02 | belum | |
 | PGW-04 | Impor/ekspor/template orang luar | 03 | belum | |
@@ -1172,6 +1172,18 @@ def label_unit_orang(doc) -> str
   `diri_sendiri`.
 
 **Terima:** uji lulus; belum ada pemanggil.
+
+**Hasil (2026-11-11):** dibangun sesuai daftar di atas, dengan empat
+penyesuaian yang harus diketahui paket berikutnya:
+- `nama_kunci` hanya membuang singkatan bentuk usaha (PT, Tbk, Persero, CV,
+  UD, Firma). "Koperasi"/"Yayasan" dipertahankan — keduanya pembeda nama yang
+  sah, dan `nama_kunci` dipakai indeks unik PGW-02.
+- Peringatan dipisah ke `peringatan_orang_luar(doc, kelompok)`;
+  `validate_orang_luar` hanya mengembalikan galat yang menolak simpan.
+- `periksa_penampungan` juga menolak pindah pusat ↔ daerah (invarian 11).
+- `bersihkan_satker_luar(payload, instansi)` menerima dokumen instansi agar
+  kelompok/tataran/jenjang selalu diturunkan dari induknya; tambahan
+  `jenis_cocok` dan `KAPASITAS_WAKIL_BADAN`.
 
 ---
 

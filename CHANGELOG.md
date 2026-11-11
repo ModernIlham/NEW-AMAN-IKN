@@ -18,6 +18,18 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1124] Master Pegawai tiga kelompok — PGW-01: fondasi logika murni — 2026-11-11
+
+- Modul baru `backend/organisasi_luar_utils.py`, belum dipanggil kode mana
+  pun: kode referensi yang dikunci PGW-00, field yang dinonaktifkan per
+  kelompok, nama kunci anti-ganda, tataran pusat/daerah, jenjang daerah
+  (provinsi → kab/kota → desa) beserta salinannya, pembersih
+  instansi/satker/orang luar, aturan pindah satker, dan label unit.
+- Uji baru (36): kesetaraan skema dengan `PegawaiIn` (salah ketik nama
+  field gagal), jenjang daerah, penyesuaian field per kelompok, dan
+  ketergantungan satu arah — modul internal tidak mengimpor modul luar.
+- Tidak ada perubahan perilaku aplikasi.
+
 ## [#1123] Master Pegawai tiga kelompok — PGW-00: regulasi dan kontrak modul — 2026-11-11
 
 - Hanya dokumen; tidak ada kode yang berubah.
