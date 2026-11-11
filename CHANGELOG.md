@@ -18,6 +18,21 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1127] Master Pegawai tiga kelompok — PGW-04: impor, ekspor, templat orang luar — 2026-11-11
+
+- Rute baru: templat CSV per kelompok, ekspor Excel per satker luar (satu
+  berkas = satu satker, nama berkas memuat instansi dan satkernya), dan impor
+  massal ke satu satker luar. Belum ada layar.
+- Header per kelompok diturunkan dari header Master Pegawai internal tanpa
+  menyuntingnya: instansi eksternal tanpa tujuh kolom pribadi; pihak ketiga
+  tanpa kolom ASN/pribadi/ahli waris/kontrak, dengan sebutan "NIK", "Jabatan
+  pada Badan", "Tingkat I–V", ditambah kolom kapasitas bertindak dan dasar
+  kewenangan. Penormal baris tetap satu (milik internal).
+- Impor tidak pernah menulis satker lain; baris yang NIP-nya milik pegawai
+  internal atau satker luar lain dilewati dengan catatan tanpa nama orangnya;
+  impor ulang tidak menggandakan; kolom yang tak ada di berkas tidak
+  mengosongkan data lama.
+
 ## [#1126] Master Pegawai tiga kelompok — PGW-03: orang luar (backend) — 2026-11-11
 
 - Rute baru `/api/pegawai-luar/…` (`routes/pegawai_luar.py`), cermin Master

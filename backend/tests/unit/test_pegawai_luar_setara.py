@@ -17,10 +17,6 @@ PENGECUALIAN_SETARA = {
     ("GET", "/{id}/sinkron-aset/pratinjau"), ("POST", "/{id}/sinkron-aset"),
     ("POST", "/kartu/identifikasi"),
 }
-# Templat, ekspor, impor — dibangun PGW-04. Hapus himpunan ini di sana.
-MENUNGGU_PGW04 = {
-    ("GET", "/template-impor"), ("GET", "/export-xlsx"), ("POST", "/impor"),
-}
 TAMBAHAN_LUAR = {("GET", "/rekap-lingkup")}
 
 
@@ -38,14 +34,13 @@ def _akhiran(router, awalan):
 def test_himpunan_rute_setara():
     internal = _akhiran(rp.pegawai_router, "/pegawai")
     luar = _akhiran(rpl.pegawai_luar_router, "/pegawai-luar")
-    assert luar == (internal - PENGECUALIAN_SETARA - MENUNGGU_PGW04) | TAMBAHAN_LUAR
+    assert luar == (internal - PENGECUALIAN_SETARA) | TAMBAHAN_LUAR
 
 
 def test_pengecualian_masih_ada_di_internal():
     """Pengecualian yang tak lagi ada di internal harus dibuang dari daftar."""
     internal = _akhiran(rp.pegawai_router, "/pegawai")
     assert PENGECUALIAN_SETARA <= internal
-    assert MENUNGGU_PGW04 <= internal
 
 
 def test_model_luar_memuat_seluruh_field_internal():

@@ -479,3 +479,122 @@ def label_unit_orang(doc) -> str:
         if b and b not in hasil:
             hasil.append(b)
     return " — ".join(hasil)
+
+
+# ── Impor/ekspor per kelompok (PGW-04) ─────────────────────────────────────
+# `pegawai_utils.HEADER_IMPOR` dan penormalnya TIDAK disunting: header luar
+# diturunkan darinya, dan baris luar dipetakan kembali ke header baku lalu
+# diserahkan ke `baris_impor_ke_pegawai` — satu penormal, bukan dua.
+
+# Sebutan kolom pihak ketiga (3.7b) → header baku.
+SEBUTAN_KOLOM_PIHAK_KETIGA = {
+    "NIP/NIK/NRP": "NIK",
+    "Jabatan": "Jabatan pada Badan",
+    "Alamat": "Alamat Korespondensi",
+    "Eselon 1": "Tingkat I", "Eselon 2": "Tingkat II", "Eselon 3": "Tingkat III",
+    "Eselon 4": "Tingkat IV", "Eselon 5": "Tingkat V",
+    "Unit Kerja": "Unit pada Badan",
+}
+KOLOM_KHUSUS_PIHAK_KETIGA = {
+    "Kapasitas Bertindak": "kapasitas_bertindak",
+    "Dasar Kewenangan": "dasar_kewenangan_jenis",
+    "Nomor Dasar Kewenangan": "dasar_kewenangan_nomor",
+    "Tgl Dasar Kewenangan": "dasar_kewenangan_tanggal",
+}
+_ENUM_KHUSUS = {"kapasitas_bertindak": KAPASITAS_BERTINDAK,
+                "dasar_kewenangan_jenis": DASAR_KEWENANGAN}
+
+
+def _field_header(header: str) -> str:
+    from pegawai_utils import KOLOM_IMPOR
+    return KOLOM_IMPOR.get(str(header or "").strip().lower(), "")
+
+
+def header_impor_luar(kelompok) -> list:
+    """Header templat/ekspor orang luar.
+
+    eksternal    : HEADER_IMPOR tanpa tujuh kolom pribadi (3.7d), urutan sama.
+    pihak_ketiga : HEADER_IMPOR tanpa kolom field 3.7c, dengan sebutan 3.7b,
+                   lalu empat kolom kapasitas & dasar kewenangan.
+    """
+    from pegawai_utils import HEADER_IMPOR
+    k = _s(kelompok)
+    nonaktif = set(FIELD_NONAKTIF.get(k, ()))
+    dasar = [h for h in HEADER_IMPOR if _field_header(h) not in nonaktif]
+    if k != "pihak_ketiga":
+        return dasar
+    return [SEBUTAN_KOLOM_PIHAK_KETIGA.get(h, h) for h in dasar] + \
+        list(KOLOM_KHUSUS_PIHAK_KETIGA)
+
+
+def _baku_dan_khusus(raw):
+    """Pisahkan satu baris berkas luar menjadi (baris ber-header baku,
+    field khusus pihak ketiga). Header dicocokkan tanpa peduli huruf besar."""
+    balik = {v.lower(): k for k, v in SEBUTAN_KOLOM_PIHAK_KETIGA.items()}
+    khusus_peta = {k.lower(): v for k, v in KOLOM_KHUSUS_PIHAK_KETIGA.items()}
+    baku, khusus = {}, {}
+    for header, nilai in (raw or {}).items():
+        kunci = str(header or "").strip()
+        rendah = kunci.lower()
+        if rendah in khusus_peta:
+            khusus[khusus_peta[rendah]] = nilai
+        else:
+            baku[balik.get(rendah, kunci)] = nilai
+    return baku, khusus
+
+
+def _norm_enum(nilai, peta) -> str:
+    v = _s(nilai)
+    if not v:
+        return ""
+    rendah = v.lower()
+    if rendah in peta:
+        return rendah
+    for kode, uraian in peta.items():
+        if uraian.lower() == rendah or kode.replace("_", " ") == rendah:
+            return kode
+    return v
+
+
+def baris_impor_luar(raw, kelompok):
+    """(doc, peringatan) untuk satu baris berkas orang luar."""
+    from pegawai_utils import baris_impor_ke_pegawai
+    baku, khusus = _baku_dan_khusus(raw)
+    doc, peringatan = baris_impor_ke_pegawai(baku)
+    for field in KOLOM_KHUSUS_PIHAK_KETIGA.values():
+        nilai = khusus.get(field, "")
+        if field in _ENUM_KHUSUS:
+            nilai = _norm_enum(nilai, _ENUM_KHUSUS[field])
+        elif field == "dasar_kewenangan_tanggal":
+            nilai = _s(nilai)[:10]
+        doc[field] = _s(nilai)
+    return doc, peringatan
+
+
+def field_dipasok_luar(raw) -> set:
+    """Padanan `field_dipasok_baris` untuk berkas luar (sebutan pihak ketiga
+    dan kolom khusus ikut dikenali)."""
+    from pegawai_utils import field_dipasok_baris
+    baku, khusus = _baku_dan_khusus(raw)
+    dipasok = field_dipasok_baris(baku)
+    dipasok.update(f for f, v in khusus.items() if _s(v))
+    return dipasok
+
+
+def baris_ekspor_luar(doc, kelompok) -> list:
+    """Satu baris ekspor selaras `header_impor_luar(kelompok)`."""
+    from pegawai_utils import HEADER_IMPOR, baris_ekspor_pegawai
+    per_header = dict(zip(HEADER_IMPOR, baris_ekspor_pegawai(doc)))
+    balik = {v: k for k, v in SEBUTAN_KOLOM_PIHAK_KETIGA.items()}
+    d = doc or {}
+    out = []
+    for h in header_impor_luar(kelompok):
+        if h in KOLOM_KHUSUS_PIHAK_KETIGA:
+            field = KOLOM_KHUSUS_PIHAK_KETIGA[h]
+            nilai = _s(d.get(field))
+            if field in _ENUM_KHUSUS:
+                nilai = _ENUM_KHUSUS[field].get(nilai, nilai)
+            out.append(nilai)
+        else:
+            out.append(per_header.get(balik.get(h, h), ""))
+    return out

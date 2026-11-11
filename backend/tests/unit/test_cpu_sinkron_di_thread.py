@@ -358,6 +358,7 @@ class TestC28:
         ("siman.py", "_parse_siman_xlsx"),
         ("categories.py", "_parse_baris_impor_kategori"),
         ("pegawai.py", "_baris_dari_unggahan_pegawai"),
+        ("pegawai_luar.py", "_baris_dari_unggahan_pegawai"),
     ])
     def test_titik_panggil_tiga_berkas_terakhir_ada(self, berkas, helper):
         # Pasangan penjaga AST di atas: AST menjamin TIDAK ADA panggilan
@@ -383,7 +384,8 @@ class TestRateLimitImpor:
                 ("categories.py", '.post("/categories/import-bulk")'),
                 ("kodefikasi.py", '.post("/kodefikasi/import")'),
                 ("persediaan.py", '.post("/persediaan/import")'),
-                ("pegawai.py", '.post("/pegawai/impor")')]
+                ("pegawai.py", '.post("/pegawai/impor")'),
+                ("pegawai_luar.py", '.post("/pegawai-luar/impor")')]
 
     @pytest.mark.parametrize("berkas,rute", ENDPOINT)
     def test_endpoint_impor_berplafon(self, berkas, rute):
