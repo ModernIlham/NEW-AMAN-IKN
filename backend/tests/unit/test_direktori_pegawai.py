@@ -162,3 +162,22 @@ def test_enforce_pegawai_terdaftar_mengenali_orang_luar(dbx):
     _jalan(dbx.pegawai_luar.update_one({"id": "l3"}, {"$set": {"status": "meninggal"}}))
     assert _galat(su.enforce_pegawai_terdaftar("555")).status_code == 400
     _jalan(su.enforce_pegawai_terdaftar("555", nip_lama="555"))   # pemegang tak berubah
+
+
+# ── pembaca 2: penerima_utils ──────────────────────────────────────────────
+def test_periksa_penerima_mengenali_orang_luar_dan_internal_tetap(dbx):
+    import penerima_utils as pnu
+    sc = partial(scope_query_field_satker, USER_A)
+    peg, catatan = _jalan(pnu.periksa_penerima(dbx, sc, "555"))
+    assert peg["nama"] == "Eka Badan" and catatan == ""
+    s = pnu.snapshot_penerima(peg)
+    assert (s["penerima_kelompok"], s["penerima_instansi"]) == ("pihak_ketiga", "PT A")
+    peg_i, _ = _jalan(pnu.periksa_penerima(dbx, sc, "111"))
+    s_i = pnu.snapshot_penerima(peg_i)
+    assert (s_i["penerima_kelompok"], s_i["penerima_instansi"]) == ("internal", "")
+    # Internal satker lain tetap tak dikenali (scope internal tak berubah).
+    assert _jalan(pnu.periksa_penerima(dbx, sc, "222"))[0] is None
+    assert pnu.snapshot_penerima(None)["penerima_kelompok"] == ""
+    _jalan(dbx.pegawai_luar.update_one({"id": "l3"}, {"$set": {"status": "meninggal"}}))
+    with pytest.raises(pnu.PenerimaMeninggal):
+        _jalan(pnu.periksa_penerima(dbx, sc, "555"))
