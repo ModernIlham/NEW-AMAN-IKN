@@ -206,3 +206,17 @@ def test_bast_pihak_kesatu_orang_luar_meninggal_ditolak_lewat_sumber():
     src = Path(rb.__file__).read_text(encoding="utf-8")
     blok = src.split("nip1 = str(pihak_pertama.get(\"nip\")", 1)[1][:1200]
     assert "db.pegawai_luar.find_one" in blok and "is_meninggal(peg1)" in blok
+
+
+# ── pembaca 4: routes/ttd.py ───────────────────────────────────────────────
+def test_ttd_dua_cek_penanda_tangan_meninggal_membaca_orang_luar():
+    """Kedua penolakan penanda tangan almarhum kini juga membaca pegawai_luar;
+    pembacaan pegawai internal ber-scope tetap ada di tempatnya."""
+    from pathlib import Path
+    import routes.ttd as rt
+    src = Path(rt.__file__).read_text(encoding="utf-8")
+    a = src.split('_alm = await db.pegawai.find(', 1)[1][:900]
+    assert 'scope_query_field_satker(' in a
+    assert 'db.pegawai_luar.find(' in a and '"status": "meninggal"' in a
+    b = src.split('pg = await db.pegawai.find_one(scope_query_field_satker(user, {"nip": baru["nip"]})', 1)[1][:500]
+    assert 'db.pegawai_luar.find_one({"nip": baru["nip"]}' in b and "is_meninggal(pg)" in b
