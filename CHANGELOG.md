@@ -18,6 +18,21 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1122] Uji browser CI: penyalaan Chromium dicoba ulang, kegagalan menyebut barisnya — 2026-11-10
+
+- Pemeriksaan "Chromium (aplikasi nyata dan MongoDB)" gagal tiga kali dari
+  enam run pada PR #1112 yang hanya berisi dokumen. Satu berhenti di tenggat
+  penyalaan Chromium; dua berhenti sesaat setelah tahap ubah-massal.
+- Penyalaan Chromium: tenggat 20 → 45 detik dan dicoba sekali lagi dengan
+  profil baru — hanya untuk "belum siap"; galat lain tetap langsung gagal.
+- `hasil.json` memuat `error_line` (nomor baris tempat uji berhenti; hanya
+  angka). Langkah ringkasan browser kini jalan juga saat uji gagal dan
+  mencetak tahap, kelas galat, baris, dan pemeriksaan terakhir ke log job.
+- Pemeriksaan toolbar seleksi setelah hapus seleksi ditunggu, tidak lagi
+  diperiksa seketika.
+- Sebab kegagalan di tahap ubah-massal belum dipastikan; kegagalan berikutnya
+  akan menyebut barisnya di log.
+
 ## [#1120] Laporan Eksekutif: label "(belum terdaftar)" juga untuk nama tanpa NIP/NIK — 2026-11-10
 
 - Distribusi Per Pengguna: nama yang tercatat **tanpa NIP/NIK** (mis. "Akhmad

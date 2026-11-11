@@ -26,6 +26,22 @@ HTTP = requests.Session()
 HTTP.trust_env = False
 
 
+def baris_galat(exc):
+    """Nomor baris TERDALAM di berkas ini tempat galat itu lahir, atau 0.
+
+    Hanya angka. Pesan galat dan nilai variabel sengaja tidak ikut: ekspresi
+    yang dievaluasi di browser bisa memuat kredensial akun sintetis. Tanpa
+    angka ini, `stage` saja tidak cukup — satu tahap memuat belasan
+    pemeriksaan, dan menebak yang mana berarti mengunduh artefak tiap kali.
+    """
+    baris, jejak = 0, exc.__traceback__
+    while jejak is not None:
+        if jejak.tb_frame.f_code.co_filename == __file__:
+            baris = jejak.tb_lineno
+        jejak = jejak.tb_next
+    return baris
+
+
 def local_target(value):
     parsed = urlparse(value)
     if (parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
@@ -35,16 +51,36 @@ def local_target(value):
     return value.rstrip("/")
 
 
+class ChromiumBelumSiap(RuntimeError):
+    """Chromium tidak membuka port DevTools dalam tenggatnya."""
+
+
+# Runner CI bersama kadang butuh lebih dari 20 detik hanya untuk menyalakan
+# Chromium: tiga dari enam run PR #1112 (yang hanya berisi dokumen) merah, dan
+# salah satunya berhenti tepat di tenggat ini sebelum satu pun fixture dibuat.
+# Tenggat diperpanjang dan penyalaan dicoba SEKALI lagi dengan profil baru —
+# hanya untuk kegagalan "belum siap", bukan untuk galat lain.
+TENGGAT_CHROMIUM_SIAP = 45
+PERCOBAAN_CHROMIUM = 2
+
+
 class Browser:
     def __init__(self, chromium, state_file=None):
         self.state_file = Path(state_file) if state_file else None
-        self.state = None
-        self.profile = tempfile.TemporaryDirectory(prefix="aman-browser-")
-        try:
-            self._start(chromium)
-        except BaseException:
-            self.close()
-            raise
+        for percobaan in range(1, PERCOBAAN_CHROMIUM + 1):
+            self.state = None
+            self.ws = self.process = self.chromium_log = None
+            self.profile = tempfile.TemporaryDirectory(prefix="aman-browser-")
+            try:
+                self._start(chromium)
+                return
+            except ChromiumBelumSiap:
+                self.close()
+                if percobaan == PERCOBAAN_CHROMIUM:
+                    raise
+            except BaseException:
+                self.close()
+                raise
 
     def _start(self, chromium):
         self.chromium_log = (self.state_file.parent / "chromium.log").open("w") if self.state_file else None
@@ -60,11 +96,11 @@ class Browser:
             "process_start": Path(f"/proc/{self.process.pid}/stat").read_text().rsplit(")", 1)[1].split()[19], "closed": False}
         self._save_state()
         active = Path(self.profile.name) / "DevToolsActivePort"
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + TENGGAT_CHROMIUM_SIAP
         while not active.exists():
             if self.process.poll() is not None or time.monotonic() > deadline:
                 self.close()
-                raise RuntimeError("Chromium tidak siap")
+                raise ChromiumBelumSiap("Chromium tidak siap")
             time.sleep(.1)
         port = active.read_text().splitlines()[0]
         pages = HTTP.get(f"http://127.0.0.1:{port}/json/list", timeout=5, allow_redirects=False).json()
@@ -380,7 +416,11 @@ def run(args):
         browser.click(testid("clear-selection-btn"))
         browser.wait("!document.querySelector('[data-testid=batch-edit-panel]')?.getClientRects().length")
         browser.wait("Array.from(document.querySelectorAll('[data-testid^=select-asset-]')).every(el=>!el.checked)")
-        assert not browser.visible(testid("clear-selection-btn")), "Toolbar seleksi masih aktif setelah hapus seleksi"
+        # Ditunggu, bukan diperiksa seketika: toolbar seleksi dilepas pada
+        # render sesudah kotak centang kosong, jadi pemeriksaan langsung
+        # berbalapan dengan render itu. Toolbar yang benar-benar tak pernah
+        # hilang tetap gagal — hanya lewat tenggat, bukan lewat kebetulan.
+        browser.wait("!document.querySelector('[data-testid=clear-selection-btn]')?.getClientRects().length", 10)
         report["checks"].append("clear_selection_distinct")
         browser.call("Page.reload", {"ignoreCache": False})
         report["stage"] = "reload"
@@ -517,6 +557,7 @@ def run(args):
     except BaseException as exc:
         failure = exc
         report["error_class"] = type(exc).__name__
+        report["error_line"] = baris_galat(exc)
         # Save only the post-login UI; body state and storage may contain tokens.
         with contextlib.suppress(Exception):
             if browser and browser.js("!document.querySelector('[data-testid=login-form]')"):

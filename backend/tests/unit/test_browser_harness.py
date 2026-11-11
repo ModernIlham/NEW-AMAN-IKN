@@ -178,3 +178,122 @@ def test_public_failure_log_is_bounded_and_redacts_exact_seed_credentials(tmp_pa
     ci.public_diagnostics(private, output, [secret])
     text = (output / "backend.log").read_text()
     assert len(text) <= 65536 and secret not in text and "abc.def.ghi" not in text and "private-value" not in text
+
+
+# ── Ketahanan penyalaan Chromium & diagnosa kegagalan ───────────────────────
+#
+# Tiga dari enam run CI pada sebuah PR yang hanya berisi dokumen merah di uji
+# browser. Satu berhenti di tenggat penyalaan Chromium; dua lainnya berhenti
+# di tahap yang sama, tetapi barisnya tak bisa diketahui tanpa mengunduh
+# artefak. Uji di bawah menjaga dua hal: penyalaan dicoba ulang HANYA untuk
+# "belum siap", dan tempat berhentinya uji kini tercatat sebagai angka.
+
+def test_chromium_belum_siap_dicoba_sekali_lagi_dengan_profil_baru(monkeypatch):
+    browser = script("uji_browser")
+    profil = []
+    def mulai(self, _chromium):
+        profil.append(Path(self.profile.name))
+        if len(profil) == 1:
+            raise browser.ChromiumBelumSiap("Chromium tidak siap")
+        self.sequence = 0
+    monkeypatch.setattr(browser.Browser, "_start", mulai)
+    hasil = browser.Browser("unused")
+    try:
+        assert len(profil) == 2 and profil[0] != profil[1]
+        assert not profil[0].exists(), "profil percobaan pertama harus dibersihkan"
+        assert profil[1].exists()
+    finally:
+        hasil.close()
+    assert not profil[1].exists()
+
+
+def test_chromium_belum_siap_dua_kali_tetap_gagal(monkeypatch):
+    browser = script("uji_browser")
+    profil = []
+    def mulai(self, _chromium):
+        profil.append(Path(self.profile.name))
+        raise browser.ChromiumBelumSiap("Chromium tidak siap")
+    monkeypatch.setattr(browser.Browser, "_start", mulai)
+    with pytest.raises(browser.ChromiumBelumSiap):
+        browser.Browser("unused")
+    assert len(profil) == browser.PERCOBAAN_CHROMIUM == 2
+    assert all(not p.exists() for p in profil)
+
+
+def test_galat_lain_saat_penyalaan_tidak_dicoba_ulang(monkeypatch):
+    """Mencoba ulang galat sembarang akan menyembunyikan cacat yang nyata."""
+    browser = script("uji_browser")
+    panggilan = []
+    def mulai(self, _chromium):
+        panggilan.append(1)
+        raise OSError("biner tidak ada")
+    monkeypatch.setattr(browser.Browser, "_start", mulai)
+    with pytest.raises(OSError):
+        browser.Browser("unused")
+    assert len(panggilan) == 1
+
+
+def test_baris_galat_menunjuk_baris_di_skrip_bukan_di_pustaka():
+    browser = script("uji_browser")
+    try:
+        browser.local_target("https://contoh.invalid/")
+    except ValueError as exc:
+        baris = browser.baris_galat(exc)
+    sumber = (ROOT / "scripts" / "uji_browser.py").read_text().splitlines()
+    assert baris > 0 and "raise ValueError" in sumber[baris - 1]
+    try:
+        json.loads("{")
+    except ValueError as exc:
+        assert browser.baris_galat(exc) == 0, "galat dari luar skrip tak punya baris di skrip"
+
+
+def test_kegagalan_mencatat_baris_tanpa_membocorkan_kredensial(tmp_path, monkeypatch):
+    browser = script("uji_browser")
+    run_id = "b" * 32
+    accounts = tmp_path / "accounts.json"
+    accounts.write_text(json.dumps({"run_id": run_id, "accounts": [{
+        "username": "loadtest-" + run_id + "-user", "password": "private-password",
+        "access_token": "private-token", "activity_id": "loadtest-" + run_id + "-activity-0"}]}))
+    accounts.chmod(0o600)
+    monkeypatch.setattr(browser.HTTP, "get", lambda *a, **k: SimpleNamespace(status_code=404))
+    output = tmp_path / "public"
+    with pytest.raises(AssertionError):
+        browser.run(SimpleNamespace(frontend="http://127.0.0.1:1", backend="http://127.0.0.1:2",
+                                    accounts=accounts, output=output, chromium="unused"))
+    teks = (output / "hasil.json").read_text()
+    report = json.loads(teks)
+    sumber = (ROOT / "scripts" / "uji_browser.py").read_text().splitlines()
+    assert type(report["error_line"]) is int and "assert" in sumber[report["error_line"] - 1]
+    assert "private-password" not in teks and "private-token" not in teks
+
+
+def test_diagnosa_browser_hanya_meneruskan_nilai_berbentuk_tetap():
+    ci = script("ci_verification")
+    hasil = ci.diagnosa_browser({
+        "stage": "batch_edit", "error_class": "AssertionError", "error_line": 376,
+        "checks": ["login_ui", "batch_preflight_before_mutation"],
+        "password": "private-password"})
+    assert hasil == {"stage": "batch_edit", "error_class": "AssertionError", "error_line": 376,
+                     "checks": 2, "last_check": "batch_preflight_before_mutation"}
+    kotor = ci.diagnosa_browser({
+        "stage": "token=abc.def.ghi", "error_class": "Bearer private-token",
+        "error_line": "private-value", "checks": ["private password"]})
+    assert kotor == {"stage": "", "error_class": "", "error_line": 0, "checks": 1, "last_check": ""}
+
+
+def test_ringkasan_browser_gagal_mencetak_diagnosa_lalu_tetap_gagal(tmp_path, capsys):
+    ci = script("ci_verification")
+    berkas = tmp_path / "hasil.json"
+    berkas.write_text(json.dumps({"ok": False, "stage": "batch_edit", "error_class": "AssertionError",
+                                  "error_line": 376, "checks": ["login_ui"], "cleanup_errors": []}))
+    with pytest.raises(ValueError):
+        ci.summary("browser", berkas)
+    keluaran = capsys.readouterr().out
+    assert 'browser-gagal={"stage":"batch_edit"' in keluaran and '"error_line":376' in keluaran
+
+
+def test_langkah_ringkasan_browser_tetap_jalan_saat_uji_gagal():
+    """Tanpa `if`, langkah ini dilewati justru ketika diagnosanya dibutuhkan."""
+    alur = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    langkah = alur.split("- name: Ringkasan browser tanpa fixture", 1)[1].split("- name:", 1)[0]
+    assert "if: ${{ !cancelled() }}" in langkah
