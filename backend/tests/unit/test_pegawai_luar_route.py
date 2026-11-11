@@ -271,6 +271,16 @@ def test_hapus_super_admin_dan_409_bila_dirujuk_satker_mana_pun(dbx):
         {"pegawai_id": o["id"], "nama": o["nama"]}]}))
     assert _galat(rpl.hapus_pegawai_luar(o["id"], user=SUPER)).status_code == 409
     _jalan(dbx.bast_serah_terima.delete_many({}))
+    # PIHAK KESATU disimpan di `pihak_pertama` (bukan `pihak_kesatu`).
+    _jalan(dbx.bast_serah_terima.insert_one({"id": "b3",
+                                             "pihak_pertama": {"pegawai_id": o["id"]}}))
+    assert _galat(rpl.hapus_pegawai_luar(o["id"], user=SUPER)).status_code == 409
+    _jalan(dbx.bast_serah_terima.delete_many({}))
+    # Tanpa tautan id, nomor identitasnya tetap dikenali.
+    _jalan(dbx.bast_serah_terima.insert_one({"id": "b4",
+                                             "pihak_kedua": {"pegawai_id": "", "nip": o["nip"]}}))
+    assert _galat(rpl.hapus_pegawai_luar(o["id"], user=SUPER)).status_code == 409
+    _jalan(dbx.bast_serah_terima.delete_many({}))
     _jalan(rpl.hapus_pegawai_luar(o["id"], user=SUPER))
     assert _jalan(dbx.pegawai_luar.count_documents({})) == 0
 

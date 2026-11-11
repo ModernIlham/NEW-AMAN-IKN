@@ -384,9 +384,15 @@ async def hapus_pegawai_luar(orang_id: str, user: dict = Depends(require_super_a
     if nip:
         dirujuk += await db.assets.count_documents(
             {"pengguna_nip": nip, "dihapus": {"$ne": True}})
-    dirujuk += await db.bast_serah_terima.count_documents({"$or": [
-        {"pihak_kesatu.pegawai_id": orang_id}, {"pihak_kedua.pegawai_id": orang_id},
-        {"penanggung_jawab_tambahan.pegawai_id": orang_id}]})
+    # BAST menyimpan pihak sebagai `pihak_pertama`/`pihak_kedua`/
+    # `penanggung_jawab_tambahan`. Dicocokkan lewat id DAN nomor identitas:
+    # pihak yang diisi dari direktori lalu disunting tetap tercatat NIP-nya.
+    rujukan = [{f"{k}.pegawai_id": orang_id}
+               for k in ("pihak_pertama", "pihak_kedua", "penanggung_jawab_tambahan")]
+    if nip:
+        rujukan += [{f"{k}.nip": nip}
+                    for k in ("pihak_pertama", "pihak_kedua", "penanggung_jawab_tambahan")]
+    dirujuk += await db.bast_serah_terima.count_documents({"$or": rujukan})
     if dirujuk:
         raise HTTPException(status_code=409, detail=(
             "Orang ini masih dirujuk aset atau berita acara — nonaktifkan saja"))
