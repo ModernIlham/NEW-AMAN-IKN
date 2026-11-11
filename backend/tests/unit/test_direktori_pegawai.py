@@ -229,3 +229,19 @@ def test_impor_aset_nip_terdaftar_gabungan_kedua_koleksi():
     src = Path(ri.__file__).read_text(encoding="utf-8")
     blok = src.split("nip_terdaftar = {str(n).strip()", 1)[1][:300]
     assert "db.pegawai, db.pegawai_luar" in blok and '.distinct("nip")' in blok
+
+
+# ── pembaca 6: routes/penggunaan.py ────────────────────────────────────────
+def test_rekap_pemegang_memperkaya_orang_luar(dbx, monkeypatch):
+    import routes.penggunaan as rpg
+    monkeypatch.setattr(rpg, "db", dbx)
+
+    async def tanpa_filter(user, q=None):
+        return dict(q or {})
+    monkeypatch.setattr(rpg, "scope_query_aset", tanpa_filter, raising=False)
+    from pathlib import Path
+    src = Path(rpg.__file__).read_text(encoding="utf-8")
+    blok = src.split("# Perkaya dgn Master Pegawai via NIP", 1)[1][:2600]
+    assert "db.pegawai_luar.find(" in blok
+    assert 'r["pegawai_master_kelompok"]' in blok and 'r["pegawai_master_instansi"]' in blok
+    assert 'scope_query_field_satker(_user, {"nip": {"$in": list(nips)}})' in blok
