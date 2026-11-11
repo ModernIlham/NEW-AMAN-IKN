@@ -66,6 +66,14 @@ async def periksa_penerima(db, scope_query, nip, konteks="serah terima"):
          "unit_kerja": 1, "status_kepegawaian": 1,
          "eselon1": 1, "eselon2": 1, "eselon3": 1, "eselon4": 1, "eselon5": 1})
     if not peg:
+        # Orang luar (PGW-06): direktori bersama, tanpa scope satker.
+        peg = await db.pegawai_luar.find_one(
+            {"nip": n},
+            {"_id": 0, "nama": 1, "nip": 1, "status": 1, "jabatan": 1,
+             "unit_kerja": 1, "status_kepegawaian": 1, "kelompok": 1,
+             "instansi_nama": 1, "eselon1": 1, "eselon2": 1, "eselon3": 1,
+             "eselon4": 1, "eselon5": 1})
+    if not peg:
         return None, (f"NIP {n} belum terdaftar di Master Pegawai — periksa "
                       f"ejaan atau daftarkan dulu")
     if is_meninggal(peg):
@@ -102,4 +110,8 @@ def snapshot_penerima(pegawai, unit_teks="") -> dict:
         "penerima_status_kepegawaian": str(
             p.get("status_kepegawaian") or "").strip(),
         "penerima_terdaftar": bool(p),
+        # Kelompok penerima (PGW-06), dibekukan bersama identitasnya.
+        "penerima_kelompok": (str(p.get("kelompok") or "").strip()
+                              or ("internal" if p else "")),
+        "penerima_instansi": str(p.get("instansi_nama") or "").strip(),
     }

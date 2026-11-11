@@ -779,6 +779,10 @@ async def buat_permintaan(payload: PermintaanIn,
             scope_query_field_satker(
                 user, {"nip": {"$in": _nip_signer}, "status": "meninggal"}),
             {"_id": 0, "nama": 1, "nip": 1}).to_list(100)
+        # Orang luar (PGW-06): direktori bersama, tanpa scope satker.
+        _alm += await db.pegawai_luar.find(
+            {"nip": {"$in": _nip_signer}, "status": "meninggal"},
+            {"_id": 0, "nama": 1, "nip": 1}).to_list(100)
         if _alm:
             _nama = ", ".join(str(a.get("nama") or a.get("nip")) for a in _alm)
             raise HTTPException(
@@ -1833,6 +1837,9 @@ async def ubah_penandatangan(
             raise HTTPException(400, "Jumlah pembubuhan harus 1–20")
         if baru["nip"]:
             pg = await db.pegawai.find_one(scope_query_field_satker(user, {"nip": baru["nip"]}), _PROJ)
+            if not pg:
+                # Orang luar (PGW-06): direktori bersama, tanpa scope satker.
+                pg = await db.pegawai_luar.find_one({"nip": baru["nip"]}, _PROJ)
             if pg and is_meninggal(pg):
                 raise HTTPException(400, "Pegawai berstatus Meninggal Dunia tidak dapat menjadi penanda tangan")
         sid, jti = str(uuid.uuid4()), str(uuid.uuid4())

@@ -1052,7 +1052,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-03 | Orang luar (backend) | 02 | **selesai** | #1117 |
 | PGW-04 | Impor/ekspor/template orang luar | 03 | **selesai** | #1118 |
 | PGW-05 | Unit kerja luar (backend) | 03 | **selesai** | #1119 |
-| PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | belum | |
+| PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | **selesai** | #1120 |
 | PGW-07 | Layar Master Pegawai | 03, 04, 05 | belum | |
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | belum | |
 | PGW-09 | Laporan & dokumen | 06 | belum | |
@@ -1429,6 +1429,22 @@ internal B, dan tidak pernah mengembalikan nomor yang tidak ditanyakan;
 lebih dari 500 nomor → 400; NIP yang ada di internal dan luar → kelompok
 internal; direktori tanpa `kelompok` → 400; hasil luar selalu membawa
 `instansi_nama` dan `satker_luar_nama`.
+
+**Hasil (2026-11-11):** `direktori_pegawai.py` + `routes/direktori_pegawai.py`;
+pembaca 7.2 diubah satu komit per berkas (shared_utils, penerima_utils,
+bast, ttd, imports, penggunaan, reports, wasdal) ditambah perluasan uji
+penerima persediaan. Penyesuaian:
+- **Laporan Eksekutif `peg_master` belum disentuh** — mengikutkan orang luar
+  ke pembagi eselon satker akan menaruh mereka di bawah unit yang salah;
+  pengelompokan tersendiri dikerjakan PGW-09. Yang diubah di `reports.py`
+  baru `_peta_status_kepegawaian`.
+- BAST: `kelompok`/`tataran`/`instansi_nama` pihak diisi server lewat NIP
+  (`_bekukan_kelompok`), bukan dari kiriman klien.
+- `cari_orang` menerima `database` opsional (dipakai `penerima_utils` yang
+  menerima `db` sebagai argumen).
+- Temuan saat mengerjakan: cek rujukan hapus orang luar (PGW-03) mencari
+  `pj_tambahan.pegawai_id`, padahal BAST menyimpan
+  `penanggung_jawab_tambahan` — diperbaiki di PR ini.
 
 ---
 

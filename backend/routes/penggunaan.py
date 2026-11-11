@@ -130,7 +130,16 @@ async def daftar_pemegang(
                 scope_query_field_satker(_user, {"nip": {"$in": list(nips)}}),
                 {"_id": 0, "nip": 1, "nama": 1, "jabatan": 1,
                  "unit_kerja": 1, "status": 1}):
-            peg_map[pgw["nip"]] = pgw
+            peg_map[pgw["nip"]] = {**pgw, "kelompok": "internal"}
+        # Orang luar (PGW-06): direktori bersama, hanya untuk NIP yang belum
+        # dikenali Master Pegawai satker ini.
+        sisa = [n for n in nips if n not in peg_map]
+        if sisa:
+            async for pgw in db.pegawai_luar.find(
+                    {"nip": {"$in": sisa}},
+                    {"_id": 0, "nip": 1, "nama": 1, "jabatan": 1, "unit_kerja": 1,
+                     "status": 1, "kelompok": 1, "instansi_nama": 1}):
+                peg_map[pgw["nip"]] = pgw
     for r in halaman:
         m = peg_map.get(str(r.get("nip") or "").strip())
         r["pegawai_master_nama"] = (m or {}).get("nama", "")
@@ -138,6 +147,8 @@ async def daftar_pemegang(
         r["pegawai_master_unit"] = (m or {}).get("unit_kerja", "")
         r["pegawai_master_status"] = (m or {}).get("status", "")
         r["pegawai_terdaftar"] = bool(m)
+        r["pegawai_master_kelompok"] = (m or {}).get("kelompok", "")
+        r["pegawai_master_instansi"] = (m or {}).get("instansi_nama", "")
         r["label_identitas"] = label_identitas_cetak(r["nip"]) if r["nip"] else ""
     return {
         "items": halaman,

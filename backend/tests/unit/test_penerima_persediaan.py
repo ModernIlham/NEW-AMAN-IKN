@@ -177,6 +177,36 @@ def test_penerima_satker_lain_tak_dikenali(dbx):
     assert r["transaksi"]["penerima_nama"] == ""
 
 
+def test_penerima_orang_luar_dikenali_dan_kelompoknya_dibekukan(dbx):
+    # PGW-06: orang luar (direktori bersama, tanpa scope satker) kini dikenali
+    # sebagai penerima; kelompok dan instansinya ikut dibekukan ke jurnal.
+    _jalan(dbx.pegawai_luar.insert_one({
+        "id": "l1", "nama": "Eka Mitra", "nip": "6471010101850001",
+        "status": "aktif", "jabatan": "Direktur", "kelompok": "pihak_ketiga",
+        "instansi_nama": "PT Mitra"}))
+    r = _keluar(penerima_nip="6471010101850001", unit_penerima="Gudang")
+    j = r["transaksi"]
+    assert j["penerima_nama"] == "Eka Mitra" and j["penerima_terdaftar"] is True
+    assert j["penerima_kelompok"] == "pihak_ketiga"
+    assert j["penerima_instansi"] == "PT Mitra"
+    assert "peringatan" not in r
+
+
+def test_penerima_orang_luar_meninggal_ditolak(dbx):
+    _jalan(dbx.pegawai_luar.insert_one({
+        "id": "l2", "nama": "Almarhum Mitra", "nip": "6471010101850002",
+        "status": "meninggal", "kelompok": "pihak_ketiga"}))
+    with pytest.raises(HTTPException) as e:
+        _keluar(penerima_nip="6471010101850002")
+    assert "Meninggal Dunia" in e.value.detail
+    assert _jalan(dbx.transaksi_persediaan.count_documents({})) == 0
+
+
+def test_penerima_internal_tetap_berkelompok_internal(dbx):
+    j = _keluar(penerima_nip="198001012005011001")["transaksi"]
+    assert j["penerima_kelompok"] == "internal" and j["penerima_instansi"] == ""
+
+
 def test_penolakan_terjadi_sebelum_layer_disentuh(dbx, monkeypatch):
     """Memeriksa penerima DI DALAM loop percobaan berarti penolakan bisa
     terjadi setelah stok terlanjur berkurang pada percobaan sebelumnya."""

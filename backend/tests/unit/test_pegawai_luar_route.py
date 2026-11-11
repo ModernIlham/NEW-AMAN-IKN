@@ -266,6 +266,11 @@ def test_hapus_super_admin_dan_409_bila_dirujuk_satker_mana_pun(dbx):
                                              "pihak_kedua": {"pegawai_id": o["id"]}}))
     assert _galat(rpl.hapus_pegawai_luar(o["id"], user=SUPER)).status_code == 409
     _jalan(dbx.bast_serah_terima.delete_many({}))
+    # Penanggung jawab tambahan disimpan di `penanggung_jawab_tambahan`.
+    _jalan(dbx.bast_serah_terima.insert_one({"id": "b2", "penanggung_jawab_tambahan": [
+        {"pegawai_id": o["id"], "nama": o["nama"]}]}))
+    assert _galat(rpl.hapus_pegawai_luar(o["id"], user=SUPER)).status_code == 409
+    _jalan(dbx.bast_serah_terima.delete_many({}))
     _jalan(rpl.hapus_pegawai_luar(o["id"], user=SUPER))
     assert _jalan(dbx.pegawai_luar.count_documents({})) == 0
 

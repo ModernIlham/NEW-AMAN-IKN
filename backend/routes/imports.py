@@ -411,7 +411,10 @@ async def import_assets(request: Request, file: UploadFile = File(...), force_up
         wajib_pegawai = bool(_settings.get("wajib_pegawai_terdaftar"))
         nip_terdaftar = set()
         if wajib_pegawai:
-            nip_terdaftar = {str(n).strip() for n in await db.pegawai.distinct("nip")
+            # Gabungan Master Pegawai internal dan direktori orang luar (PGW-06).
+            nip_terdaftar = {str(n).strip()
+                             for kol in (db.pegawai, db.pegawai_luar)
+                             for n in await kol.distinct("nip")
                              if str(n or "").strip()}
         pegawai_errors = []
 
