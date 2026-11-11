@@ -18,6 +18,24 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1126] Master Pegawai tiga kelompok — PGW-03: orang luar (backend) — 2026-11-11
+
+- Rute baru `/api/pegawai-luar/…` (`routes/pegawai_luar.py`), cermin Master
+  Pegawai internal: daftar (wajib kelompok, dicari & dipotong halaman di
+  server), rekap unit, rekap lingkup (per tataran/instansi/satker), perlu
+  serah terima, aset dipegang, tambah/ubah/hapus, foto, kartu. Belum ada layar.
+- Kelompok, tataran, instansi, satker, dan salinan provinsi orang selalu
+  diturunkan dari satkernya; pihak ketiga dipaksa Non-ASN dan field ASN/
+  pribadinya dikosongkan; eksternal hanya kehilangan tujuh field pribadi;
+  perorangan bertindak untuk diri sendiri.
+- NIP/NIK unik se-direktori dan tidak boleh sama dengan pegawai internal
+  satker mana pun (pesan tidak menyebut orangnya); kartu yang dipegang
+  pegawai internal ditolak; pindah satker hanya sekelompok.
+- Cacah aset tetap ter-scope satker pemanggil; hapus permanen hanya
+  super-admin dan ditolak bila masih dirujuk aset/BAST di satker mana pun.
+- Uji kesetaraan menjaga himpunan rute luar = internal − pengecualian, dan
+  memastikan modul internal tidak mengenal modul luar.
+
 ## [#1125] Master Pegawai tiga kelompok — PGW-02: direktori instansi & satker luar (backend) — 2026-11-11
 
 - Rute baru `/api/luar/…` (`routes/organisasi_luar.py`): referensi kode,

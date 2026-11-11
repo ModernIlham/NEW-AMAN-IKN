@@ -1049,7 +1049,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-00 | Regulasi & kontrak modul | — | **selesai** | #1114 |
 | PGW-01 | Fondasi murni | 00 | **selesai** | #1115 |
 | PGW-02 | Master instansi & satker luar (backend) | 01 | **selesai** | #1116 |
-| PGW-03 | Orang luar (backend) | 02 | belum | |
+| PGW-03 | Orang luar (backend) | 02 | **selesai** | #1117 |
 | PGW-04 | Impor/ekspor/template orang luar | 03 | belum | |
 | PGW-05 | Unit kerja luar (backend) | 03 | belum | |
 | PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | belum | |
@@ -1308,6 +1308,19 @@ hanya melihat asetnya.
 
 **Terima:** uji lama `test_pegawai_*`, `test_portal_*`, `test_unit_kerja_*`
 lulus tanpa disunting; `git diff --stat` tidak memuat `routes/pegawai.py`.
+
+**Hasil (2026-11-11):** `routes/pegawai_luar.py` + uji rute dan uji
+kesetaraan; indeks NIP unik parsial dan kartu unik+sparse. Penyesuaian:
+- Urutan proses: `_bersih` → `sesuaikan_orang_luar` → `_stempel` →
+  `validate_orang_luar` (yang menjalankan `validate_pegawai` internal).
+  Menyesuaikan lebih dulu agar field yang toh dikosongkan tidak menolak simpan.
+- `kode_satker` **dibuang**, bukan dipaksa kosong (invarian 6, sejalan PGW-02).
+- Daftar memakai `semua_status=true` untuk memuat yang tidak aktif, dan tiap
+  baris membawa `label_unit` ("instansi — satker — unit").
+- Templat/ekspor/impor menunggu PGW-04: uji kesetaraan memuat himpunan
+  sementara `MENUNGGU_PGW04` yang harus dihapus di paket itu.
+- Penjaga "tak memanggil portal/scope" memeriksa impor dan pemanggilan, bukan
+  sebutan di docstring.
 
 ---
 
