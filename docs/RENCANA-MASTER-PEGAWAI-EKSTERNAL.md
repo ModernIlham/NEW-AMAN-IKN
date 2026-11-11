@@ -1053,7 +1053,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-04 | Impor/ekspor/template orang luar | 03 | **selesai** | #1118 |
 | PGW-05 | Unit kerja luar (backend) | 03 | **selesai** | #1119 |
 | PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | **selesai** | #1120 |
-| PGW-07 | Layar Master Pegawai | 03, 04, 05 | belum | |
+| PGW-07 | Layar Master Pegawai | 03, 04, 05 | **selesai** | #1121 |
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | belum | |
 | PGW-09 | Laporan & dokumen | 06 | belum | |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | belum | |
@@ -1541,6 +1541,36 @@ penerima persediaan. Penyesuaian:
 
 **Terima:** `yarn lint`; `CI=true yarn test --watchAll=false`;
 `CI=false yarn build`; periksa manual HP dan desktop, terang dan gelap.
+
+
+**Hasil (2026-11-11):** `lib/ranahPegawai.js` (+ uji), `PilihKelompok.jsx`,
+`BilahLingkupLuar.jsx`, `KelolaOrganisasiLuar.jsx`, `PegawaiPage.jsx`, dan
+`PegawaiKelompok.test.jsx`. Penyesuaian:
+- **Kontradiksi spesifikasi diselesaikan dengan prop.** Butir 3 meminta
+  "tanpa pilihan tersimpan → hanya layar pilih, tanpa daftar", sedangkan
+  `PegawaiAkarEselon.test.jsx` (wajib lulus tanpa disunting) merender halaman
+  tanpa pilihan tersimpan dan langsung menekan Tambah. Keduanya tak mungkin
+  sekaligus benar pada perilaku bawaan yang sama. Maka gerbang dipasang lewat
+  prop `wajibPilihKelompok` yang diberikan `App.js`; tanpa prop itu halaman
+  langsung membuka ranah internal (perilaku lama). Produksi memakai gerbang.
+- Jalur internal sengaja dibiarkan sebagai literal lama di cabang internal
+  (bukan dirakit dari ranah) — himpunan URL internal dibekukan di uji dan
+  tetap empat GET yang sama. `/pegawai/referensi` dan
+  `/pegawai/deteksi-identitas` dipakai ketiga ranah (tak ada padanan luar);
+  sinkron aset hanya internal.
+- Cacah di layar pilih: kelompok luar dari `rekap-lingkup`; **cacah internal
+  tidak ditampilkan** karena satu-satunya sumbernya adalah daftar `/pegawai`,
+  yang justru dilarang dimuat di layar pilih.
+- Rute baru `POST /luar/wadah-perorangan` (admin): pembantu
+  `pastikan_wadah_perorangan` (PGW-02) ternyata tak dipanggil dari rute mana
+  pun, sehingga pilihan Perorangan tak terjangkau dari layar.
+- Daftar orang luar dimuat maks. 200 per lingkup (batas server), dicari di
+  server; kepala halaman menyebut "N dari total" bila terpotong.
+- Kelola Unit di form orang luar hanya aktif bila satker orang itu sama
+  dengan satker di bilah lingkup (master unit yang dimuat milik satker itu).
+- Label `nomor_induk` per jenis badan didefinisikan di layar
+  (`LABEL_NOMOR_INDUK`) — referensi server belum memuatnya.
+- Belum: periksa manual HP/desktop terang/gelap di peramban sungguhan.
 
 ---
 
