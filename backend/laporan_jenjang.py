@@ -314,6 +314,65 @@ def baris_hierarki_pengguna(pengguna, levels):
     return keluar
 
 
+
+# Pembagi pengguna LUAR (PGW-09): sesudah pengguna internal, tiap kelompok
+# di bawah pembagi sendiri — jalur eselon organisasi lain tak dilebur ke
+# pohon satker ini. Urutan pembagi tetap (bukan menurut cacah) supaya
+# laporan antarperiode bisa dibandingkan.
+JUDUL_KELOMPOK_LUAR = (
+    ("eksternal_pusat", "Instansi Eksternal — Pusat"),
+    ("eksternal_daerah", "Instansi Eksternal — Daerah"),
+    ("pihak_ketiga", "Pihak Ketiga"),
+)
+TANPA_INSTANSI = "(instansi tak tercatat)"
+TANPA_SATKER = "(satker tak tercatat)"
+TANPA_PROVINSI = "(provinsi tak tercatat)"
+
+
+def _kunci_teks(field, tanpa):
+    return lambda p: str((p or {}).get(field) or "").strip() or tanpa
+
+
+def baris_hierarki_pengguna_luar(pengguna):
+    """Pengguna instansi eksternal dan pihak ketiga, berjenjang per kelompok.
+
+    - Pusat: "Instansi Eksternal — Pusat" → K/L → satker → pengguna.
+    - Daerah: "Instansi Eksternal — Daerah" → provinsi → pemda → perangkat
+      daerah → pengguna.
+    - Pihak ketiga: "Pihak Ketiga" → badan → unit → pengguna.
+
+    Tiap baris masukan membawa `kunci_ikon`, `instansi_nama`,
+    `satker_luar_nama`, `provinsi_nama`, `count`, `value`, `nama`. Bentuk
+    keluarannya sama dengan `baris_hierarki_pengguna`.
+    """
+    keluar = []
+    for kunci, judul in JUDUL_KELOMPOK_LUAR:
+        isi = [p for p in (pengguna or []) if p.get("kunci_ikon") == kunci]
+        if not isi:
+            continue
+        keluar.append({"name": judul, "depth": 0, "daun": False, "kelompok_luar": kunci,
+                       "count": sum(x["count"] for x in isi),
+                       "value": sum(x["value"] for x in isi)})
+        fns = [_kunci_teks("instansi_nama", TANPA_INSTANSI),
+               _kunci_teks("satker_luar_nama", TANPA_SATKER)]
+        if kunci == "eksternal_daerah":
+            fns = [_kunci_teks("provinsi_nama", TANPA_PROVINSI)] + fns
+        grup = _hierarki(isi, fns, [lambda k: k] * len(fns), depth=1)
+        for i, b in enumerate(grup):
+            keluar.append({
+                "name": b["label"], "depth": b["depth"], "daun": False,
+                "count": sum(x["count"] for x in b["aset"]),
+                "value": sum(x["value"] for x in b["aset"]),
+            })
+            terdalam = (i + 1 >= len(grup)) or (grup[i + 1]["depth"] <= b["depth"])
+            if not terdalam:
+                continue
+            for p in sorted(b["aset"], key=lambda x: (-x["value"], -x["count"],
+                                                      (x["nama"] or "").lower())):
+                keluar.append({**p, "name": p["nama"],
+                               "depth": b["depth"] + 1, "daun": True})
+    return keluar
+
 def tandai_batang_daun(baris):
     """Beri `bar_pct` HANYA pada jenjang terdalam; kembalikan `baris`.
 

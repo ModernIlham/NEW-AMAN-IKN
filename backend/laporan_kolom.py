@@ -75,6 +75,9 @@ SISIPAN_BARIS = 3.95
 
 #: Catatan kaki tabel: `margin-top` 6px + baris teks 7px selebar penuh.
 MARGIN_CATATAN = 6.0
+#: Satu baris keterangan ikon kelompok di atas tabel Pengguna (PGW-09):
+#: font 6.5px + margin bawah 4px. Ikut dikurangkan dari jatah baris.
+TINGGI_LEGENDA_IKON = 12.0
 
 #: Cadangan yang HARUS ditinggalkan di luar perabot yang dapat ditunjuk.
 #:
@@ -355,6 +358,8 @@ def tinggi_pengguna(b, kolom) -> int:
     bertambah satu baris teks. Baris pembagi tak punya NIP, jadi ia tidak.
     """
     nama, jabatan = (b.get("name") or ""), (b.get("jabatan") or "")
+    if b.get("daun") and b.get("kunci_ikon"):
+        nama += "   "   # ikon kelompok sebaris (±10px) setelah nama — PGW-09
     px_nama = lebar_setelah_jorok(
         PX_NAMA_PENGGUNA_1 if kolom == 1 else PX_NAMA_PENGGUNA_2,
         b.get("depth"))

@@ -97,6 +97,19 @@ def distribusi_pengguna(assets, pegawai_by_nip=None):
             for _n in range(1, 6):
                 g[f"eselon{_n}"] = str(
                     (master or {}).get(f"eselon{_n}") or "").strip()
+            # Kelompok orang (PGW-09): internal bila tercatat di Master
+            # Pegawai satker; orang luar membawa kelompok/instansinya.
+            # Tak terdaftar → tanpa kelompok (dan tanpa ikon).
+            if master:
+                from organisasi_luar_utils import kunci_ikon
+                kel = str(master.get("kelompok") or "").strip() or "internal"
+                g["kelompok"] = kel
+                g["kunci_ikon"] = kunci_ikon(kel, master.get("tataran"))
+                for f in ("instansi_nama", "satker_luar_nama", "provinsi_nama"):
+                    g[f] = str(master.get(f) or "").strip()
+            else:
+                g.update({"kelompok": "", "kunci_ikon": "", "instansi_nama": "",
+                          "satker_luar_nama": "", "provinsi_nama": ""})
         g["count"] += 1
         try:
             g["value"] += harga_float(a.get("purchase_price"))
