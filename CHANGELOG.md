@@ -18,6 +18,18 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1128] Master Pegawai tiga kelompok — PGW-05: unit kerja luar (backend) — 2026-11-11
+
+- Rute baru `/api/unit-kerja-luar/…`: daftar, tambah, ubah (ganti nama,
+  pindah induk, ubah tingkat), hapus, dan bangun pohon dari data orang —
+  semuanya wajib per satker luar. Belum ada layar.
+- Aturan pohon sama dengan unit kerja internal; puncaknya mengikuti eselon
+  satker luar. Induk dari satker lain ditolak; ganti nama hanya merambat ke
+  orang luar di satker itu — tidak pernah ke aset, unit kerja, atau Master
+  Pegawai internal. Wadah perorangan tidak punya struktur unit.
+- Hapus unit hanya super-admin; ditolak bila masih punya sub-unit atau
+  dipakai orang.
+
 ## [#1127] Master Pegawai tiga kelompok — PGW-04: impor, ekspor, templat orang luar — 2026-11-11
 
 - Rute baru: templat CSV per kelompok, ekspor Excel per satker luar (satu

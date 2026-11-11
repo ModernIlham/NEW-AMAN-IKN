@@ -1051,7 +1051,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-02 | Master instansi & satker luar (backend) | 01 | **selesai** | #1116 |
 | PGW-03 | Orang luar (backend) | 02 | **selesai** | #1117 |
 | PGW-04 | Impor/ekspor/template orang luar | 03 | **selesai** | #1118 |
-| PGW-05 | Unit kerja luar (backend) | 03 | belum | |
+| PGW-05 | Unit kerja luar (backend) | 03 | **selesai** | #1119 |
 | PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | belum | |
 | PGW-07 | Layar Master Pegawai | 03, 04, 05 | belum | |
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | belum | |
@@ -1396,6 +1396,14 @@ untuk lingkup luar; ganti nama unit di satker luar X tidak mengubah orang di
 satker luar Y yang unitnya senama; `pegawai`, `unit_kerja`, `assets` **tidak
 berubah sama sekali** sesudah setiap operasi; satker-wadah perorangan
 menolak semua operasi unit.
+
+**Hasil (2026-11-11):** `routes/unit_kerja_luar.py` terdaftar; indeks
+tambahan `(satker_luar_id, parent_id, nama_unit)`. Penyesuaian:
+- Hapus unit hanya super-admin — tata kelola 3.4 untuk direktori bersama
+  (internal: admin). Ganti nama/pindah induk tetap untuk semua admin.
+- Induk dari satker lain ditolak 400 (aturan penampungan 3).
+- `bangun-dari-pegawai` menerima `satker_luar_id` di badan permintaan.
+- Audit ketat (`strict=True`) dengan aksi `luar_unit_*`.
 
 ---
 

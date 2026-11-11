@@ -507,6 +507,7 @@ from routes.pegawai import pegawai_router
 from routes.unit_kerja import unit_kerja_router
 from routes.organisasi_luar import organisasi_luar_router
 from routes.pegawai_luar import pegawai_luar_router
+from routes.unit_kerja_luar import unit_kerja_luar_router
 from routes.stiker import stiker_router
 from routes.penghapusan import penghapusan_router
 from routes.pemanfaatan import pemanfaatan_router
@@ -588,6 +589,7 @@ api_router.include_router(pegawai_router)
 api_router.include_router(unit_kerja_router)
 api_router.include_router(organisasi_luar_router)
 api_router.include_router(pegawai_luar_router)
+api_router.include_router(unit_kerja_luar_router)
 api_router.include_router(stiker_router)
 api_router.include_router(penghapusan_router)
 api_router.include_router(pemanfaatan_router)

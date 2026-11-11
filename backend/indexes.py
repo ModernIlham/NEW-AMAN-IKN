@@ -478,6 +478,8 @@ async def create_indexes() -> None:
         await _idx(db.instansi_luar, "induk_id")
         await _idx(db.instansi_luar, [("provinsi_id", 1), ("jenis", 1), ("nama", 1)])
         await _idx(db.unit_kerja_luar, "satker_luar_id")
+        await _idx(db.unit_kerja_luar,
+                   [("satker_luar_id", 1), ("parent_id", 1), ("nama_unit", 1)])
         await _idx(db.pegawai_luar, "instansi_id")
         await _idx(db.pegawai_luar, [("kelompok", 1), ("satker_luar_id", 1), ("nama", 1)])
         await _idx(db.pegawai_luar, [("kelompok", 1), ("tataran", 1), ("nama", 1)])
