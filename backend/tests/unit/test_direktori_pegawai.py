@@ -220,3 +220,12 @@ def test_ttd_dua_cek_penanda_tangan_meninggal_membaca_orang_luar():
     assert 'db.pegawai_luar.find(' in a and '"status": "meninggal"' in a
     b = src.split('pg = await db.pegawai.find_one(scope_query_field_satker(user, {"nip": baru["nip"]})', 1)[1][:500]
     assert 'db.pegawai_luar.find_one({"nip": baru["nip"]}' in b and "is_meninggal(pg)" in b
+
+
+# ── pembaca 5: routes/imports.py ───────────────────────────────────────────
+def test_impor_aset_nip_terdaftar_gabungan_kedua_koleksi():
+    from pathlib import Path
+    import routes.imports as ri
+    src = Path(ri.__file__).read_text(encoding="utf-8")
+    blok = src.split("nip_terdaftar = {str(n).strip()", 1)[1][:300]
+    assert "db.pegawai, db.pegawai_luar" in blok and '.distinct("nip")' in blok
