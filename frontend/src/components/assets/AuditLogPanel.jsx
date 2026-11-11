@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, memo } from "react";
 import { History, X, ChevronLeft, ChevronRight, ChevronDown, User, Clock, Plus, Edit3, Trash2, Layers, FileUp, Users, Package, ShieldCheck, ShieldAlert, RefreshCw, Server, Download } from "lucide-react";
 import { Button } from "../ui/button";
+import IkonKelompok from "../pegawai/IkonKelompok";
 import axios from "axios";
 
 import { downloadFileWithProgress } from "../../lib/downloadFile";
@@ -155,8 +156,10 @@ export const TimelineEntry = memo(({ log, showAssetInfo }) => {
                     <span className="font-medium text-muted-foreground">{FIELD_LABELS[c.field] || c.field}</span>
                     <div className="flex items-center gap-1 mt-0.5">
                       <span className="text-red-400 line-through truncate max-w-[100px]">{c.from || "(kosong)"}</span>
+                      {c.field === "pengguna_nip" && <IkonKelompok nomor={c.from} ukuran={11} />}
                       <span className="text-muted-foreground">&rarr;</span>
                       <span className="text-emerald-600 font-medium truncate max-w-[100px]">{c.to || "(kosong)"}</span>
+                      {c.field === "pengguna_nip" && <IkonKelompok nomor={c.to} ukuran={11} />}
                     </div>
                   </div>
                 ))}

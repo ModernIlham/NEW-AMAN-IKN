@@ -23,6 +23,8 @@ import KelolaPenandatangan, { RiwayatPenandatangan } from "@/components/ttd/Kelo
 import DialogBatalPermintaan, { MIN_ALASAN_BATAL } from "@/components/ttd/DialogBatalPermintaan";
 import { bagikanWa, bagikanEmail } from "@/lib/pesanTtd";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import TombolOrangLuar from "@/components/pegawai/TombolOrangLuar";
 import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
@@ -603,6 +605,7 @@ export default function TtdPermintaanPage({ user, onBack }) {
                   <div key={i} className="rounded-xl border border-border p-2.5 space-y-1.5">
                     <div className="flex items-center gap-1.5">
                       <span className="w-5 h-5 rounded-full bg-teal-600/10 text-teal-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                      <IkonKelompok nomor={s.nip} />
                       <Input value={s.nama} list="ttd-pegawai-list"
                         onChange={(e) => { ubahSigner(i, "nama", e.target.value); isiDariPegawai(i, e.target.value); }}
                         placeholder="Nama lengkap *" className="h-9 text-sm" data-testid={`ttd-form-nama-${i}`} />
@@ -613,6 +616,16 @@ export default function TtdPermintaanPage({ user, onBack }) {
                         data-testid={`ttd-tap-kartu-${i}`}>
                         <IdCard className="w-4 h-4" />
                       </button>
+                      {/* Penanda tangan dari instansi eksternal / pihak ketiga (PGW-08) */}
+                      <TombolOrangLuar kecil testId={`ttd-orang-luar-${i}`}
+                        onPilih={(p) => {
+                          setForm((f) => (f ? { ...f, signers: f.signers.map((x, idx) => (idx === i
+                            ? { ...x, nama: p.nama || "", nip: p.nip || "", jabatan: p.jabatan || "",
+                                email: p.email || x.email || "" } : x)) } : f));
+                          if (p.kapasitas_bertindak === "petugas") {
+                            toast.warning(`${p.nama} tercatat sebagai petugas/karyawan — bukan pihak yang sah menandatangani atas nama badannya.`, { duration: 9000 });
+                          }
+                        }} />
                       {form.signers.length > 1 && (
                         <button type="button" aria-label="Hapus penanda tangan"
                           onClick={() => setForm((f) => ({ ...f, signers: f.signers.filter((_, idx) => idx !== i) }))}

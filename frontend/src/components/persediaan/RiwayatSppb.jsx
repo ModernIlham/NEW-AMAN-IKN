@@ -10,6 +10,8 @@ import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
 import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 import { tanggalId } from "@/components/persediaan/RiwayatNotaDinas";
 import { ClipboardSignature, FileDown, PenLine } from "lucide-react";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import { kelompokDari } from "@/lib/kelompokOrang";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -115,6 +117,7 @@ export default function RiwayatSppb({ versi = 0, user }) {
                       {s.jenis_label || s.jenis} · {s.jumlah_barang} barang
                       {" "}· {tanggalId(s.tanggal)}
                       {s.penerima_nama ? ` · ${s.penerima_nama}` : ""}
+                      {s.penerima_nama && <>{" "}<IkonKelompok kunciIkon={kelompokDari({ penerima_kelompok: s.penerima_kelompok, penerima_tataran: s.penerima_tataran }, null)} /></>}
                       {s.unit_penerima ? ` (${s.unit_penerima})` : ""}
                     </span>
                     {r && (

@@ -245,6 +245,9 @@ def test_rekap_pemegang_memperkaya_orang_luar(dbx, monkeypatch):
     assert "db.pegawai_luar.find(" in blok
     assert 'r["pegawai_master_kelompok"]' in blok and 'r["pegawai_master_instansi"]' in blok
     assert 'scope_query_field_satker(_user, {"nip": {"$in": list(nips)}})' in blok
+    # PGW-08: kunci ikon dari kelompok + tataran (pusat ≠ daerah).
+    assert '"tataran": 1' in blok
+    assert 'r["pegawai_master_kunci_ikon"] = (kunci_ikon(m.get("kelompok"), m.get("tataran"))' in blok
 
 
 # ── pembaca 7: routes/reports.py ───────────────────────────────────────────

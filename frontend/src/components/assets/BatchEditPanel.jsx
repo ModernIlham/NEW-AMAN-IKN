@@ -32,6 +32,8 @@ import { UKURAN_STIKER } from "@/lib/stikerAset";
 import PemilihUnitOrganisasi from "./PemilihUnitOrganisasi";
 import MarkerPinEditor from "./MarkerPinEditor";
 import MarkerDesignIcon from "./MarkerDesignIcon";
+import IkonKelompok from "../pegawai/IkonKelompok";
+import TombolOrangLuar from "../pegawai/TombolOrangLuar";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -775,8 +777,18 @@ const BatchEditPanel = memo(function BatchEditPanel({
                 {/* Nama pengguna — di HP tampil SETELAH Jenis Operasional/Jabatan
                     (order-2); di desktop kembali ke urutan sumber (grid 2 kolom). */}
                 <div className="space-y-0.5 order-2 sm:order-none">
-                  <label className="text-[10px] text-muted-foreground">{PENGGUNA_NAME_LABELS[updates.pengguna_melekat_ke] || "Nama Pengguna"}</label>
-                  <ClearableInput placeholder="—" value={updates.user === "__clear__" ? "" : updates.user} isClear={updates.user === "__clear__"} onChange={e => setField("user", e.target.value)} onClear={() => toggleClearField("user")} />
+                  <label className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    {PENGGUNA_NAME_LABELS[updates.pengguna_melekat_ke] || "Nama Pengguna"}
+                    <IkonKelompok nomor={updates.pengguna_nip === "__clear__" ? "" : updates.pengguna_nip} ukuran={12} />
+                  </label>
+                  <div className="flex items-start gap-1">
+                    <div className="flex-1 min-w-0">
+                      <ClearableInput placeholder="—" value={updates.user === "__clear__" ? "" : updates.user} isClear={updates.user === "__clear__"} onChange={e => setField("user", e.target.value)} onClear={() => toggleClearField("user")} />
+                    </div>
+                    {/* Pengguna dari instansi eksternal / pihak ketiga (PGW-08) */}
+                    <TombolOrangLuar kecil testId="batch-pengguna-luar"
+                      onPilih={(o) => { setField("user", o.nama || ""); setField("pengguna_nip", o.nip || ""); }} />
+                  </div>
                 </div>
                 {/* NIP/NIK pegawai pengguna */}
                 <div className="space-y-0.5 order-2 sm:order-none">

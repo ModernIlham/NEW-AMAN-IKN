@@ -30,7 +30,9 @@ import RiwayatNotaDinas from "@/components/persediaan/RiwayatNotaDinas";
 import RiwayatSppb from "@/components/persediaan/RiwayatSppb";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
-import { opsiPenerima, cocokkanPenerima } from "@/lib/penerimaPersediaan";
+import { opsiPenerima, cocokkanPenerima, opsiPenerimaLuar } from "@/lib/penerimaPersediaan";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import TombolOrangLuar from "@/components/pegawai/TombolOrangLuar";
 import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
 import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 
@@ -1579,8 +1581,12 @@ export default function PersediaanPage({ user, onBack }) {
                   bebas — penerima bisa saja belum ada di master, atau bukan
                   pegawai satker ini. */}
               <div>
-                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-out-penerima">Penerima (Master Pegawai)</label>
-                <Input id="psd-out-penerima" list="psd-penerima-list"
+                <label className="text-xs font-medium text-foreground mb-1 flex items-center gap-1.5" htmlFor="psd-out-penerima">
+                  Penerima (Master Pegawai)
+                  <IkonKelompok nomor={keluar.data.penerima_nip} />
+                </label>
+                <div className="flex items-start gap-1.5">
+                <Input id="psd-out-penerima" list="psd-penerima-list" className="flex-1 min-w-0"
                   placeholder="ketik nama atau NIP penerima"
                   value={keluar.data.penerima_teks || ""}
                   onChange={(e) => setKeluar((m) => {
@@ -1594,13 +1600,26 @@ export default function PersediaanPage({ user, onBack }) {
                         ? cocok.unit : m.data.unit_penerima } };
                   })}
                   data-testid="persediaan-keluar-penerima" />
+                {/* Orang luar (PGW-08): penerima dari instansi eksternal /
+                    pihak ketiga — dicari di direktori bersama. */}
+                <TombolOrangLuar testId="persediaan-keluar-penerima-luar"
+                  onPilih={(o) => {
+                    const opsi = opsiPenerimaLuar(o);
+                    setPenerimaOpsi((daftar) => (daftar.some((x) => x.label === opsi.label)
+                      ? daftar : [...daftar, opsi]));
+                    setKeluar((m) => ({ ...m, data: { ...m.data, penerima_teks: opsi.label,
+                      penerima_nip: opsi.nip,
+                      unit_penerima: m.data.unit_penerima || opsi.unit } }));
+                  }} />
+                </div>
                 <datalist id="psd-penerima-list">
                   {penerimaOpsi.map((o) => <option key={o.label} value={o.label} />)}
                 </datalist>
                 <p className="text-[11px] text-muted-foreground mt-1"
                   data-testid="persediaan-keluar-penerima-info">
                   {keluar.data.penerima_nip
-                    ? `Tertaut Master Pegawai — NIP ${keluar.data.penerima_nip}`
+                    ? `Tertaut ${penerimaOpsi.find((o) => o.nip === keluar.data.penerima_nip)?.luar
+                      ? "direktori orang luar" : "Master Pegawai"} — NIP ${keluar.data.penerima_nip}`
                     : "Belum tertaut Master Pegawai; bukti keluar hanya menyebut unitnya."}
                 </p>
               </div>
@@ -2091,8 +2110,12 @@ export default function PersediaanPage({ user, onBack }) {
                 ) : (
                   <>
                     <div>
-                      <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-penerima">Penerima (Master Pegawai)</label>
-                      <Input id="psd-m-penerima" list="psd-m-penerima-list"
+                      <label className="text-xs font-medium text-foreground mb-1 flex items-center gap-1.5" htmlFor="psd-m-penerima">
+                        Penerima (Master Pegawai)
+                        <IkonKelompok nomor={massal.penerima_nip} />
+                      </label>
+                      <div className="flex items-start gap-1.5">
+                      <Input id="psd-m-penerima" list="psd-m-penerima-list" className="flex-1 min-w-0"
                         placeholder="ketik nama atau NIP penerima"
                         value={massal.penerima_teks || ""}
                         onChange={(e) => {
@@ -2105,6 +2128,16 @@ export default function PersediaanPage({ user, onBack }) {
                           }
                         }}
                         data-testid="persediaan-massal-penerima" />
+                      <TombolOrangLuar testId="persediaan-massal-penerima-luar"
+                        onPilih={(o) => {
+                          const opsi = opsiPenerimaLuar(o);
+                          setPenerimaOpsi((daftar) => (daftar.some((x) => x.label === opsi.label)
+                            ? daftar : [...daftar, opsi]));
+                          setMField("penerima_teks", opsi.label);
+                          setMField("penerima_nip", opsi.nip);
+                          if (opsi.unit && !massal.unit_penerima) setMField("unit_penerima", opsi.unit);
+                        }} />
+                      </div>
                       <datalist id="psd-m-penerima-list">
                         {penerimaOpsi.map((o) => <option key={o.label} value={o.label} />)}
                       </datalist>

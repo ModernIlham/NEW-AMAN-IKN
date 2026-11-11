@@ -6,6 +6,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -21,7 +22,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  * 3. Cadangan — ketik UID manual lalu Enter.
  *
  * Mode:
- * - "identifikasi" (default): UID → POST /pegawai/kartu/identifikasi →
+ * - "identifikasi" (default): UID → POST /direktori-pegawai/kartu/identifikasi →
  *   `onPegawai(pegawai)` (auto-isi form mana pun).
  * - "raw": UID mentah diserahkan ke `onUid(uid)` (dipakai PENDAFTARAN kartu
  *   di Master Pegawai — server yang menyimpan hash-nya).
@@ -64,12 +65,16 @@ export default function KartuTapDialog({
         onOpenChange?.(false);
         return;
       }
-      const r = await axios.post(`${API}/pegawai/kartu/identifikasi`, { uid });
+      // Identifikasi gabungan (PGW-08): Master Pegawai satker dulu, lalu
+      // direktori orang luar.
+      const r = await axios.post(`${API}/direktori-pegawai/kartu/identifikasi`, { uid });
       // Dialog sudah ditutup pengguna saat respons tiba → jangan mengisi
       // form yang sudah dibatalkan / men-toast menyesatkan.
       if (!openRef.current) return;
       const p = r.data?.pegawai;
-      toast.success(`Kartu dikenali: ${p?.nama || "-"}`);
+      toast.success(<span className="inline-flex items-center gap-1.5">
+        Kartu dikenali: {p?.nama || "-"} <IkonKelompok kunciIkon={p?.kunci_ikon} hiasan />
+      </span>);
       onPegawai?.(p);
       onOpenChange?.(false);
     } catch (err) {

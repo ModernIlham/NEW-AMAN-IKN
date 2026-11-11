@@ -274,3 +274,21 @@ def test_modul_internal_tidak_mengimpor_modul_luar():
     for nama in ("pegawai_utils.py", "pejabat_utils.py", "organisasi_utils.py",
                  "routes/pegawai.py", "routes/unit_kerja.py", "routes/satker.py"):
         assert "organisasi_luar_utils" not in (akar / nama).read_text(encoding="utf-8"), nama
+
+
+def test_ikon_kelompok_json_satu_entri_per_kunci_ikon():
+    """Satu sumber gambar ikon (3.8): tiap KUNCI_IKON punya label, teks
+    alternatif, warna, dan gambar; tak ada kunci lain."""
+    import json
+    from pathlib import Path
+    data = json.loads((Path(__file__).resolve().parents[2] / "data" / "ikon_kelompok.json")
+                      .read_text(encoding="utf-8"))
+    assert tuple(data["urutan"]) == olu.KUNCI_IKON
+    assert set(data["ikon"]) == set(olu.KUNCI_IKON)
+    for k, d in data["ikon"].items():
+        assert d["label"] and d["alt"] and d["warna"] and d["hex"].startswith("#"), k
+        assert d["elemen"] and all(tag in ("path", "rect", "circle", "line", "polyline", "polygon")
+                                   for tag, _ in d["elemen"]), k
+    # Empat gambar berbeda bentuk, bukan hanya warna.
+    assert len({json.dumps(d["elemen"]) for d in data["ikon"].values()}) == 4
+    assert "lucide" in data["sumber"].lower() and "isc" in data["sumber"].lower()

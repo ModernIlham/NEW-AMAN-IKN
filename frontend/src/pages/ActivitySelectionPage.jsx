@@ -30,6 +30,8 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { useTripleClick } from "@/hooks/useTripleClick";
 import { kabarkanPerubahanSatker } from "@/lib/referensiSatker";
 import { useRevisiSatker } from "@/hooks/useReferensiSatker";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import TombolOrangLuar from "@/components/pegawai/TombolOrangLuar";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -1153,7 +1155,14 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               {(form.tim_peneliti || []).map((member, idx) => (
                 <div key={idx} className="rounded-md border border-blue-200/80 dark:border-blue-700/40 p-1.5 space-y-1.5 bg-white/60 dark:bg-slate-800/40">
                   <div className="flex items-center gap-1.5">
+                    <IkonKelompok nomor={member.nip} />
                     <Input value={member.nama} onChange={e => { const arr = [...form.tim_peneliti]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_peneliti: arr})); }} placeholder="Nama lengkap" className="h-8 text-xs flex-1 min-w-0" />
+                    {/* Anggota dari instansi eksternal / pihak ketiga (PGW-08):
+                        "dari_satker" terisi nama instansinya. */}
+                    <TombolOrangLuar kecil testId={`tim-peneliti-luar-${idx}`}
+                      onPilih={(o) => setForm(p => ({...p, tim_peneliti: p.tim_peneliti.map((m, i) => (i === idx
+                        ? {...m, nama: o.nama || "", nip: o.nip || "", jabatan: o.jabatan || "",
+                            dari_satker: [o.instansi_nama, o.satker_luar_nama].filter(Boolean).join(" — ")} : m))}))} />
                     <button type="button" aria-label="Hapus anggota" onClick={() => setForm(p => ({...p, tim_peneliti: p.tim_peneliti.filter((_, i) => i !== idx)}))} className="h-8 w-8 flex-shrink-0 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
@@ -1175,7 +1184,14 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
               {(form.tim_pendukung || []).map((member, idx) => (
                 <div key={idx} className="rounded-md border border-violet-200/80 dark:border-violet-700/40 p-1.5 space-y-1.5 bg-white/60 dark:bg-slate-800/40">
                   <div className="flex items-center gap-1.5">
+                    <IkonKelompok nomor={member.nip} />
                     <Input value={member.nama} onChange={e => { const arr = [...form.tim_pendukung]; arr[idx] = {...arr[idx], nama: e.target.value}; setForm(p => ({...p, tim_pendukung: arr})); }} placeholder="Nama lengkap" className="h-8 text-xs flex-1 min-w-0" />
+                    {/* Anggota dari instansi eksternal / pihak ketiga (PGW-08):
+                        "dari_pihak" terisi nama instansinya. */}
+                    <TombolOrangLuar kecil testId={`tim-pendukung-luar-${idx}`}
+                      onPilih={(o) => setForm(p => ({...p, tim_pendukung: p.tim_pendukung.map((m, i) => (i === idx
+                        ? {...m, nama: o.nama || "", nip: o.nip || "", jabatan: o.jabatan || "",
+                            dari_pihak: [o.instansi_nama, o.satker_luar_nama].filter(Boolean).join(" — ")} : m))}))} />
                     <button type="button" aria-label="Hapus anggota" onClick={() => setForm(p => ({...p, tim_pendukung: p.tim_pendukung.filter((_, i) => i !== idx)}))} className="h-8 w-8 flex-shrink-0 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><X className="w-3.5 h-3.5" /></button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">

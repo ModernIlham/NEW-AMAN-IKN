@@ -50,3 +50,15 @@ export function cocokkanPenerima(teks, opsi) {
   if (senama.length === 1) return { nip: senama[0].nip, unit: senama[0].unit };
   return null;
 }
+
+/**
+ * Orang luar dari direktori (PGW-08) → opsi penerima. Unit = "instansi —
+ * satker"; ditandai `luar` supaya layar menyebut sumbernya dengan benar.
+ * Server tetap memeriksa NIP-nya ke direktori orang luar (PGW-06).
+ */
+export function opsiPenerimaLuar(o) {
+  const nama = String(o?.nama || "").trim();
+  const nip = String(o?.nip || "").trim();
+  const unit = [o?.instansi_nama, o?.satker_luar_nama].filter(Boolean).join(" — ");
+  return { label: nip ? `${nama} — ${nip}` : nama, nama, nip, unit, luar: true };
+}

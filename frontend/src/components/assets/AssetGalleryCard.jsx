@@ -11,6 +11,7 @@ import { sisaGaransi } from "../../lib/garansi";
 import { apakahTempId } from "../../lib/idAntrean";
 import { useSinkronSiman } from "../../lib/simanSync";
 import { berTitikHijau, keteranganPsp } from "../../lib/tandaPsp";
+import IkonKelompok from "../pegawai/IkonKelompok";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const COND = { "Baik": "bg-emerald-500", "Rusak Ringan": "bg-amber-500", "Rusak Berat": "bg-red-500" };
@@ -286,6 +287,7 @@ const AssetGalleryCard = memo(({ asset, isEditing, onEdit, onDelete, onPrintCard
           <div className="flex items-center gap-1 mb-0.5 w-full">
             <User className="w-2.5 h-2.5 text-blue-500 flex-shrink-0" />
             <span className="text-[9px] sm:text-[10px] text-blue-600 dark:text-blue-400 truncate">{asset.user}</span>
+            <IkonKelompok nomor={asset.pengguna_nip} ukuran={11} />
           </div>
         )}
 

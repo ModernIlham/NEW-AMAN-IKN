@@ -23,6 +23,7 @@ from auth_utils import (
     require_admin, require_user, require_user_or_query_token, require_writer,
 )
 from db import db
+from organisasi_luar_utils import kunci_ikon
 from pegawai_utils import baris_identitas_isian, label_identitas_cetak
 from report_filters import active_asset_filter, tanpa_dummy_filter
 from shared_utils import (kode_satker_user, scope_query_aset,
@@ -138,7 +139,7 @@ async def daftar_pemegang(
             async for pgw in db.pegawai_luar.find(
                     {"nip": {"$in": sisa}},
                     {"_id": 0, "nip": 1, "nama": 1, "jabatan": 1, "unit_kerja": 1,
-                     "status": 1, "kelompok": 1, "instansi_nama": 1}):
+                     "status": 1, "kelompok": 1, "tataran": 1, "instansi_nama": 1}):
                 peg_map[pgw["nip"]] = pgw
     for r in halaman:
         m = peg_map.get(str(r.get("nip") or "").strip())
@@ -149,6 +150,9 @@ async def daftar_pemegang(
         r["pegawai_terdaftar"] = bool(m)
         r["pegawai_master_kelompok"] = (m or {}).get("kelompok", "")
         r["pegawai_master_instansi"] = (m or {}).get("instansi_nama", "")
+        # Kunci ikon kelompok (PGW-08) — tataran membedakan pusat/daerah.
+        r["pegawai_master_kunci_ikon"] = (kunci_ikon(m.get("kelompok"), m.get("tataran"))
+                                          if m else "")
         r["label_identitas"] = label_identitas_cetak(r["nip"]) if r["nip"] else ""
     return {
         "items": halaman,

@@ -71,7 +71,7 @@ async def periksa_penerima(db, scope_query, nip, konteks="serah terima"):
             {"nip": n},
             {"_id": 0, "nama": 1, "nip": 1, "status": 1, "jabatan": 1,
              "unit_kerja": 1, "status_kepegawaian": 1, "kelompok": 1,
-             "instansi_nama": 1, "eselon1": 1, "eselon2": 1, "eselon3": 1,
+             "tataran": 1, "instansi_nama": 1, "eselon1": 1, "eselon2": 1, "eselon3": 1,
              "eselon4": 1, "eselon5": 1})
     if not peg:
         return None, (f"NIP {n} belum terdaftar di Master Pegawai — periksa "
@@ -114,4 +114,6 @@ def snapshot_penerima(pegawai, unit_teks="") -> dict:
         "penerima_kelompok": (str(p.get("kelompok") or "").strip()
                               or ("internal" if p else "")),
         "penerima_instansi": str(p.get("instansi_nama") or "").strip(),
+        # Tataran (PGW-08) — ikon instansi eksternal pusat ≠ daerah.
+        "penerima_tataran": str(p.get("tataran") or "").strip(),
     }

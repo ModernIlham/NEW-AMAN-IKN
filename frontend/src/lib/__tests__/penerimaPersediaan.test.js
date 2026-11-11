@@ -50,3 +50,15 @@ test("nama KEMBAR sengaja tidak ditebak", () => {
 test("nama yang tak ada di master tidak dipaksakan cocok", () => {
   expect(cocokkanPenerima("Orang Luar", opsiPenerima(PEGAWAI))).toBeNull();
 });
+
+// ── PGW-08: penerima orang luar dari direktori ─────────────────────────
+import { opsiPenerimaLuar } from "../penerimaPersediaan";
+
+test("orang luar → opsi berunit instansi — satker; tetap cocok saat diketik ulang", () => {
+  const o = opsiPenerimaLuar({ nama: "Eka Mitra", nip: "6471010101850001",
+    instansi_nama: "PT Mitra", satker_luar_nama: "Cabang Balikpapan" });
+  expect(o).toEqual({ label: "Eka Mitra — 6471010101850001", nama: "Eka Mitra",
+    nip: "6471010101850001", unit: "PT Mitra — Cabang Balikpapan", luar: true });
+  expect(cocokkanPenerima("6471010101850001", [o])).toEqual({
+    nip: "6471010101850001", unit: "PT Mitra — Cabang Balikpapan" });
+});

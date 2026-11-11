@@ -52,7 +52,14 @@ export function dariPegawai(p) {
   const nama = String(p?.nama || "").trim();
   const nip = String(p?.nip || "").trim();
   const unit = String(p?.unit_kerja || p?.unit_organisasi || "").trim();
-  return { pegawai_id: String(p.id || ""), nama, nip, unit_eselon: unit };
+  const hasil = { pegawai_id: String(p.id || ""), nama, nip, unit_eselon: unit };
+  // Orang luar dari direktori (PGW-08): kelompoknya dibawa untuk tampilan;
+  // server tetap membekukannya sendiri dari NIP. payloadPj tidak mengirimnya.
+  if (["eksternal", "pihak_ketiga"].includes(p.kelompok)) {
+    Object.assign(hasil, { kelompok: p.kelompok, tataran: String(p.tataran || ""),
+      instansi_nama: String(p.instansi_nama || "") });
+  }
+  return hasil;
 }
 
 /** Semua id aset yang sudah melekat pada penanggung jawab MANA PUN. */
