@@ -18,6 +18,16 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1134] Master Pegawai tiga kelompok — PGW-12: data uji & dokumentasi — 2026-11-11
+
+- Data uji sintetis untuk direktori luar: instansi eksternal (pusat dan
+  pemda berjenjang), pihak ketiga, wadah perorangan, beserta orangnya —
+  `python -m scripts.synthdata --kind luar`.
+- Panduan pengembang mencatat empat koleksi luar sebagai sengaja dipakai
+  bersama seluruh satker, dan aturan ikon kelompok satu sumber.
+- README, halaman Info, dan ringkasan modul Penggunaan menyebut tiga kelompok
+  orang.
+
 ## [#1133] Master Pegawai tiga kelompok — PGW-10 (kerangka): kebijakan per jenis penerima — 2026-11-11
 
 - Daftar skema penyerahan yang sah per jenis penerima di luar satker

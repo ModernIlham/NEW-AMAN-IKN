@@ -1058,7 +1058,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-09 | Laporan & dokumen | 06 | **selesai** | #1123 |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | **kerangka selesai**; butir pasal & form menunggu verifikasi PMK 115/2020 | #1124 (kerangka) |
 | PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | belum | |
-| PGW-12 | Data uji & dokumentasi | 07–10 | belum | |
+| PGW-12 | Data uji & dokumentasi | 07–10 | **selesai** | #1125 |
 
 PGW-04, 05, 06 boleh paralel setelah PGW-03. Sampai PGW-07 ter-merge,
 pengguna tidak melihat perubahan apa pun.
@@ -1859,6 +1859,17 @@ Pemanfaatan dan Penggunaan (PSP) memanggil `periksa_penyerahan` sebagai
   men-scope-nya; aturan "ikon kelompok hanya lewat `IkonKelompok`".
 - `CHANGELOG.md`: tiap PR mengisi entrinya. Penomoran mengikuti **kepala
   CHANGELOG.md** (pada baseline: nomor entri = nomor PR + 9).
+
+
+**Hasil (2026-11-11):** `generate_organisasi_luar` (+ `--kind luar` di CLI) —
+K/L, pemprov → kab/kota → desa, badan pihak ketiga, dan wadah perorangan,
+lewat fungsi murni yang sama dengan rute dan lolos validatornya; tanpa
+`kode_satker`, tanpa kode resmi tebakan. Skill `aman-dev`: baris peta repo
+modul luar & ikon, catatan **koleksi luar sengaja bersama**, aturan ikon
+hanya lewat `IkonKelompok`/`svgIkonKelompok`. Skill `aman-testdata`, README,
+InfoPage, dan fitur modul Penggunaan di `bmnModules.js` diperbarui.
+Catatan: daftar fitur modul selalu bercentang hijau, jadi BAST penerima luar
+yang masih tertahan (PGW-10) **tidak** dicantumkan di sana.
 
 ---
 
