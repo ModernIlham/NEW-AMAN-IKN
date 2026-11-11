@@ -269,3 +269,27 @@ def test_wasdal_pegawai_berisiko_ikut_membaca_orang_luar():
     assert "db.pegawai_luar.find(" in blok
     assert "not in _nip_internal" in blok          # internal menang, tak ganda
     assert "_jumlah_aset_per_nip(user)" in blok    # cacah aset tetap ter-scope
+
+
+# ── PGW-09: unit orang luar untuk dokumen pemegang ──────────────────────
+def test_unit_orang_luar_per_nip_internal_menang_dan_berinstansi(dbx):
+    _jalan(dbx.pegawai.insert_one({"nip": "9111", "nama": "Internal", "kode_satker": "691778",
+                                   "unit_kerja": "Bagian Umum"}))
+    _jalan(dbx.pegawai_luar.insert_many([
+        {"id": "l1", "nip": "9111", "nama": "Kembar Lama", "kelompok": "pihak_ketiga",
+         "instansi_nama": "PT Lama"},
+        {"id": "l2", "nip": "9222", "nama": "Dewi", "kelompok": "eksternal",
+         "tataran": "daerah", "jenis_instansi": "pemerintah_kabkota",
+         "instansi_nama": "Kabupaten X", "provinsi_nama": "Provinsi Y",
+         "satker_luar_nama": "Dinas PU", "unit_kerja": "Bidang Jalan"}]))
+    hasil = _jalan(dp.unit_orang_luar_per_nip(["9111", "9222", "9444", ""], database=dbx))
+    assert hasil == {"9222": "Kabupaten X, Provinsi Y — Dinas PU — Bidang Jalan"}
+
+
+def test_sel_jabatan_pemegang_luar_menyebut_instansi():
+    import routes.reports as rp
+    unit = {"222": "PT Mitra — Cabang"}
+    assert rp._jabatan_pemegang({"nip": "222", "jabatan": "Teknisi"}, unit, str, "\n") \
+        == "Teknisi\nPT Mitra — Cabang"
+    # Pegawai internal tidak berubah.
+    assert rp._jabatan_pemegang({"nip": "111", "jabatan": ""}, unit, str, "\n") == "-"

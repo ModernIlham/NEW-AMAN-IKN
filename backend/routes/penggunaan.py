@@ -1329,6 +1329,15 @@ async def daftar_pemegang_pdf(
         identitas += f" · {label_identitas_cetak(nip.strip())}: {_esc(nip.strip())}"
     if jabatan:
         identitas += f" · Jabatan: {_esc(jabatan)}"
+    # Pemegang orang luar disebut bersama instansinya (PGW-09); internal tetap.
+    if nip.strip():
+        import direktori_pegawai as dp
+        from functools import partial
+        _unit = (await dp.unit_orang_luar_per_nip(
+            [nip.strip()], partial(scope_query_field_satker, _user), database=db)
+        ).get(nip.strip())
+        if _unit:
+            identitas += f" · Instansi: {_esc(_unit)}"
     if melekat:
         identitas += f" · Melekat ke: {_esc(melekat)}"
     elements.append(Paragraph(identitas, st['Meta']))

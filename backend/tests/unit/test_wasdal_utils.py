@@ -571,3 +571,37 @@ def test_baris_csv_insidentil():
     # Baris 3: dilaporkan → Selesai; tenggat aktif kosong
     assert rows[3][5] == "Dilaporkan" and rows[3][7] == "Selesai"
     assert rows[3][6] == "" and rows[3][8] == "BA-9"
+
+
+# ── PGW-09: orang luar pada temuan pemegang berisiko ───────────────────
+def test_orang_luar_disebut_kelompok_dan_instansinya():
+    peg = [{"id": "l1", "nama": "Eka", "nip": "6471", "status": "nonaktif",
+            "kelompok": "pihak_ketiga", "tataran": "", "instansi_nama": "PT Mitra"},
+           {"id": "l2", "nama": "Dewi", "nip": "6472", "status": "keluar",
+            "kelompok": "eksternal", "tataran": "daerah",
+            "instansi_nama": "Kabupaten Penajam Paser Utara"}]
+    hasil = {t["nama_orang"] if "nama_orang" in t else t["asset_name"]: t
+             for t in temuan_pemegang_berisiko(peg, {"6471": 2, "6472": 1}, HARI_INI)}
+    assert hasil["Eka"]["detail"].startswith("Pihak Ketiga — PT Mitra: 2 aset masih dipegang")
+    assert hasil["Eka"]["kelompok"] == "pihak_ketiga"
+    assert hasil["Dewi"]["detail"].startswith(
+        "Instansi Eksternal (Daerah) — Kabupaten Penajam Paser Utara:")
+
+
+def test_pegawai_internal_tidak_berubah_dan_tanpa_field_kelompok():
+    t = temuan_pemegang_berisiko([{"id": "p1", "nama": "Budi", "nip": "1990",
+                                   "status": "pensiun"}], {"1990": 1}, HARI_INI)[0]
+    assert t["detail"].startswith("1 aset masih dipegang")
+    assert "kelompok" not in t
+
+
+def test_orang_luar_meninggal_tanpa_jam_ahli_waris():
+    """Jam 3 tahun pemberitahuan ahli waris = rezim TGR pegawai negeri; tak
+    dilampirkan pada orang luar (PGW-00)."""
+    t = temuan_pemegang_berisiko([{"id": "l3", "nama": "Almarhum", "nip": "6473",
+                                   "status": "meninggal", "tanggal_meninggal": "2026-01-01",
+                                   "kelompok": "pihak_ketiga", "instansi_nama": "CV Maju"}],
+                                 {"6473": 1}, HARI_INI)[0]
+    assert t["jenis"] == "pemegang_meninggal_belum_serah_terima"
+    assert t["tingkat"] == "" and t["batas_lapor"] == "" and t["sisa_hari_lapor"] is None
+    assert "Pihak Ketiga — CV Maju" in t["detail"]
