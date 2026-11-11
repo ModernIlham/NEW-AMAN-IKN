@@ -205,6 +205,17 @@ def test_penerima_orang_luar_meninggal_ditolak(dbx):
 def test_penerima_internal_tetap_berkelompok_internal(dbx):
     j = _keluar(penerima_nip="198001012005011001")["transaksi"]
     assert j["penerima_kelompok"] == "internal" and j["penerima_instansi"] == ""
+    assert j["penerima_tataran"] == ""
+
+
+def test_penerima_pemda_membekukan_tataran_daerah(dbx):
+    # PGW-08: ikon instansi eksternal membedakan pusat dan daerah.
+    _jalan(dbx.pegawai_luar.insert_one({
+        "id": "l3", "nama": "Staf Pemda", "nip": "6471010101850003",
+        "status": "aktif", "kelompok": "eksternal", "tataran": "daerah",
+        "instansi_nama": "Pemerintah Kabupaten X"}))
+    j = _keluar(penerima_nip="6471010101850003")["transaksi"]
+    assert (j["penerima_kelompok"], j["penerima_tataran"]) == ("eksternal", "daerah")
 
 
 def test_penolakan_terjadi_sebelum_layer_disentuh(dbx, monkeypatch):
