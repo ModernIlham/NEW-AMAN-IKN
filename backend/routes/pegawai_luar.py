@@ -19,6 +19,7 @@ Beda yang disengaja dari Master Pegawai internal:
 Modul ini tidak pernah menulis `pegawai`, `unit_kerja`, `satker`, atau
 `assets`; keempatnya hanya DIBACA (cek silang NIP/kartu, cacah aset).
 """
+import asyncio
 import json
 import re
 import uuid
@@ -34,13 +35,16 @@ from db import db, fs_bucket
 from kartu_utils import hash_kandidat, label_kartu, valid_uid
 from shared_utils import kode_satker_user, limiter, log_audit
 import organisasi_luar_utils as olu
-from pegawai_utils import (info_masa_pegawai, kelompok_unit_kerja,
+from pegawai_utils import (gabung_baris_pegawai, info_masa_pegawai,
+                           kelompok_unit_kerja, kunci_dedup_pegawai,
                            pegawai_perlu_serah_terima, rekap_eselon,
                            unit_kerja_terdalam)
 from routes.pegawai import (KartuIn, PegawaiIn, _FOTO_MAX, _bersih,
+                            _baris_dari_unggahan_pegawai,
                             _jumlah_aset_per_nip, _kecilkan_foto_asli)
 
 pegawai_luar_router = APIRouter()
+MAX_EKSPOR_LUAR = 20000
 
 # Hash kartu & pendaftarnya tak pernah dikirim ke klien (sama dengan internal).
 _PROJ = {"_id": 0, "kartu_uid_hashes": 0, "kartu_terdaftar_oleh": 0}
@@ -558,3 +562,240 @@ async def lepas_kartu_pegawai_luar(request: Request, orang_id: str,
     await _audit("luar_orang_kartu", orang_id, admin,
                  f"Lepas kartu {orang.get('kartu_label') or ''} dari {orang.get('nama') or '-'}")
     return {"ok": True}
+
+
+# ── templat, ekspor, impor (PGW-04) ────────────────────────────────────────
+_CONTOH_IMPOR = {
+    "eksternal": {
+        "NIP/NIK/NRP": "198501012010011001", "Nama Lengkap": "Budi Santoso",
+        "Jenis Kelamin": "Laki-laki", "Tgl Lahir": "1985-01-01",
+        "Status Kepegawaian": "PNS", "Pangkat/Golongan": "Penata (III/c)",
+        "Jabatan": "Analis Pengelolaan BMN", "Eselon 1": "Sekretariat",
+        "Eselon 2": "Bagian Umum", "Unit Kerja": "Bagian Umum",
+        "Email": "budi@instansi.go.id", "Status": "AKTIF",
+    },
+    "pihak_ketiga": {
+        "NIK": "6471010101850001", "Nama Lengkap": "Ani Lestari",
+        "Jenis Kelamin": "Perempuan", "Jabatan pada Badan": "Direktur Utama",
+        "Tingkat I": "Direksi", "Email": "ani@badan.co.id", "Status": "AKTIF",
+        "Kapasitas Bertindak": "Pengurus yang berwenang mewakili badan",
+        "Dasar Kewenangan": "Anggaran dasar/akta",
+        "Nomor Dasar Kewenangan": "Akta No. 12", "Tgl Dasar Kewenangan": "2020-02-03",
+    },
+}
+
+
+def _nama_aman(teks: str) -> str:
+    return re.sub(r"[^0-9A-Za-z]+", "_", str(teks or "")).strip("_")[:60] or "luar"
+
+
+@pegawai_luar_router.get("/pegawai-luar/template-impor")
+async def template_impor_pegawai_luar(kelompok: str = "",
+                                      _user: dict = Depends(require_user)):
+    """Templat CSV per kelompok: header `header_impor_luar` + satu contoh."""
+    import csv as _csv
+    import io
+    if kelompok not in olu.KELOMPOK_LUAR:
+        raise HTTPException(status_code=400, detail="Pilih kelompok dulu")
+    header = olu.header_impor_luar(kelompok)
+    contoh = _CONTOH_IMPOR[kelompok]
+    assert set(contoh) <= set(header)
+    buf = io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(header)
+    w.writerow([contoh.get(h, "") for h in header])
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"), media_type="text/csv",
+        headers={"Content-Disposition":
+                 f'attachment; filename="template_impor_{kelompok}.csv"'})
+
+
+def _build_xlsx_luar(header, baris):
+    """Pembangun kecil sendiri — `_build_pegawai_xlsx` internal mengeraskan
+    HEADER_IMPOR dan tidak disunting. Gaya sama: header biru, zebra, kolom
+    nomor sebagai teks, header beku."""
+    import io
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    from pegawai_utils import KOLOM_TEKS_EKSPOR
+    teks = set(KOLOM_TEKS_EKSPOR) | {"NIK"}
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Data Orang Luar"
+    tipis = Side(style="thin", color="CBD5E1")
+    border = Border(left=tipis, right=tipis, top=tipis, bottom=tipis)
+    ws.append(header)
+    for c in ws[1]:
+        c.fill = PatternFill("solid", fgColor="1E40AF")
+        c.font = Font(bold=True, color="FFFFFF", size=10)
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = border
+    kolom_teks = {i + 1 for i, h in enumerate(header) if h in teks}
+    zebra = PatternFill("solid", fgColor="EFF6FF")
+    for ridx, row in enumerate(baris, start=2):
+        for cidx, val in enumerate(row, start=1):
+            cell = ws.cell(row=ridx, column=cidx, value=val)
+            cell.border = border
+            cell.font = Font(size=10)
+            if cidx in kolom_teks:
+                cell.number_format = "@"
+            if ridx % 2 == 0:
+                cell.fill = zebra
+    for i, h in enumerate(header, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = max(14, min(32, len(h) + 4))
+    ws.freeze_panes = "C2"
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(header))}1"
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+@pegawai_luar_router.get("/pegawai-luar/export-xlsx")
+async def export_pegawai_luar_xlsx(satker_luar_id: str = "",
+                                   _user: dict = Depends(require_user)):
+    """Ekspor satu satker luar (satu berkas = satu satker); berkasnya bisa
+    diedit lalu diimpor kembali ke satker yang sama."""
+    if not satker_luar_id:
+        raise HTTPException(status_code=400, detail="Pilih satker dulu")
+    satker = await db.satker_luar.find_one({"id": satker_luar_id}, {"_id": 0})
+    if not satker:
+        raise HTTPException(status_code=404, detail="Satker luar tidak ditemukan")
+    kelompok = satker.get("kelompok", "")
+    items = await db.pegawai_luar.find({"satker_luar_id": satker_luar_id}, _PROJ) \
+        .sort("nama", 1).to_list(MAX_EKSPOR_LUAR + 1)
+    if len(items) > MAX_EKSPOR_LUAR:
+        raise HTTPException(413, f"Satker melebihi batas ekspor {MAX_EKSPOR_LUAR:,} orang; "
+                                 "ekspor tidak dipotong diam-diam.")
+    header = olu.header_impor_luar(kelompok)
+    baris = [olu.baris_ekspor_luar(it, kelompok) for it in items]
+    from render_executor import run_renderer
+    data = await run_renderer(_build_xlsx_luar, header, baris)
+    nama_file = (f"orang_luar_{_nama_aman(satker.get('instansi_nama'))}_"
+                 f"{_nama_aman(satker.get('nama_satker'))}.xlsx")
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nama_file}"'})
+
+
+def _filter_dedup_luar(kunci, satker_luar_id: str) -> dict:
+    """Cermin `_filter_dedup` internal, dengan lingkup `satker_luar_id` —
+    impor ke satu satker tak pernah menyentuh satker lain (aturan 9)."""
+    def _persis(nilai):
+        return {"$regex": f"^{re.escape(str(nilai or '').strip())}$", "$options": "i"}
+    q = {"satker_luar_id": satker_luar_id}
+    tanpa_nip = [{"nip": ""}, {"nip": {"$exists": False}}, {"nip": None}]
+    jenis = kunci[0]
+    if jenis == "nip":
+        q["nip"] = kunci[1]
+    elif jenis == "wna":
+        q["nomor_identitas_wna"] = kunci[2]
+    elif jenis == "lahir":
+        q.update({"nama": _persis(kunci[1]), "tanggal_lahir": kunci[2],
+                  "$or": tanpa_nip})
+    else:
+        q.update({"nama": _persis(kunci[1]), "unit_kerja": _persis(kunci[2]),
+                  "jabatan": _persis(kunci[3]),
+                  "status_kepegawaian": _persis(kunci[4]), "$or": tanpa_nip})
+    return q
+
+
+@pegawai_luar_router.post("/pegawai-luar/impor")
+@limiter.limit("6/minute")
+async def impor_pegawai_luar(request: Request, file: UploadFile = File(...),
+                             satker_luar_id: str = Form(""),
+                             user: dict = Depends(require_admin)):
+    """Impor massal ke SATU satker luar. Header per kelompok; baris yang NIP-nya
+    milik pegawai internal atau satker luar lain dilewati dengan catatan."""
+    if not satker_luar_id:
+        raise HTTPException(status_code=400, detail="Pilih satker tujuan impor dulu")
+    satker = await _satker_aktif(satker_luar_id)
+    kelompok, jenis = satker.get("kelompok", ""), satker.get("jenis", "")
+    nama = str(file.filename or "").lower()
+    data = await file.read()
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Berkas maksimal 15MB")
+    rows = await asyncio.to_thread(_baris_dari_unggahan_pegawai, nama, data)
+
+    # Pembanding dimuat SEKALI, bukan per baris.
+    nip_internal = {str(p.get("nip") or "").strip() async for p in
+                    db.pegawai.find({"nip": {"$nin": ["", None]}}, {"_id": 0, "nip": 1})}
+    nip_luar = {}
+    async for p in db.pegawai_luar.find({"nip": {"$nin": ["", None]}},
+                                        {"_id": 0, "nip": 1, "satker_luar_id": 1}):
+        nip_luar[str(p["nip"]).strip()] = p.get("satker_luar_id")
+
+    dilewati, catatan, per_orang, urutan = 0, [], {}, []
+
+    def _catat(teks):
+        if len(catatan) < 200:
+            catatan.append(teks)
+
+    for idx, raw in enumerate(rows, start=2):
+        doc, _ = olu.baris_impor_luar(raw, kelompok)
+        if not doc["nama"]:
+            dilewati += 1
+            continue
+        doc["satker_luar_id"] = satker_luar_id
+        doc = _stempel(olu.sesuaikan_orang_luar(doc, kelompok, jenis), satker)
+        errors = [e for e in olu.validate_orang_luar(doc, kelompok, jenis)
+                  if "NIP" not in e]
+        if errors:
+            dilewati += 1
+            _catat(f"Baris {idx} ({doc['nama']}): {'; '.join(errors)}")
+            continue
+        nip = doc.get("nip", "")
+        if nip and nip in nip_internal:
+            dilewati += 1
+            _catat(f"Baris {idx}: NIP/NIK {nip} terdaftar sebagai pegawai internal")
+            continue
+        if nip and nip in nip_luar and nip_luar[nip] != satker_luar_id:
+            dilewati += 1
+            _catat(f"Baris {idx}: NIP/NIK {nip} sudah terdaftar di satker luar lain")
+            continue
+        kunci = kunci_dedup_pegawai(doc)
+        if kunci is None:
+            dilewati += 1
+            continue
+        dipasok = olu.field_dipasok_luar(raw)
+        if kunci in per_orang:
+            lama, dipasok_lama = per_orang[kunci]
+            per_orang[kunci] = gabung_baris_pegawai(lama, dipasok_lama, doc, dipasok)
+        else:
+            per_orang[kunci] = (doc, dipasok)
+            urutan.append(kunci)
+
+    from pymongo import UpdateOne
+    now, jejak = _kini(), _jejak(user)
+    ops = []
+    for kunci in urutan:
+        doc, dipasok = per_orang[kunci]
+        setel = {k: v for k, v in doc.items()
+                 if k in dipasok and k not in _FIELD_TURUNAN}
+        setel.update({"nama": doc["nama"], "updated_at": now, "diubah_oleh": jejak})
+        saat_baru = {k: v for k, v in doc.items() if k not in setel}
+        saat_baru.update({"id": str(uuid.uuid4()), "created_at": now,
+                          "dicatat_oleh": jejak})
+        ops.append(UpdateOne(_filter_dedup_luar(kunci, satker_luar_id),
+                             {"$set": setel, "$setOnInsert": saat_baru,
+                              "$inc": {"version": 1}}, upsert=True))
+    dibuat = diperbarui = 0
+    if ops:
+        try:
+            res = await db.pegawai_luar.bulk_write(ops, ordered=False)
+        except Exception as e:
+            if not _duplikat(e):
+                raise
+            raise HTTPException(status_code=409, detail=(
+                "Sebagian NIP/NIK baru saja didaftarkan pengguna lain — muat ulang "
+                "lalu impor kembali"))
+        dibuat = (res.upserted_count or 0) + (res.inserted_count or 0)
+        diperbarui = res.modified_count or 0
+    await _audit("luar_satker_impor", satker_luar_id, user,
+                 f"Impor orang luar ke {satker.get('nama_satker', '')}: {dibuat} baru, "
+                 f"{diperbarui} diperbarui, {dilewati} dilewati")
+    return {"ok": True, "dibaca": len(rows), "dibuat": dibuat,
+            "diperbarui": diperbarui, "dilewati": dilewati, "catatan": catatan}

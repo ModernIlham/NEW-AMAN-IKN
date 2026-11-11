@@ -1050,7 +1050,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-01 | Fondasi murni | 00 | **selesai** | #1115 |
 | PGW-02 | Master instansi & satker luar (backend) | 01 | **selesai** | #1116 |
 | PGW-03 | Orang luar (backend) | 02 | **selesai** | #1117 |
-| PGW-04 | Impor/ekspor/template orang luar | 03 | belum | |
+| PGW-04 | Impor/ekspor/template orang luar | 03 | **selesai** | #1118 |
 | PGW-05 | Unit kerja luar (backend) | 03 | belum | |
 | PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | belum | |
 | PGW-07 | Layar Master Pegawai | 03, 04, 05 | belum | |
@@ -1367,6 +1367,18 @@ urutan sisanya sama; header pihak ketiga tidak memuat satu pun kolom field
 ulang tidak menggandakan; berkas berisi NIP pegawai internal → internal tak
 berubah; ekspor/impor tanpa
 `satker_luar_id` → 400.
+
+**Hasil (2026-11-11):** `GET /pegawai-luar/template-impor?kelompok=`,
+`GET /pegawai-luar/export-xlsx?satker_luar_id=`, `POST /pegawai-luar/impor`
+(form `satker_luar_id`). Penyesuaian:
+- Tambahan `field_dipasok_luar(raw)` — padanan `field_dipasok_baris` yang
+  mengenali sebutan pihak ketiga dan empat kolom khusus.
+- Urutan per baris sama dengan PGW-03: sesuaikan → stempel → validasi.
+- Stempel lingkup (`_FIELD_TURUNAN`) tidak pernah masuk `$set`; satker
+  sudah dikunci oleh saringan dedup.
+- Templat memerlukan `kelompok` (header-nya berbeda per kelompok).
+- `MENUNGGU_PGW04` dihapus dari uji kesetaraan — himpunan rute luar kini
+  persis internal − 6.4 + `rekap-lingkup`.
 
 ---
 
