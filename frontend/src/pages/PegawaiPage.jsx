@@ -32,6 +32,8 @@ import { EMPTY_PIHAK_KETIGA, KELOMPOK, bacaPilihan, kunciTingkat, labelLingkup,
   paramLingkup, ranah, simpanPilihan,
 } from "@/lib/ranahPegawai";
 import { isSuperAdminPusat } from "@/lib/satkerAktif";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import { kelompokDari } from "@/lib/kelompokOrang";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -1152,7 +1154,10 @@ export default function PegawaiPage({ user, onBack, wajibPilihKelompok = false }
                     <div className="flex items-start gap-2">
                       <AvatarPegawai p={it} pratinjau onPreview={setPreviewFoto} jalur={rn.pegawai} />
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-foreground text-sm leading-tight break-words">{namaLengkap(it)}</p>
+                        <p className="font-semibold text-foreground text-sm leading-tight break-words">
+                          {namaLengkap(it)}{" "}
+                          <IkonKelompok kunciIkon={kelompokDari(it, luar ? null : "internal")} />
+                        </p>
                         <p className="text-[10px] text-muted-foreground font-mono">
                           {im.label_identitas && it.nip ? `${im.label_identitas} ` : ""}{it.nip || "—"}
                         </p>
@@ -1255,6 +1260,7 @@ export default function PegawaiPage({ user, onBack, wajibPilihKelompok = false }
                         <p className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
                           <AvatarPegawai p={it} ukur="w-7 h-7" pratinjau onPreview={setPreviewFoto} jalur={rn.pegawai} />
                           {namaLengkap(it)}
+                          <IkonKelompok kunciIkon={kelompokDari(it, luar ? null : "internal")} />
                           {it.status_kepegawaian && (
                             <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold uppercase">
                               {uraian("status_kepegawaian", it.status_kepegawaian).split(" (")[0]}

@@ -63,6 +63,10 @@ import MarkerDesignIcon from "./MarkerDesignIcon";
 import { STATUS_COLORS } from "../../lib/warnaAset";
 import { UKURAN_STIKER } from "../../lib/stikerAset";
 import PengadaanKontrakFields from "./PengadaanKontrakFields";
+import IkonKelompok from "../pegawai/IkonKelompok";
+import PilihKelompok from "../pegawai/PilihKelompok";
+import CariOrangLuar from "../pegawai/CariOrangLuar";
+import useKelompokOrang from "../../hooks/useKelompokOrang";
 
 // ============================================================================
 // INVENTORY CLASSIFICATION INFO DATA (SE 17/SE/M/2024)
@@ -604,6 +608,10 @@ const AssetForm = memo(({
   const [pegawaiPickerOpen, setPegawaiPickerOpen] = useState(false);
   const [kartuTapOpen, setKartuTapOpen] = useState(false); // tap kartu e-KTP → isi pengguna
   const [pegawaiQuery, setPegawaiQuery] = useState("");
+  // Saringan kelompok pemilih pengguna (PGW-08). Bawaan Internal — perilaku
+  // lama; eksternal/pihak ketiga dicari di direktori bersama (server).
+  const [kelompokPemilih, setKelompokPemilih] = useState("internal");
+  const [tataranPemilih, setTataranPemilih] = useState("pusat");
   // Asset version (OCC): appended as ?v= cache-buster to all media streaming
   // URLs (photo strip, checklist photos/PDFs) so the browser cache is busted
   // whenever the asset changes.
@@ -1380,12 +1388,22 @@ const AssetForm = memo(({
     return list.slice(0, 40);
   }, [pegawaiAll, pegawaiQuery]);
 
-  // Peringatan lunak: NIP pengguna diisi tapi tak ada di Master Pegawai.
+  // NIP pengguna ditanyakan ke penjawab kelompok (PGW-08) setelah berhenti
+  // mengetik — bukan tiap tombol, supaya tak membanjiri server.
+  const [nipTunda, setNipTunda] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setNipTunda((formData.pengguna_nip || "").trim()), 500);
+    return () => clearTimeout(t);
+  }, [formData.pengguna_nip]);
+  const petaKelompokNip = useKelompokOrang(nipTunda ? [nipTunda] : []);
+  // Peringatan lunak: NIP tak dikenal di Master Pegawai MAUPUN direktori
+  // orang luar — menurut penjawab kelompok, bukan daftar yang kebetulan
+  // termuat. Belum terjawab (luring/gagal) → tanpa peringatan.
   const penggunaNipWarn = useMemo(() => {
     const nip = (formData.pengguna_nip || "").trim();
-    if (!nip || !Array.isArray(pegawaiAll)) return false;
-    return !pegawaiAll.some((p) => String(p.nip || "").trim() === nip);
-  }, [formData.pengguna_nip, pegawaiAll]);
+    if (!nip || nip !== nipTunda) return false;
+    return petaKelompokNip[nip] === null;
+  }, [formData.pengguna_nip, nipTunda, petaKelompokNip]);
 
   // Pilih pegawai dari master → isi user (nama) + pengguna_nip + jabatan.
   // Jabatan DITIMPA bila master punya nilainya — memilih orang BERBEDA tidak
@@ -2965,7 +2983,10 @@ const AssetForm = memo(({
                   </div>
                 )}
                 <div className="space-y-1">
-                  <Label className="text-xs">{PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}</Label>
+                  <Label className="text-xs flex items-center gap-1.5">
+                    {PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}
+                    <IkonKelompok nomor={nipTunda} />
+                  </Label>
                   <div className="flex gap-1.5">
                     <Input name="user" value={formData.user} onChange={handleInputChange} className="h-8 flex-1 min-w-0" data-testid="input-pengguna-nama" />
                     {/* Tap kartu e-KTP → pegawai terisi otomatis (identifikasi cepat) */}
@@ -2983,6 +3004,16 @@ const AssetForm = memo(({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent className="w-[calc(100vw-3rem)] max-w-sm">
                         <div className="p-2">
+                          <div className="mb-2">
+                            <PilihKelompok kelompok={kelompokPemilih} tataran={tataranPemilih}
+                              awalanTestId="pengguna-pegawai" onKelompok={setKelompokPemilih}
+                              onTataran={setTataranPemilih} />
+                          </div>
+                          {kelompokPemilih !== "internal" ? (
+                            <CariOrangLuar kelompok={kelompokPemilih} tataran={tataranPemilih}
+                              onPilih={onPickPegawai} testId="pengguna-pegawai-luar"
+                              terpilihNip={formData.pengguna_nip || ""} />
+                          ) : (<>
                           <Input placeholder="Cari nama / NIP pegawai…" value={pegawaiQuery} onChange={e => setPegawaiQuery(e.target.value)} className="h-8 mb-2" data-testid="pengguna-pegawai-search" />
                           <ScrollArea className="h-56">
                             {pegawaiResults === null ? (
@@ -3001,6 +3032,7 @@ const AssetForm = memo(({
                               </button>
                             ))}
                           </ScrollArea>
+                          </>)}
                         </div>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -3012,7 +3044,7 @@ const AssetForm = memo(({
                   {penggunaNipWarn && (
                     <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-start gap-1" data-testid="pengguna-nip-warning">
                       <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                      <span>NIP/NIK belum terdaftar di Master Pegawai — daftarkan agar pencatatan konsisten.</span>
+                      <span>NIP/NIK belum terdaftar di Master Pegawai maupun direktori orang luar — daftarkan agar pencatatan konsisten.</span>
                     </p>
                   )}
                 </div>

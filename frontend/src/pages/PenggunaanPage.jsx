@@ -38,6 +38,8 @@ import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
 import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 import PortalPemegangPanel from "@/components/penggunaan/PortalPemegangPanel";
 import PilihPegawaiBast, { pihakDariPegawai } from "@/components/penggunaan/PilihPegawaiBast";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import { kelompokDari } from "@/lib/kelompokOrang";
 import PilihanRingkas from "@/components/ui/PilihanRingkas";
 import StatusOtomasiBast from "@/components/penggunaan/StatusOtomasiBast";
 import DokumenAkhirBast from "@/components/penggunaan/DokumenAkhirBast";
@@ -1033,7 +1035,13 @@ export default function PenggunaanPage({ user, onBack }) {
                     data-testid={`penggunaan-row-${p.nama}`}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-foreground leading-tight">{p.nama}</p>
+                      <p className="text-sm font-semibold text-foreground leading-tight flex items-center gap-1.5">
+                        {p.nama}
+                        <IkonKelompok kunciIkon={p.pegawai_master_kunci_ikon} />
+                        {p.pegawai_master_instansi && (
+                          <span className="text-[10px] font-normal text-muted-foreground truncate">{p.pegawai_master_instansi}</span>
+                        )}
+                      </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         {[p.nip && `${p.label_identitas || "NIP/NIK"} ${p.nip}`, p.jabatan, p.melekat_ke,
                           `${p.jumlah_kegiatan} kegiatan`].filter(Boolean).join(" · ")}
@@ -2016,6 +2024,7 @@ export default function PenggunaanPage({ user, onBack }) {
                       </p>
                       <p className="font-mono text-[11px] text-muted-foreground break-all">
                         {b.nomor || "(tanpa nomor)"} · {String(b.tanggal || "").slice(0, 10)} · {(b.asset_ids || []).length} aset → {b.pihak_kedua?.nama}
+                        {" "}<IkonKelompok kunciIkon={kelompokDari(b.pihak_kedua, null)} />
                       </p>
                       {elektronikFinal && (
                         <p className="text-[10px] text-emerald-600 dark:text-emerald-400" data-testid={`bast-bukti-elektronik-${b.id}`}>
@@ -2362,7 +2371,7 @@ export default function PenggunaanPage({ user, onBack }) {
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 space-y-2">
                   <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">Pemegang lama (PIHAK KESATU) — menyerahkan</p>
                   <div className="flex min-w-0 items-start gap-2"><div className="min-w-0 flex-1"><PilihPegawaiBast daftar={pegawaiList || []} value={formBast.pihak_pertama.pegawai_id}
-                    label="Pegawai pemegang lama" testId="bast-lama-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_pertama: pihakDariPegawai(p) }))} /></div><button type="button" title="Tap kartu pegawai (e-KTP/NFC)" aria-label="Pilih pemegang lama dari kartu pegawai" onClick={() => setKartuTapUntuk("pihak_pertama")} className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-input bg-card hover:bg-accent" data-testid="bast-lama-tap-kartu"><IdCard className="h-4 w-4 text-blue-600" /></button></div>
+                    pihak={formBast.pihak_pertama} label="Pegawai pemegang lama" testId="bast-lama-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_pertama: pihakDariPegawai(p) }))} /></div><button type="button" title="Tap kartu pegawai (e-KTP/NFC)" aria-label="Pilih pemegang lama dari kartu pegawai" onClick={() => setKartuTapUntuk("pihak_pertama")} className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-input bg-card hover:bg-accent" data-testid="bast-lama-tap-kartu"><IdCard className="h-4 w-4 text-blue-600" /></button></div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {!formBast.pihak_pertama.pegawai_id && <Input value={formBast.pihak_pertama.nama}
                       placeholder="Nama pemegang lama *" data-testid="bast-lama-nama"
@@ -2431,7 +2440,7 @@ export default function PenggunaanPage({ user, onBack }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="text-xs font-medium block mb-1">Penerima (PIHAK KEDUA) *</label>
                   <div className="flex min-w-0 items-start gap-2"><div className="min-w-0 flex-1"><PilihPegawaiBast daftar={pegawaiList || []} value={formBast.pihak_kedua.pegawai_id}
-                    label="Pegawai pihak kedua" testId="bast-penerima-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_kedua: pihakDariPegawai(p) }))} /></div>
+                    pihak={formBast.pihak_kedua} label="Pegawai pihak kedua" testId="bast-penerima-pegawai" onPilih={p => setFormBast(f => ({ ...f, pihak_kedua: pihakDariPegawai(p) }))} /></div>
                     <button type="button" title="Tap kartu pegawai (e-KTP/NFC)" aria-label="Pilih pihak kedua dari kartu pegawai" onClick={() => setKartuTapUntuk("pihak_kedua")} className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-input bg-card hover:bg-accent" data-testid="bast-penerima-tap-kartu"><IdCard className="h-4 w-4 text-blue-600" /></button></div>
                   {!formBast.pihak_kedua.pegawai_id && <Input value={formBast.pihak_kedua.nama}
                     placeholder="Nama pihak di luar master / identitas dokumen"
@@ -2502,7 +2511,7 @@ export default function PenggunaanPage({ user, onBack }) {
                     return (
                       <div key={i} className="rounded-lg border border-border p-2 space-y-1.5"
                         data-testid={`bast-pj-${i}`}>
-                        <PilihPegawaiBast daftar={pegawaiList || []} value={pj.pegawai_id} label={`Pegawai penanggung jawab ${i + 1}`}
+                        <PilihPegawaiBast daftar={pegawaiList || []} value={pj.pegawai_id} pihak={pj} label={`Pegawai penanggung jawab ${i + 1}`}
                           testId={`bast-pj-pegawai-${i}`} onPilih={p => setFormBast(f => ({ ...f, pj_tambahan: f.pj_tambahan.map((x, j) => j === i ? { ...x, ...dariPegawai(p) } : x) }))} />
                         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_44px] gap-2">
                           {!pj.pegawai_id && <Input value={pj.nama} placeholder="Nama pihak di luar Master Pegawai" className="col-span-2 min-w-0"
