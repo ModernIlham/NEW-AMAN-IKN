@@ -9,7 +9,8 @@ import { LARANGAN_IKON, PERMUKAAN_IKON, PERMUKAAN_IKON_MENYUSUL } from "../kelom
 
 const SRC = path.resolve(__dirname, "../..");
 const baca = (rel) => fs.readFileSync(path.join(SRC, rel), "utf8");
-const mengimpor = (teks) => /import\s+IkonKelompok\s+from\s+["'][^"']*IkonKelompok["']/.test(teks);
+const mengimpor = (teks) => /import\s+IkonKelompok\s+from\s+["'][^"']*IkonKelompok["']/.test(teks)
+  || /import\s*\{[^}]*\bsvgIkonKelompok\b[^}]*\}\s*from\s*["'][^"']*kelompokOrang["']/.test(teks);
 
 function semuaBerkas(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
@@ -27,7 +28,7 @@ test("tiap berkas PERMUKAAN_IKON ada dan mengimpor IkonKelompok", () => {
   }
 });
 
-test("layar yang menyusul (PGW-08b/11) tercatat dan berkasnya ada", () => {
+test("layar yang menyusul (PGW-11) tercatat dan berkasnya ada", () => {
   for (const rel of PERMUKAAN_IKON_MENYUSUL) {
     expect([rel, fs.existsSync(path.join(SRC, rel))]).toEqual([rel, true]);
     expect(PERMUKAAN_IKON).not.toContain(rel);

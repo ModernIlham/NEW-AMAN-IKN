@@ -15,6 +15,8 @@ import StatKartu from "@/components/ui/StatKartu";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import TombolOrangLuar from "@/components/pegawai/TombolOrangLuar";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
@@ -67,6 +69,10 @@ export default function PemeliharaanPage({ user, onBack }) {
   const [jenisList, setJenisList] = useState([]);
   // Referensi Master Pegawai — saran pelaksana internal (penyedia jasa tetap ketik bebas)
   const [pegawaiList, setPegawaiList] = useState([]);
+  // Orang luar yang dipilih dari direktori (PGW-08) — pelaksana tercatat
+  // sebagai teks, jadi ikonnya hanya ditampilkan selama form terbuka.
+  const [pelaksanaLuar, setPelaksanaLuar] = useState(null);
+  const [kapPetugas, setKapPetugas] = useState(""); // nama pelaksana BAPP yang berkapasitas petugas
   // Jadwal berkala: {items, jumlah, terlambat, segera} | null
   const [jadwal, setJadwal] = useState(null);
   // Dialog catat: {data, aset, saving} | null
@@ -720,9 +726,23 @@ export default function PemeliharaanPage({ user, onBack }) {
                   data-testid="pemeliharaan-biaya" />
               </div>
               <div>
-                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pml-pelaksana">Pelaksana</label>
+                <label className="text-xs font-medium text-foreground mb-1 flex items-center gap-1.5" htmlFor="pml-pelaksana">
+                  Pelaksana
+                  {pelaksanaLuar && form.data.pelaksana === pelaksanaLuar.teks && (
+                    <IkonKelompok kunciIkon={pelaksanaLuar.kunci} />
+                  )}
+                </label>
+                <div className="flex items-start gap-1.5">
                 <Input id="pml-pelaksana" placeholder="petugas / penyedia jasa" list="pml-pegawai-list"
+                  className="flex-1 min-w-0" data-testid="pemeliharaan-pelaksana"
                   value={form.data.pelaksana} onChange={(e) => setField("pelaksana", e.target.value)} />
+                <TombolOrangLuar testId="pemeliharaan-pelaksana-luar"
+                  onPilih={(o) => {
+                    const teks = [o.nama, o.instansi_nama].filter(Boolean).join(" — ");
+                    setPelaksanaLuar({ teks, kunci: o.kunci_ikon });
+                    setField("pelaksana", teks);
+                  }} />
+                </div>
                 <datalist id="pml-pegawai-list">
                   {pegawaiList.map((p, i) => (
                     <option key={`${p.nama}-${i}`} value={p.nama}>
@@ -879,8 +899,21 @@ export default function PemeliharaanPage({ user, onBack }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="text-[11px] text-muted-foreground">Pihak yang menyerahkan (pelaksana)</label>
+                    <div className="flex items-start gap-1.5">
                     <Input value={kap.pihak_pelaksana} onChange={(e) => setKap((k) => ({ ...k, pihak_pelaksana: e.target.value }))}
-                      placeholder="nama pelaksana/penyedia" className="h-9 text-xs" />
+                      placeholder="nama pelaksana/penyedia" className="h-9 text-xs flex-1 min-w-0" />
+                    <TombolOrangLuar kecil testId="kap-pelaksana-luar"
+                      onPilih={(o) => {
+                        setKapPetugas(o.kapasitas_bertindak === "petugas" ? (o.nama || "") : "");
+                        setKap((k) => ({ ...k, pihak_pelaksana: o.nama || "",
+                          jabatan_pelaksana: [o.jabatan, o.instansi_nama].filter(Boolean).join(" ") }));
+                      }} />
+                    </div>
+                    {kapPetugas && kap.pihak_pelaksana === kapPetugas && (
+                      <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                        Petugas/karyawan bukan pihak yang sah menandatangani atas nama badannya.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground">Jabatan/perusahaan</label>

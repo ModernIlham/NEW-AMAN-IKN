@@ -14,6 +14,7 @@ import {
 import { autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 import { UKURAN_STIKER } from "../../lib/stikerAset";
 import { OPERASIONAL_JENIS_OPTIONS, normalisasiJenisOperasional } from "../../lib/jenisOperasional";
+import IkonKelompok from "../pegawai/IkonKelompok";
 
 // ============================================================================
 // InventoryFieldSheet — tampilan EKSKLUSIF mode inventarisasi lapangan.
@@ -450,7 +451,10 @@ const InventoryFieldSheet = ({
                 </div>
               )}
               <div className="space-y-1">
-                <Label className="text-xs">{PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}</Label>
+                <Label className="text-xs flex items-center gap-1.5">
+                  {PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}
+                  <IkonKelompok nomor={formData.pengguna_nip} />
+                </Label>
                 <Input name="user" value={formData.user || ""} onChange={onInputChange} className="h-9 text-xs" data-testid="sheet-pengguna-input" />
               </div>
               <div className="space-y-1">

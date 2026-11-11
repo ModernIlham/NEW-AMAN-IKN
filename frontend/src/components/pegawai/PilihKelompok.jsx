@@ -32,7 +32,7 @@ const Pilihan = ({ aktif, onClick, kunci, label, n, testId, besar }) => (
 );
 
 export default function PilihKelompok({ kelompok, tataran, cacah = {}, onKelompok,
-  onTataran, bentuk = "bilah", awalanTestId = "pegawai" }) {
+  onTataran, bentuk = "bilah", awalanTestId = "pegawai", hanyaLuar = false }) {
   const besar = bentuk === "layar";
   return (
     <div className={besar ? "space-y-3" : "space-y-1.5"} data-testid={`${awalanTestId}-pilih-kelompok-${bentuk}`}>
@@ -43,7 +43,7 @@ export default function PilihKelompok({ kelompok, tataran, cacah = {}, onKelompo
       )}
       <div className={besar ? "grid grid-cols-1 sm:grid-cols-3 gap-2" : "flex flex-wrap gap-1.5"}
         role="group" aria-label="Kelompok pegawai">
-        {KELOMPOK.map((k) => (
+        {KELOMPOK.filter((k) => !hanyaLuar || k.kunci !== "internal").map((k) => (
           <Pilihan key={k.kunci} besar={besar} aktif={kelompok === k.kunci}
             onClick={() => onKelompok(k.kunci)} kunci={kunciIkon(k.kunci, tataran)}
             label={besar ? k.label : k.ringkas}

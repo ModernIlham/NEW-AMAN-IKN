@@ -39,6 +39,8 @@ import { warnaLevel, ordinalLantai } from "../../lib/spasialDenah";
 import { labelDilepas } from "../../lib/labelRingkas";
 import useLebarElemen from "../../hooks/useLebarElemen";
 import Lightbox from "./PhotoLightboxLoader";
+import { svgIkonKelompok } from "../../lib/kelompokOrang";
+import useKelompokOrang, { bacaKelompok } from "../../hooks/useKelompokOrang";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -297,6 +299,9 @@ const AssetMapFullView = memo(function AssetMapFullView({
   const ukurOnRef = useRef(false);
   useEffect(() => { ukurOnRef.current = ukurOn; }, [ukurOn]);
   const [rows, setRows] = useState([]);
+  // Kelompok pengguna tiap aset di peta (PGW-08) — ditanyakan bersama,
+  // dibaca saat popup dibuka (popup dibangun lambat oleh Leaflet).
+  useKelompokOrang(useMemo(() => rows.map((r) => r.pengguna_nip), [rows]));
   const [total, setTotal] = useState(0);
   const [truncated, setTruncated] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1204,15 +1209,17 @@ const AssetMapFullView = memo(function AssetMapFullView({
       ["Lokasi", row.location],
       ["Pengguna", String(row.user || "").trim()
         ? `${row.user}${String(row.pengguna_nip || "").trim() ? ` · ${row.pengguna_nip}` : ""}`
-        : ""],
+        : "", svgIkonKelompok(bacaKelompok(row.pengguna_nip))],
     ].filter(([, v]) => String(v || "").trim());
     if (infoRows.length > 0) {
       const info = document.createElement("div");
       info.style.cssText = "margin-top:7px;padding-top:6px;border-top:1px solid #f1f5f9";
-      info.innerHTML = infoRows.map(([label, value]) => `
+      // Elemen ke-3 (opsional) = SVG ikon kelompok dari svgIkonKelompok —
+      // dibangkitkan dari data ikon sendiri, bukan masukan pengguna.
+      info.innerHTML = infoRows.map(([label, value, ikon]) => `
         <div style="display:flex;gap:6px;font-size:10.5px;margin-top:2px">
           <span style="flex:0 0 56px;color:#94a3b8">${esc(label)}</span>
-          <span style="min-width:0;color:#334155;font-weight:500;word-break:break-word">${esc(value)}</span>
+          <span style="min-width:0;color:#334155;font-weight:500;word-break:break-word">${esc(value)}${ikon ? ` ${ikon}` : ""}</span>
         </div>`).join("");
       el.appendChild(info);
     }

@@ -33,6 +33,25 @@ export function kunciIkon(kelompok, tataran = "") {
   return "internal";
 }
 
+const escAttr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+  .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * SVG ikon sebagai teks, untuk permukaan non-React (popup peta Leaflet).
+ * Gambar & warnanya dari sumber yang sama dengan `IkonKelompok`; kunci tak
+ * dikenal → "" (tanpa ikon).
+ */
+export function svgIkonKelompok(kunci, ukuran = 12) {
+  const d = DATA.ikon[kunci];
+  if (!d) return "";
+  const isi = d.elemen.map(([tag, attrs]) => `<${tag} ${Object.entries(attrs)
+    .map(([k, v]) => `${k}="${escAttr(v)}"`).join(" ")}/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${escAttr(d.alt)}"`
+    + ` width="${ukuran}" height="${ukuran}" viewBox="0 0 24 24" fill="none"`
+    + ` stroke="${escAttr(d.hex)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`
+    + ` style="display:inline-block;vertical-align:-2px"><title>${escAttr(d.alt)}</title>${isi}</svg>`;
+}
+
 /**
  * Kunci ikon sebuah catatan. Salinan pada catatan itu sendiri (BAST,
  * penerima persediaan — dibekukan sejak PGW-06) MENANG atas jawaban server;
@@ -56,9 +75,10 @@ export function sebutTataran(kunci) {
 
 /**
  * Registry layar yang menampilkan ikon (7.3). Uji menagih tiap berkas di
- * sini mengimpor `IkonKelompok`. PGW-08a memasang yang tercantum di
- * `PERMUKAAN_IKON`; sisanya di `PERMUKAAN_IKON_MENYUSUL` (PGW-08b/11) —
- * uji menagih keduanya tercatat supaya tak ada yang terlupa.
+ * sini mengimpor `IkonKelompok` (atau `svgIkonKelompok` untuk permukaan
+ * non-React seperti popup peta). Nama berkas dicocokkan dengan repo saat
+ * PGW-08: daftar/kartu aset dirender `VirtualizedAssetTable` dan
+ * `AssetGalleryCard`, bukan `DashboardPage` sendiri.
  */
 export const PERMUKAAN_IKON = [
   "pages/PegawaiPage.jsx",
@@ -66,20 +86,24 @@ export const PERMUKAAN_IKON = [
   "components/pegawai/CariOrangLuar.jsx",
   "components/pegawai/KartuTapDialog.jsx",
   "components/assets/AssetForm.jsx",
-  "components/penggunaan/PilihPegawaiBast.jsx",
-  "pages/PenggunaanPage.jsx",
-];
-export const PERMUKAAN_IKON_MENYUSUL = [
-  "pages/DashboardPage.jsx",
+  "components/assets/VirtualizedAssetTable.jsx",
+  "components/assets/AssetGalleryCard.jsx",
   "components/assets/InventoryFieldSheet.jsx",
   "components/assets/BatchEditPanel.jsx",
   "components/assets/AssetMapFullView.jsx",
   "components/assets/AuditLogPanel.jsx",
+  "components/penggunaan/PilihPegawaiBast.jsx",
+  "pages/PenggunaanPage.jsx",
   "pages/PersediaanPage.jsx",
+  "components/persediaan/RiwayatSppb.jsx",
   "pages/PemeliharaanPage.jsx",
   "pages/TtdPermintaanPage.jsx",
+  "components/ttd/BarisPenandaTangan.jsx",
   "pages/ActivitySelectionPage.jsx",
   "pages/WasdalPage.jsx",
+];
+/** Menyusul PGW-11: ikon di samping mitra/pihak yang tertaut `instansi_luar`. */
+export const PERMUKAAN_IKON_MENYUSUL = [
   "pages/PemanfaatanPage.jsx",
   "pages/PemindahtangananPage.jsx",
   "pages/PengadaanPage.jsx",

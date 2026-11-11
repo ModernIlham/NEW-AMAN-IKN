@@ -14,6 +14,7 @@ import { kelasStatusInventarisasi } from "../../lib/warnaAset";
 import { useSinkronSiman } from "../../lib/simanSync";
 import { berTitikHijau, keteranganPsp } from "../../lib/tandaPsp";
 import { Button } from "../ui/button";
+import IkonKelompok from "../pegawai/IkonKelompok";
 import {
   Tooltip,
   TooltipContent,
@@ -409,6 +410,9 @@ const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, on
                     <div className="flex items-center gap-0.5 min-w-0 leading-tight" title={`Pengguna: ${a.user}`}>
                       <User className="w-2.5 h-2.5 text-muted-foreground/70 flex-shrink-0" />
                       <span className="text-[9px] text-muted-foreground/80 truncate">{a.user}</span>
+                      {/* Ikon kelompok — nomor yang tampil ditanyakan bersama
+                          (satu permintaan per tumpukan, bukan per baris). */}
+                      <IkonKelompok nomor={a.pengguna_nip} ukuran={10} />
                     </div>
                   )}
                 </div>

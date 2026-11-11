@@ -24,3 +24,12 @@ test("salinan pada catatan menang atas jawaban server; tanpa keduanya → null",
   expect(kelompokDari({}, null)).toBeNull();
   expect(kelompokDari(null, "bukan-kunci")).toBeNull();
 });
+
+test("svgIkonKelompok: SVG bernama dari sumber yang sama; kunci tak dikenal → kosong", () => {
+  const { svgIkonKelompok } = require("../kelompokOrang");
+  const svg = svgIkonKelompok("eksternal_daerah", 12);
+  expect(svg).toMatch(/^<svg /);
+  expect(svg).toContain('aria-label="Pegawai pemda"');
+  expect(svg).toContain(infoIkon("eksternal_daerah").elemen[0][1].d);
+  expect(svgIkonKelompok("bukan")).toBe("");
+});

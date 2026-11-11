@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import TooltipKetuk from "@/components/ui/TooltipKetuk";
 import { infoIkon } from "@/lib/kelompokOrang";
-import useKelompokOrang from "@/hooks/useKelompokOrang";
+import useKelompokOrang, { bacaKelompok } from "@/hooks/useKelompokOrang";
 
 // Gambar dari kelompokOrang.infoIkon (lucide, viewbox 24). Dibedakan BENTUK,
 // warna hanya penguat (3.8).
@@ -36,9 +36,20 @@ const Isi = ({ info, ukuran, denganLabel, className, hiasan }) => {
   return <TooltipKetuk konten={info.alt}>{isi}</TooltipKetuk>;
 };
 
+// Nomor yang sedang DIKETIK baru ditanyakan setelah berhenti sejenak —
+// jawaban yang sudah tersimpan tetap tampil seketika. Saat dipasang pertama
+// kali (baris daftar) nomornya langsung ikut tumpukan, tanpa jeda.
+const JEDA_KETIK_MS = 400;
 const DariNomor = ({ nomor, ...rest }) => {
-  const peta = useKelompokOrang([nomor]);
-  const info = infoIkon(peta[String(nomor || "").trim()]);
+  const kini = String(nomor || "").trim();
+  const [tanya, setTanya] = useState(kini);
+  useEffect(() => {
+    if (kini === tanya) return undefined;
+    const t = setTimeout(() => setTanya(kini), JEDA_KETIK_MS);
+    return () => clearTimeout(t);
+  }, [kini, tanya]);
+  const peta = useKelompokOrang([tanya]);
+  const info = infoIkon(kini === tanya ? peta[kini] : bacaKelompok(kini));
   return info ? <Isi info={info} {...rest} /> : null;
 };
 

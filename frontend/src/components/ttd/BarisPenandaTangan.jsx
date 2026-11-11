@@ -3,6 +3,7 @@ import { Copy, Link2, Mail, MessageCircle, RotateCcw, ShieldCheck } from "lucide
 import { Button } from "@/components/ui/button";
 import { teksSisaWaktu, warnaSisaWaktu, sudahKedaluwarsa } from "@/lib/sisaWaktu";
 import { teksIdentitasTtd } from "@/lib/identitasTtd";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
 
 /** Status yang MASIH boleh diterbitkan tautannya. Sengaja daftar-putih:
  *  "belum ditandatangani" saja tidak cukup — orang yang sudah mengunggah
@@ -64,7 +65,7 @@ export default function BarisPenandaTangan({
             menentukan siapa bertanggung jawab meneken apa. Jabatan di baris
             bawah tetap dipotong: ia keterangan, bukan identitas. */}
         <p className="text-sm font-semibold leading-snug flex-1 min-w-0 break-words">
-          {s.urutan}. {s.nama}
+          {s.urutan}. {s.nama}{" "}<IkonKelompok nomor={s.nip} />
         </p>
         {/* Pratinjau TTD disembunyikan bila permintaan DIBATALKAN — endpoint
             gambarnya menolak (410) sehingga <img> jadi ikon rusak. */}

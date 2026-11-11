@@ -26,6 +26,7 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import { WARNA_CHIP, kelasChipStatus } from "@/lib/chipStatus";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 import MenuKepala from "@/components/ui/MenuKepala";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -529,6 +530,7 @@ export default function WasdalPage({ user, onBack }) {
                                 <div className="flex items-center justify-between gap-2">
                                   <p className="text-xs font-semibold text-foreground min-w-0 truncate">
                                     {t.asset_name || t.pihak || "-"}
+                                    {t.nip && <>{" "}<IkonKelompok nomor={t.nip} /></>}
                                   </p>
                                   <div className="flex items-center gap-1.5 flex-shrink-0">
                                     {t.asset_code && (
