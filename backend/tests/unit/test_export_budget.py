@@ -147,6 +147,7 @@ def test_actual_file_route_inventory_requires_budget_or_explicit_non_renderer_re
         "/api/templates/csv": "fixed two-row CSV template",
         "/api/kodefikasi/template": "fixed CSV template",
         "/api/pegawai/template-impor": "fixed CSV template",
+        "/api/pegawai-luar/template-impor": "fixed CSV template",
         "/api/persediaan/template": "fixed CSV template",
     }
     uncovered, used = [], set()
