@@ -342,4 +342,112 @@ def generate_activity(count, seed=42):
     return out
 
 
+
+# ──────────────────── direktori luar (PGW-12, rencana 3.3) ────────────────────
+# Nama di bawah adalah nama TEMPAT nyata di sekitar IKN atau nama badan
+# rekaan; tak ada kode resmi (kode_referensi/kode_luar sengaja kosong) — kode
+# tidak pernah ditebak, termasuk di data uji (rencana 3.10 praktik 2).
+_KL_FIKTIF = ["Kementerian Prasarana Wilayah", "Kementerian Tata Kelola Aset",
+              "Badan Riset Kawasan"]
+_SATKER_KL = ["Sekretariat Jenderal", "Balai Prasarana Kalimantan Timur",
+              "Direktorat Pengelolaan Aset"]
+_PROVINSI = ["Provinsi Kalimantan Timur", "Provinsi Kalimantan Selatan"]
+_KABKOTA = {"Provinsi Kalimantan Timur": ["Kabupaten Penajam Paser Utara",
+                                          "Kabupaten Kutai Kartanegara"],
+            "Provinsi Kalimantan Selatan": ["Kota Banjarbaru"]}
+_DESA = ["Desa Bumi Harapan", "Desa Pemaluan"]
+_PERANGKAT = ["Dinas Pekerjaan Umum", "Badan Pengelola Keuangan dan Aset Daerah",
+              "Sekretariat Daerah"]
+_BADAN = [("bumn", "PT Contoh Karya Nusantara (Persero)"),
+          ("badan_usaha_swasta", "PT Mitra Sarana Konstruksi"),
+          ("koperasi", "Koperasi Jasa Nusantara Baru"),
+          ("yayasan", "Yayasan Pendidikan Nusantara"),
+          ("bumd", "PT Air Minum Daerah Contoh")]
+_UNIT_BADAN = ["Kantor Pusat", "Kantor Cabang Balikpapan"]
+
+
+def generate_organisasi_luar(seed=42, orang_per_satker=3):
+    """Direktori luar sintetis: instansi, satker, dan orang luar.
+
+    Kembalian ``{"instansi": [...], "satker": [...], "orang": [...]}`` —
+    berbentuk dokumen yang SIAP disisipkan ke ``instansi_luar``,
+    ``satker_luar``, dan ``pegawai_luar``: dibersihkan dan diberi salinan
+    jenjang lewat fungsi murni yang sama dengan rute aplikasi, dan lolos
+    validatornya. Tak satu pun membawa ``kode_satker`` (invarian 6). Pemda
+    berjenjang provinsi → kab/kota → desa; pihak ketiga mencakup wadah
+    "Masyarakat (Perorangan)".
+    """
+    import organisasi_luar_utils as olu
+
+    rng = random.Random(seed + 4)
+    instansi, satker, orang = [], [], []
+    hitung = {"i": 0, "s": 0, "o": 0}
+
+    def _id(pref):
+        hitung[pref] += 1
+        return f"sintetis-{pref}{hitung[pref]:04d}"
+
+    def _instansi(kelompok, jenis, nama, induk=None, wadah=False, **extra):
+        doc = olu.bersihkan_instansi_luar({"kelompok": kelompok, "jenis": jenis,
+                                           "nama": nama, **extra})
+        doc.update({"id": _id("i"), "aktif": True, "wadah": wadah, "version": 1,
+                    "induk_id": (induk or {}).get("id", "")})
+        doc.update(olu.salinan_jenjang(doc, induk))
+        instansi.append(doc)
+        return doc
+
+    def _satker(ins, nama, wadah=False, eselon=""):
+        doc = olu.bersihkan_satker_luar({"nama_satker": nama, "eselon_satker": eselon}, ins)
+        doc.update({"id": _id("s"), "aktif": True, "wadah": wadah, "version": 1})
+        satker.append(doc)
+        return doc
+
+    def _orang(sat, kapasitas=""):
+        for _ in range(orang_per_satker):
+            d = {"nama": _nama_orang(rng), "nip": _nik(rng), "jabatan": rng.choice(vb.JABATAN),
+                 "status": "aktif", "jenis_kelamin": rng.choice(["L", "P"])}
+            kel, jenis = sat["kelompok"], sat.get("jenis", "")
+            if kel == "pihak_ketiga":
+                d["kapasitas_bertindak"] = kapasitas or rng.choice(
+                    ["pengurus_berwenang", "penerima_kuasa", "petugas"])
+            doc = olu.sesuaikan_orang_luar(d, kel, jenis)
+            doc.update({"id": _id("o"), "version": 1, "satker_luar_id": sat["id"],
+                        "satker_luar_nama": sat["nama_satker"],
+                        "instansi_id": sat["instansi_id"],
+                        "instansi_nama": sat.get("instansi_nama", ""),
+                        "kelompok": kel, "tataran": sat.get("tataran", ""),
+                        "jenis_instansi": jenis,
+                        **{f: sat.get(f, "") for f in olu.FIELD_JENJANG}})
+            doc.pop("kode_satker", None)
+            orang.append(doc)
+
+    for nama in _KL_FIKTIF:
+        kl = _instansi("eksternal", "kementerian_lembaga", nama)
+        for s in rng.sample(_SATKER_KL, 2):
+            _orang(_satker(kl, s, eselon=str(rng.choice([1, 2, 3]))))
+    for prov_nama in _PROVINSI:
+        prov = _instansi("eksternal", "pemerintah_provinsi", prov_nama)
+        _orang(_satker(prov, rng.choice(_PERANGKAT)))
+        for kab_nama in _KABKOTA[prov_nama]:
+            kab = _instansi("eksternal", "pemerintah_kabkota", kab_nama, induk=prov)
+            _orang(_satker(kab, rng.choice(_PERANGKAT)))
+            if kab_nama == "Kabupaten Penajam Paser Utara":
+                for desa_nama in _DESA:
+                    desa = _instansi("eksternal", "pemerintah_desa", desa_nama, induk=kab)
+                    _orang(_satker(desa, "Kantor Desa"))
+    for jenis, nama in _BADAN:
+        badan = _instansi("pihak_ketiga", jenis, nama)
+        for u in _UNIT_BADAN:
+            _orang(_satker(badan, u))
+    wadah = _instansi("pihak_ketiga", "perorangan", "Masyarakat (Perorangan)", wadah=True)
+    _orang(_satker(wadah, "Masyarakat (Perorangan)", wadah=True), kapasitas="diri_sendiri")
+    return {"instansi": instansi, "satker": satker, "orang": orang}
+
+
+def _nik(rng):
+    """NIK 16 digit fiktif (kode wilayah Kaltim 64xxxx + tanggal + urut)."""
+    return (f"64{rng.randint(1, 72):02d}{rng.randint(1, 30):02d}"
+            f"{rng.randint(1, 28):02d}{rng.randint(1, 12):02d}{rng.randint(70, 99):02d}"
+            f"{rng.randint(1, 9999):04d}")
+
 PROFIL_TERSEDIA = tuple(PROFIL.keys())

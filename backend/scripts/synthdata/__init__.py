@@ -18,6 +18,7 @@ from .generator import (
     generate_activity,
     generate_asset,
     generate_assets,
+    generate_organisasi_luar,
     generate_pegawai,
     generate_satker,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "generate_assets",
     "generate_asset",
     "generate_pegawai",
+    "generate_organisasi_luar",
     "generate_satker",
     "generate_activity",
     "FIELD_STRATEGIES",

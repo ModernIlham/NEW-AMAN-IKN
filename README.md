@@ -225,7 +225,11 @@ siklus lainnya aktif** (Persediaan, Pelaporan, Pembukuan, Perencanaan,
 Penganggaran, Pengadaan, Penggunaan, Pemanfaatan, Penilaian, Pengamanan,
 Pemeliharaan, Pemindahtanganan, Pemusnahan, Penghapusan, Wasdal) beserta
 master pendukung (Kodefikasi, Pegawai, Pejabat, Ruangan, Unit Kerja,
-Referensi Akun BAS, Satker). Aplikasi berjalan **multi-satker terisolasi**
+Referensi Akun BAS, Satker). **Master Pegawai** mencakup tiga kelompok —
+pegawai internal, pegawai **instansi eksternal** (pusat/K-L dan daerah/pemda)
+dan **pihak ketiga** (wakil badan usaha, koperasi, yayasan, perorangan) —
+dalam direktori luar yang dipakai bersama seluruh satker, dengan ikon kelompok
+di layar dan di Laporan Eksekutif. Aplikasi berjalan **multi-satker terisolasi**
 (data tiap satker terpisah; super-admin lintas-satker), dengan
 **sinkronisasi SIMAN V2**, **tanda tangan elektronik**, **cetak stiker
 label BMN**, dan **backup otomatis terjadwal**.
