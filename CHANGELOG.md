@@ -18,6 +18,22 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1129] Master Pegawai tiga kelompok — PGW-06: direktori gabungan & pembaca backend — 2026-11-11
+
+- Rute baru `/api/direktori-pegawai` (pemilih lintas modul: internal
+  ter-scope satker atau orang luar aktif, dicari & dipotong halaman di
+  server), `POST /api/direktori-pegawai/kelompok` (bahan ikon, maks. 500
+  nomor, hanya nomor yang ditanyakan), dan identifikasi kartu gabungan.
+- Pembaca lama kini mengenali orang luar (aditif — perilaku untuk pegawai
+  internal tidak berubah): status kepegawaian untuk blok tanda tangan,
+  setelan Wajib Pegawai Terdaftar, penerima persediaan, PIHAK KESATU BAST,
+  penanda tangan TTD yang meninggal, impor aset, rekap pemegang Penggunaan,
+  blok TTD tim laporan, dan temuan Wasdal pemegang berisiko.
+- BAST membekukan kelompok, tataran, dan instansi tiap pihak dari
+  direktori; penerima persediaan membekukan kelompok dan instansinya.
+- Perbaikan: hapus permanen orang luar kini juga menolak bila ia tercatat
+  sebagai penanggung jawab tambahan BAST.
+
 ## [#1128] Master Pegawai tiga kelompok — PGW-05: unit kerja luar (backend) — 2026-11-11
 
 - Rute baru `/api/unit-kerja-luar/…`: daftar, tambah, ubah (ganti nama,
