@@ -255,3 +255,14 @@ def test_peta_status_kepegawaian_mengenali_orang_luar_internal_menang(dbx, monke
     _jalan(dbx.pegawai_luar.update_many({}, {"$set": {"status_kepegawaian": "non_asn"}}))
     peta = _jalan(rr._peta_status_kepegawaian(["555", "999", "000"]))
     assert peta == {"555": "non_asn", "999": "pns"}
+
+
+# ── pembaca 8: routes/wasdal.py ────────────────────────────────────────────
+def test_wasdal_pegawai_berisiko_ikut_membaca_orang_luar():
+    from pathlib import Path
+    import routes.wasdal as rw
+    src = Path(rw.__file__).read_text(encoding="utf-8")
+    blok = src.split("pegawai = [p async for p in db.pegawai.find(", 1)[1][:1800]
+    assert "db.pegawai_luar.find(" in blok
+    assert "not in _nip_internal" in blok          # internal menang, tak ganda
+    assert "_jumlah_aset_per_nip(user)" in blok    # cacah aset tetap ter-scope

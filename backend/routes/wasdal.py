@@ -97,6 +97,16 @@ async def _data_pemantauan(ambang_hari: int, user=None):
                   # "pemegang meninggal" (UU 1/2004 Ps. 66 ayat (2)).
                   "tanggal_meninggal": 1,
                   "pemberitahuan_ahli_waris_tanggal": 1})]
+    # Orang luar (PGW-06) ikut dideteksi. Direktori bersama, tanpa scope:
+    # temuan hanya lahir bila NIP-nya memegang aset satker ini (peta di bawah
+    # ter-scope), jadi orang luar tanpa aset di sini tak pernah muncul.
+    _nip_internal = {str(p.get("nip") or "").strip() for p in pegawai}
+    pegawai += [p async for p in db.pegawai_luar.find(
+        {"nip": {"$nin": ["", None]}},
+        {"_id": 0, "id": 1, "nama": 1, "nip": 1, "status": 1,
+         "tgl_selesai_kontrak": 1, "tanggal_meninggal": 1,
+         "pemberitahuan_ahli_waris_tanggal": 1})
+        if str(p.get("nip") or "").strip() not in _nip_internal]
     peta_aset_nip = await _jumlah_aset_per_nip(user)
     # Integrasi Pengamanan → Wasdal: dokumen kepemilikan (STNK/pajak/IMB)
     # yang masa berlakunya lewat = temuan objek pengamanan & pemeliharaan.
