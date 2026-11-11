@@ -1054,7 +1054,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-05 | Unit kerja luar (backend) | 03 | **selesai** | #1119 |
 | PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | **selesai** | #1120 |
 | PGW-07 | Layar Master Pegawai | 03, 04, 05 | **selesai** | #1121 |
-| PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | belum | |
+| PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **08a selesai**; 08b belum | #1122 (08a) |
 | PGW-09 | Laporan & dokumen | 06 | belum | |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | belum | |
 | PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | belum | |
@@ -1634,6 +1634,39 @@ disentuh.
 
 **Terima:** empat ikon terbedakan dalam skala abu-abu (bentuknya, bukan
 warnanya); periksa terang/gelap, HP/desktop; halaman Persuratan tanpa ikon.
+
+
+**Hasil 08a (2026-11-11):** `backend/data/ikon_kelompok.json` (dibangkitkan
+dari ikon lucide-react 0.507.0, ISC) dan salinannya
+`frontend/src/lib/ikonKelompok.json`; `lib/kelompokOrang.js`,
+`IkonKelompok.jsx`, `hooks/useKelompokOrang.js`, `CariOrangLuar.jsx`; pemilih
+pengguna di `AssetForm.jsx`, pihak BAST di `PilihPegawaiBast.jsx` +
+`PenggunaanPage.jsx`, identifikasi kartu gabungan di `KartuTapDialog.jsx`.
+Nama berkas 7.3 dicocokkan ulang: semuanya ada. Penyesuaian:
+- **Ranah internal pemilih tetap memakai daftar `/pegawai` yang sudah
+  dimuat**; hanya eksternal/pihak ketiga yang dicari di
+  `GET /direktori-pegawai`. Alasan: daftar internal satu satker kecil dan
+  sudah termuat (tetap bisa dicari tanpa jaringan sesudahnya), peringatan
+  "pegawai tertaut tidak tersedia" bergantung padanya, dan lima uji yang
+  me-mock `/pegawai` tetap sah. Peringatan "belum terdaftar" di form aset
+  kini bertanya ke penjawab kelompok (NIP ditunda 500 ms).
+- Pihak BAST orang luar: `pegawai_id` = id direktori luar (pengaman hapus
+  orang luar menghitung rujukan lewat id ini); akses BMN Saya tetap hanya
+  internal karena server mencocokkan NIP ke Master Pegawai satker.
+- `PilihKelompok.jsx` (PGW-07) kini memakai `IkonKelompok` — sebelumnya
+  memilih ikon/warnanya sendiri, melanggar "satu sumber".
+- `IkonKelompok` punya mode `hiasan` untuk di dalam tombol (tanpa tooltip
+  dan tanpa fokus, nama kelompok sebagai teks pembaca layar) — mencegah
+  elemen interaktif bersarang.
+- Rekap pemegang (`routes/penggunaan.py`) menambah
+  `pegawai_master_kunci_ikon` (dengan tataran) supaya pusat/daerah tak
+  tertukar.
+- **Temuan & perbaikan:** pengaman hapus orang luar (PGW-03) mencari
+  `pihak_kesatu.pegawai_id`, padahal BAST menyimpan `pihak_pertama` — kini
+  `pihak_pertama`, dan juga dicocokkan lewat NIP.
+- `PERMUKAAN_IKON` memuat yang sudah terpasang; sisanya di
+  `PERMUKAAN_IKON_MENYUSUL` (08b/11) dan uji menagih keduanya tercatat.
+- Belum: periksa skala abu-abu, terang/gelap, HP/desktop di peramban.
 
 ---
 

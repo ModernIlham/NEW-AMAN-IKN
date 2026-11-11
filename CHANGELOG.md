@@ -18,6 +18,24 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1131] Master Pegawai tiga kelompok — PGW-08a: ikon kelompok, pemilih aset & BAST — 2026-11-11
+
+- Ikon kelompok orang — Internal, Eksternal Pusat, Eksternal Daerah, Pihak
+  Ketiga — dibedakan bentuk (bukan hanya warna), bernama untuk pembaca
+  layar, dengan keterangan yang bisa diketuk. Gambarnya satu sumber
+  (`backend/data/ikon_kelompok.json`, disalin identik ke frontend).
+- Kelompok tiap nomor ditanyakan ke server bertumpuk (satu permintaan untuk
+  banyak baris) dan diingat di perangkat untuk luring.
+- Pemilih pengguna di form aset dan pihak BAST punya saringan Internal /
+  Eksternal (Pusat/Daerah) / Pihak Ketiga; orang luar dicari di direktori
+  bersama. Peringatan "belum terdaftar" di form aset kini mengenali orang
+  luar. Memilih petugas pihak ketiga sebagai pihak BAST memunculkan
+  peringatan lunak.
+- Tap kartu mengenali orang luar. Ikon tampil di Master Pegawai, rekap
+  pemegang, dan riwayat BAST.
+- Perbaikan: hapus permanen orang luar kini juga ditolak bila ia tercatat
+  sebagai PIHAK KESATU BAST, atau dirujuk BAST lewat NIP-nya.
+
 ## [#1130] Master Pegawai tiga kelompok — PGW-07: layar Master Pegawai — 2026-11-11
 
 - Master Pegawai kini dibuka pada layar **pilih kelompok**: Pegawai Internal,
