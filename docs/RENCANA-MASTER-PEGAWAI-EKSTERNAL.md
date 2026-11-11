@@ -1055,7 +1055,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | **selesai** | #1120 |
 | PGW-07 | Layar Master Pegawai | 03, 04, 05 | **selesai** | #1121 |
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a + 08b) |
-| PGW-09 | Laporan & dokumen | 06 | belum | |
+| PGW-09 | Laporan & dokumen | 06 | **selesai** | #1123 |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | belum | |
 | PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | belum | |
 | PGW-12 | Data uji & dokumentasi | 07–10 | belum | |
@@ -1729,6 +1729,30 @@ berubah; laporan yang seluruh penggunanya internal menghasilkan baris yang
 sama dengan sebelum paket selain ikon dan legendanya; tiap ikon di HTML
 punya `<title>`; tak ada templat lain di `backend/templates/` yang memuat
 gambar ikon kelompok. Smoke-render PDF dengan harness FakeDB.
+
+
+**Hasil (2026-11-11):** `backend/ikon_kelompok.py` (SVG sebaris + `<title>`
+dari `data/ikon_kelompok.json`); Laporan Eksekutif — ikon di tiap baris
+pengguna terdaftar, satu baris "Keterangan ikon" di atas tabel, dan pembagi
+pengguna luar sesudah internal (`laporan_jenjang.baris_hierarki_pengguna_luar`);
+`distribusi_pengguna` membawa kelompok/instansi; daftar pemegang PDF/Word &
+PDF per pemegang menyebut instansi orang luar (`label_unit_orang`); temuan
+Wasdal menyebut kelompok + instansi. Penyesuaian:
+- **SVG sebaris diuji dirender nyata** (WeasyPrint → pypdfium2: keempat warna
+  ikon tergambar di halaman Distribusi Per Pengguna) — data-URI tak perlu.
+- Potret baris laporan seluruh-internal dari kode sebelum paket dibekukan di
+  uji; sesudah paket identik selain ikon & legenda.
+- Tinggi legenda (`laporan_kolom.TINGGI_LEGENDA_IKON`) dan lebar ikon
+  sesudah nama ikut dihitung penghitung halaman — tanpa itu lembar bisa
+  meluber.
+- Batang grafik pengguna luar ditandai per kelompok: kedalaman daun Daerah
+  satu jenjang lebih dalam daripada Pusat/Pihak Ketiga.
+- Daftar pemegang tak punya kolom unit; instansi orang luar ditulis di
+  bawah jabatannya (baris internal tak berubah).
+- Temuan Wasdal untuk orang luar yang meninggal **tanpa jam 3 tahun ahli
+  waris** (rezim TGR pegawai negeri; PGW-00) — sebelumnya ikut terlampir.
+- Kop jenjang tabel ("Eselon I › … › Pengguna") tetap menyebut jenjang
+  internal; bagian luar berlabel lewat baris pembaginya sendiri.
 
 ---
 

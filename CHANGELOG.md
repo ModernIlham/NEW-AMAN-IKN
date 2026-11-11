@@ -18,6 +18,21 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1132] Master Pegawai tiga kelompok — PGW-09: laporan & dokumen — 2026-11-11
+
+- Laporan Eksekutif, Distribusi Per Pengguna: tiap pengguna terdaftar
+  diberi ikon kelompoknya (satu-satunya naskah cetak berikon), dengan satu
+  baris keterangan ikon di atas tabel — tetap terbaca dicetak hitam-putih.
+- Pengguna instansi eksternal dan pihak ketiga dibagi tersendiri sesudah
+  pegawai internal: Pusat → K/L → satker; Daerah → provinsi → pemda →
+  perangkat daerah; Pihak Ketiga → badan → unit. Baris pegawai internal tidak
+  berubah; total tetap.
+- Daftar pemegang (PDF/Word) dan daftar per pemegang menyebut instansi
+  pemegang orang luar.
+- Temuan Wasdal "pemegang berisiko" menyebut kelompok dan instansi orang
+  luar, tanpa tenggat pemberitahuan ahli waris yang hanya berlaku bagi
+  pegawai negeri.
+
 ## [#1131] Master Pegawai tiga kelompok — PGW-08: ikon kelompok & pemilih orang lintas modul — 2026-11-11
 
 - Ikon kelompok orang — Internal, Eksternal Pusat, Eksternal Daerah, Pihak
