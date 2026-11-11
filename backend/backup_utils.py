@@ -85,6 +85,9 @@ RESET_KEEP_COLLECTIONS = {
     # Master referensi (ditambah saat audit backup/restore/reset — #407):
     "kodefikasi", "categories", "referensi_akun_hierarki",
     "unit_kerja", "pegawai", "pejabat", "ruangan",
+    # Direktori pegawai LUAR (instansi eksternal & pihak ketiga) — master
+    # bersama seluruh instansi, sama sifatnya dengan pegawai/unit_kerja.
+    "instansi_luar", "satker_luar", "unit_kerja_luar", "pegawai_luar",
     # Penanda versi seed referensi akun — ikut dipertahankan agar konsisten
     # dengan `referensi_akun` (tanpa ini seed ter-replay; tidak merusak,
     # tapi inkonsisten — audit W7).
@@ -124,7 +127,8 @@ LEGACY_COLLECTION_ALIASES = {"activities": "inventory_activities"}
 #   • ttd_spesimen → pegawai/pejabat.ttd_file_id (spesimen tanda tangan; kind)
 # CATATAN: berkas OPERASIONAL (ttd_sign, dokumen e-sign, foto aset, lampiran)
 # TIDAK dipertahankan — koleksi induknya memang ikut direset.
-RESET_KEEP_GRIDFS_JENIS = {"foto_pegawai", "foto_pegawai_asli"}
+RESET_KEEP_GRIDFS_JENIS = {"foto_pegawai", "foto_pegawai_asli",
+                           "foto_pegawai_luar", "foto_pegawai_luar_asli"}
 RESET_KEEP_GRIDFS_KIND = {"ttd_spesimen"}
 
 

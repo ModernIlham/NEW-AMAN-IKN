@@ -1048,7 +1048,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 |---|---|---|---|---|
 | PGW-00 | Regulasi & kontrak modul | — | **selesai** | #1114 |
 | PGW-01 | Fondasi murni | 00 | **selesai** | #1115 |
-| PGW-02 | Master instansi & satker luar (backend) | 01 | belum | |
+| PGW-02 | Master instansi & satker luar (backend) | 01 | **selesai** | #1116 |
 | PGW-03 | Orang luar (backend) | 02 | belum | |
 | PGW-04 | Impor/ekspor/template orang luar | 03 | belum | |
 | PGW-05 | Unit kerja luar (backend) | 03 | belum | |
@@ -1230,6 +1230,23 @@ Wadah perorangan dibuat lewat pembantu idempoten `pastikan_wadah_perorangan`.
 - `GET /luar/riwayat` menampilkan suntingan admin B kepada pengguna satker A.
 - Daftar instansi dipotong halaman; `q` mencari pada nama, singkatan, kode;
   daftar tanpa `kelompok` → 400.
+
+**Hasil (2026-11-11):** rute `routes/organisasi_luar.py` terdaftar di
+`server.py`; indeks 5.5 untuk keempat koleksi; keempat koleksi dan dua jenis
+foto luar masuk `RESET_KEEP_*`. Penyesuaian:
+- `organisasi_luar_utils` kini **membuang** kunci `kode_satker` dari satker
+  dan orang luar (invarian 6), bukan menyimpannya kosong.
+- Jenis instansi tidak bisa diganti sama sekali bila sudah punya satker atau
+  pemda di bawahnya (lebih ketat dari "ke tataran lain" — penggantian jenis
+  juga mengubah aturan induknya).
+- POST instansi berjenis `perorangan` ditolak — perorangan selalu di wadah.
+- `GET /luar/referensi` mengembalikan `kunci_ikon`; isi `ikon_kelompok.json`
+  menyusul di PGW-08.
+- Belum ada `Idempotency-Key`: catatan direktori bukan dokumen resmi, dan
+  kirim ulang ditolak oleh pemeriksa nama kembar dengan menunjuk id yang ada.
+- "Dirujuk transaksi" pada hapus belum diperiksa (rujukannya baru lahir di
+  PGW-10/11); hapus instansi kini 409 bila masih punya orang atau pemda di
+  bawahnya, dan satker kosong ikut terhapus.
 
 ---
 

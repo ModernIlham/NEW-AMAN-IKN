@@ -440,6 +440,48 @@ async def create_indexes() -> None:
         await _idx(db.pejabat, "id", unique=True)
         await _idx(db.ruangan, "id", unique=True)
         await _idx(db.unit_kerja, "id", unique=True)
+        # Direktori pegawai LUAR (instansi eksternal & pihak ketiga) — satu
+        # direktori untuk seluruh instansi, tanpa kode_satker (rencana 5.5).
+        # Percobaan unik ditulis mentah di dalam try, sesuai peringatan _idx.
+        for kol in ("instansi_luar", "satker_luar", "unit_kerja_luar",
+                    "pegawai_luar"):
+            await _idx(db[kol], "id", unique=True)
+        # induk_id ikut kunci: nama desa berulang antar-kabupaten.
+        for koll, kunci, nama in (
+                (db.instansi_luar,
+                 [("kelompok", 1), ("induk_id", 1), ("nama_kunci", 1)],
+                 "unique_nama_instansi_luar"),
+                (db.satker_luar, [("instansi_id", 1), ("nama_kunci", 1)],
+                 "unique_nama_satker_luar")):
+            try:
+                await koll.create_index(kunci, unique=True, name=nama)
+            except Exception:
+                await _idx(koll, kunci, name=f"{nama}_lookup")
+        try:
+            await db.instansi_luar.create_index(
+                [("kelompok", 1), ("kode_referensi", 1)], unique=True,
+                name="unique_kode_instansi_luar",
+                partialFilterExpression={"kode_referensi": {"$gt": ""}})
+        except Exception:
+            await _idx(db.instansi_luar, [("kelompok", 1), ("kode_referensi", 1)],
+                       name="kode_instansi_luar_lookup")
+        try:
+            await db.satker_luar.create_index(
+                [("instansi_id", 1), ("kode_luar", 1)], unique=True,
+                name="unique_kode_satker_luar",
+                partialFilterExpression={"kode_luar": {"$gt": ""}})
+        except Exception:
+            await _idx(db.satker_luar, [("instansi_id", 1), ("kode_luar", 1)],
+                       name="kode_satker_luar_lookup")
+        await _idx(db.instansi_luar,
+                   [("kelompok", 1), ("tataran", 1), ("jenis", 1), ("nama", 1)])
+        await _idx(db.instansi_luar, "induk_id")
+        await _idx(db.instansi_luar, [("provinsi_id", 1), ("jenis", 1), ("nama", 1)])
+        await _idx(db.unit_kerja_luar, "satker_luar_id")
+        await _idx(db.pegawai_luar, "instansi_id")
+        await _idx(db.pegawai_luar, [("kelompok", 1), ("satker_luar_id", 1), ("nama", 1)])
+        await _idx(db.pegawai_luar, [("kelompok", 1), ("tataran", 1), ("nama", 1)])
+        await _idx(db.pegawai_luar, [("provinsi_id", 1), ("nama", 1)])
         # Register impor SIMAN: riwayat terbaru dulu.
         await _idx(db.siman_imports, "waktu")
         # Register e-sign: daftar per pembuat, terbaru dulu.
