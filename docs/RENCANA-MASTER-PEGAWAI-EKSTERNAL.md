@@ -1054,7 +1054,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-05 | Unit kerja luar (backend) | 03 | **selesai** | #1119 |
 | PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | **selesai** | #1120 |
 | PGW-07 | Layar Master Pegawai | 03, 04, 05 | **selesai** | #1121 |
-| PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **08a selesai**; 08b belum | #1122 (08a) |
+| PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a), #1123 (08b) |
 | PGW-09 | Laporan & dokumen | 06 | belum | |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | belum | |
 | PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | belum | |
@@ -1666,6 +1666,29 @@ Nama berkas 7.3 dicocokkan ulang: semuanya ada. Penyesuaian:
   `pihak_pertama`, dan juga dicocokkan lewat NIP.
 - `PERMUKAAN_IKON` memuat yang sudah terpasang; sisanya di
   `PERMUKAAN_IKON_MENYUSUL` (08b/11) dan uji menagih keduanya tercatat.
+- Belum: periksa skala abu-abu, terang/gelap, HP/desktop di peramban.
+
+
+**Hasil 08b (2026-11-11):** `TombolOrangLuar.jsx` — pintu ke direktori orang
+luar dari pemilih yang sudah ada — dipasang di Persediaan (penerima tunggal
+& massal), Pemeliharaan (pelaksana & pihak BAPP), TTD (penanda tangan), dan
+tim peneliti/pendukung kegiatan (`dari_satker`/`dari_pihak` terisi
+instansinya). Ikon di daftar & kartu aset, field sheet, edit massal, popup
+peta, jejak audit (`pengguna_nip`), riwayat SPPB, baris penanda tangan, dan
+temuan Wasdal. Penyesuaian:
+- Registry: daftar/kartu aset dirender `VirtualizedAssetTable.jsx` dan
+  `AssetGalleryCard.jsx` — `DashboardPage.jsx` sendiri tak menampilkan
+  pengguna, jadi dicoret dari registry. Pemanfaatan, Pemindahtanganan, dan
+  Pengadaan tetap di `PERMUKAAN_IKON_MENYUSUL` untuk PGW-11.
+- Popup peta dibangun Leaflet sebagai DOM mentah, bukan React: memakai
+  `svgIkonKelompok` dari `kelompokOrang.js` (sumber gambar sama); uji
+  permukaan menerima impor itu sebagai pengganti `IkonKelompok`.
+- `IkonKelompok` dengan `nomor` menunda pertanyaan 400 ms selama nomornya
+  diketik (jawaban tersimpan tetap tampil seketika) — tanpa ini isian NIP
+  mengirim satu permintaan per ketukan, padahal batasnya 60/menit.
+- Pelaksana pemeliharaan tercatat sebagai teks tanpa NIP, jadi ikonnya hanya
+  tampil selama form terbuka; daftar pemeliharaan tetap tanpa ikon.
+- Snapshot penerima persediaan menambah `penerima_tataran` (pusat ≠ daerah).
 - Belum: periksa skala abu-abu, terang/gelap, HP/desktop di peramban.
 
 ---
