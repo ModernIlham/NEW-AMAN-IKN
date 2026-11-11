@@ -886,7 +886,7 @@ export default function PegawaiPage({ user, onBack, wajibPilihKelompok = false }
           </div>
         </div>
         {kelompok && (
-          <div className="max-w-5xl mx-auto px-3 sm:px-6 pb-2">
+          <div className="max-w-5xl mx-auto mt-2">
             <PilihKelompok kelompok={kelompok} tataran={tataran} cacah={cacahBilah}
               onKelompok={gantiKelompok} onTataran={gantiTataran} />
           </div>
@@ -916,7 +916,7 @@ export default function PegawaiPage({ user, onBack, wajibPilihKelompok = false }
             <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
               <Input value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari nama / NIP / jabatan / unit / email…" className="pl-9 h-10" data-testid="pegawai-search" />
+                placeholder={luar ? "Cari nama / NIP/NIK / jabatan…" : "Cari nama / NIP / jabatan / unit / email…"} className="pl-9 h-10" data-testid="pegawai-search" />
             </div>
             {isAdmin && (
               <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.csv" className="hidden"

@@ -95,7 +95,7 @@ export default function BilahLingkupLuar({ kelompok, tataran, lingkup, onUbah,
   return (
     <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3 space-y-2"
       data-testid="pegawai-bilah-lingkup">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-1.5 ${daerah ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
         {daerah && (
           <select value={provinsiId} onChange={(e) => pilihProvinsi(e.target.value)}
             aria-label="Provinsi" className={KELAS_PILIH} data-testid="lingkup-provinsi">

@@ -45,7 +45,7 @@ export default function PilihKelompok({ kelompok, tataran, cacah = {}, onKelompo
         role="group" aria-label="Kelompok pegawai">
         {KELOMPOK.filter((k) => !hanyaLuar || k.kunci !== "internal").map((k) => (
           <Pilihan key={k.kunci} besar={besar} aktif={kelompok === k.kunci}
-            onClick={() => onKelompok(k.kunci)} kunci={kunciIkon(k.kunci, tataran)}
+            onClick={() => onKelompok(k.kunci)} kunci={kunciIkon(k.kunci)}
             label={besar ? k.label : k.ringkas}
             n={cacah[k.kunci]} testId={`${awalanTestId}-kelompok-${k.kunci}`} />
         ))}
