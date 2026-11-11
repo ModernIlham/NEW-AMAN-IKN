@@ -658,3 +658,164 @@ def test_nama_TANPA_nomor_berlabel_belum_terdaftar_seperti_nomor_tak_terdaftar(d
     assert d["pengguna_ringkas"]["jumlah_tanpa_nomor"] == 2
     assert "2 di antaranya tanpa NIP/NIK" in blok
     assert "1 di antaranya memiliki nomor yang belum terdaftar" in blok
+
+
+# ── PGW-09: ikon kelompok & pembagi pengguna luar ───────────────────────
+import json as _json
+import re as _re
+from pathlib import Path as _Path
+
+#: Potret baris sebelum PGW-09 (kode `main` sebelum paket), seluruh pengguna
+#: internal: (nama, depth, daun, NUP, nilai, bar_pct). Sesudah paket hanya
+#: boleh bertambah ikon & legenda — urutan dan isi barisnya tetap.
+POTRET_SEBELUM_PGW09 = [
+    ["SEKRETARIAT JENDERAL", 0, False, 9, 29000.0, None],
+    ["BIRO UMUM", 1, False, 7, 25000.0, None],
+    ["BAGIAN PERLENGKAPAN", 2, False, 3, 9000.0, None],
+    ["Siti Aminah", 3, True, 3, 9000.0, 75],
+    ["BAGIAN RUMAH TANGGA", 2, False, 4, 16000.0, None],
+    ["Budi Santoso", 3, True, 4, 16000.0, 100],
+    ["BIRO KEUANGAN", 1, False, 2, 4000.0, None],
+    ["BAGIAN AKUNTANSI", 2, False, 2, 4000.0, None],
+    ["Andi Wijaya", 3, True, 2, 4000.0, 50],
+    ["DIREKTORAT JENDERAL A", 0, False, 1, 1000.0, None],
+    ["DIREKTORAT B", 1, False, 1, 1000.0, None],
+    ["SUBDIREKTORAT C", 2, False, 1, 1000.0, None],
+    ["Rina Marlina", 3, True, 1, 1000.0, 25],
+    ["(tanpa unit organisasi)", 0, False, 3, 400.0, None],
+    ["Tanpa Pengguna / NIP", 1, True, 2, 200.0, None],
+    ["Pegawai Luar Master", 1, True, 1, 200.0, None],
+]
+
+#: (nip, nama, kelompok, tataran, provinsi, instansi, satker, eselon1, aset)
+ORANG_LUAR = [
+    ("7001", "Agus Kementerian", "eksternal", "pusat", "", "Kementerian PUPR",
+     "Balai Prasarana Kaltim", "DITJEN CIPTA KARYA", 2),
+    ("7002", "Dewi Pemda", "eksternal", "daerah", "Provinsi Kalimantan Timur",
+     "Kabupaten Penajam Paser Utara", "Dinas Pekerjaan Umum", "SEKRETARIAT DAERAH", 3),
+    ("7003", "Eka Mitra", "pihak_ketiga", "", "", "PT Mitra Konstruksi",
+     "Kantor Cabang Balikpapan", "", 1),
+]
+
+
+def _seed_luar(fake):
+    async def isi():
+        n = 100
+        for nip, nama, kel, tat, prov, ins, sat, e1, banyak in ORANG_LUAR:
+            await fake.pegawai_luar.insert_one({
+                "id": f"l{nip}", "nip": nip, "nama": nama, "jabatan": "Staf",
+                "kelompok": kel, "tataran": tat, "provinsi_nama": prov,
+                "instansi_nama": ins, "satker_luar_nama": sat, "eselon1": e1})
+            for _ in range(banyak):
+                n += 1
+                await fake.assets.insert_one(
+                    {"id": f"L{n}", "activity_id": "k1", "asset_name": "Genset",
+                     "asset_code": "3050104009", "NUP": str(n),
+                     "purchase_price": 5000, "purchase_date": "2023-01-01",
+                     "pengguna_nip": nip, "user": nama, "eselon1": e1,
+                     "inventory_status": "Belum Diinventarisasi"})
+    _jalan(isi())
+
+
+def test_seluruh_internal_baris_SAMA_dengan_sebelum_PGW09(dbx):
+    d = _data(dbx, tanpa_nip=2, tak_terdaftar=1)
+    assert [[b["name"], b["depth"], bool(b.get("daun")), b["count"], b["value"],
+             b.get("bar_pct")] for b in d["pengguna_hier"]] == POTRET_SEBELUM_PGW09
+    assert d["pengguna_total"] == {"count": 13, "value": 30400.0}
+    ikon = {b["name"]: b.get("kunci_ikon") for b in d["pengguna_hier"] if b.get("daun")}
+    assert ikon["Budi Santoso"] == "internal"
+    # Tak terdaftar / tanpa nomor: tanpa ikon.
+    assert not ikon["Pegawai Luar Master"] and not ikon["Tanpa Pengguna / NIP"]
+
+
+def test_pengguna_luar_dibagi_TERSENDIRI_sesudah_internal(dbx):
+    _jalan(_seed(dbx))
+    _seed_luar(dbx)
+    d = _jalan(rp._build_executive_summary_data("k1", with_asset_rows=False))
+    baris = d["pengguna_hier"]
+    nama = [b["name"] for b in baris]
+    i_pusat = nama.index("Instansi Eksternal — Pusat")
+    assert all(not b.get("kunci_ikon") or b["kunci_ikon"] == "internal"
+               for b in baris[:i_pusat]), "pengguna luar bocor ke pohon internal"
+    assert "DITJEN CIPTA KARYA" not in nama and "SEKRETARIAT DAERAH" not in nama
+    rantai = [(b["name"], b["depth"]) for b in baris[i_pusat:]]
+    assert rantai == [
+        ("Instansi Eksternal — Pusat", 0), ("Kementerian PUPR", 1),
+        ("Balai Prasarana Kaltim", 2), ("Agus Kementerian", 3),
+        ("Instansi Eksternal — Daerah", 0), ("Provinsi Kalimantan Timur", 1),
+        ("Kabupaten Penajam Paser Utara", 2), ("Dinas Pekerjaan Umum", 3),
+        ("Dewi Pemda", 4),
+        ("Pihak Ketiga", 0), ("PT Mitra Konstruksi", 1),
+        ("Kantor Cabang Balikpapan", 2), ("Eka Mitra", 3)]
+    ikon = {b["name"]: b.get("kunci_ikon") for b in baris if b.get("daun")}
+    assert (ikon["Agus Kementerian"], ikon["Dewi Pemda"], ikon["Eka Mitra"]) == (
+        "eksternal_pusat", "eksternal_daerah", "pihak_ketiga")
+    # Tiap kelompok luar berbatang pada daunnya sendiri (kedalaman berbeda).
+    batang = {b["name"]: b.get("bar_pct") for b in baris if b.get("daun")}
+    assert batang["Agus Kementerian"] and batang["Dewi Pemda"] and batang["Eka Mitra"]
+    # Total tidak berubah: seluruh aset tetap terhitung tepat sekali.
+    assert d["pengguna_total"]["count"] == d["total_count"] == 10 + 6
+    assert d["pengguna_ringkas"]["jumlah_tak_terdaftar"] == 0
+
+
+def test_tiap_ikon_di_HTML_punya_title_dan_ada_legenda(dbx):
+    _jalan(_seed(dbx, tak_terdaftar=1))
+    _seed_luar(dbx)
+    d = _jalan(rp._build_executive_summary_data("k1", with_asset_rows=False))
+    html = rp._jinja_env().get_template("executive_summary.html").render(preview=False, **d)
+    svgs = _re.findall(r"<svg class=\"ikon-kelompok\".*?</svg>", html, flags=_re.S)
+    assert svgs, "ikon kelompok tidak tercetak"
+    assert all("<title>" in s for s in svgs)
+    assert "data-ikon-legenda" in html
+    for alt in ("Pegawai internal", "Pegawai kementerian/lembaga", "Pegawai pemda",
+                "Pihak ketiga"):
+        assert f"<title>{alt}</title>" in html
+    # Ikon menempel di BARIS penggunanya, bukan hanya di legenda.
+    for nama, alt in (("Budi Santoso", "Pegawai internal"), ("Dewi Pemda", "Pegawai pemda"),
+                      ("Eka Mitra", "Pihak ketiga")):
+        sel = html.split(nama, 1)[1].split("</td>", 1)[0]
+        assert f"<title>{alt}</title>" in sel, nama
+    # Pengguna tak terdaftar: label tetap, tanpa ikon di barisnya.
+    baris_luar = html.split("Pegawai Luar Master", 1)[1].split("</td>", 1)[0]
+    assert "(belum terdaftar)" in baris_luar and "ikon-kelompok" not in baris_luar
+
+
+def test_tak_ada_templat_LAIN_yang_memuat_gambar_ikon_kelompok():
+    data = _json.loads((_Path(rp.__file__).resolve().parents[1] / "data"
+                        / "ikon_kelompok.json").read_text(encoding="utf-8"))
+    jejak = {attrs["d"] for d in data["ikon"].values() for tag, attrs in d["elemen"]
+             if "d" in attrs and len(attrs["d"]) > 12}
+    folder = _Path(TPL).resolve().parent
+    for f in folder.rglob("*"):
+        if not f.is_file() or f.name == "executive_summary.html":
+            continue
+        teks = f.read_text(encoding="utf-8", errors="ignore")
+        assert "ikon-kelompok" not in teks and "ikon_svg" not in teks, f.name
+        assert not any(j in teks for j in jejak), f.name
+
+
+def test_PDF_benar_benar_menggambar_ikon_dan_legenda(dbx):
+    """Uji render nyata (WeasyPrint): keempat warna ikon tergambar di
+    halaman Distribusi Per Pengguna — bukan sekadar ada di HTML."""
+    import pypdfium2 as pdfium
+    from weasyprint import HTML
+
+    _jalan(_seed(dbx))
+    _seed_luar(dbx)
+    d = _jalan(rp._build_executive_summary_data("k1", with_asset_rows=False))
+    html = rp._jinja_env().get_template("executive_summary.html").render(preview=False, **d)
+    pdf_bytes = HTML(string=html, base_url=os.path.dirname(TPL)).write_pdf()
+    warna = {k: tuple(int(v["hex"][i:i + 2], 16) for i in (1, 3, 5))
+             for k, v in _json.loads((_Path(rp.__file__).resolve().parents[1] / "data"
+                                      / "ikon_kelompok.json").read_text("utf-8"))["ikon"].items()}
+    with pdfium.PdfDocument(pdf_bytes) as pdf:
+        halaman = [p for p in pdf if "Distribusi Per Pengguna" in p.get_textpage().get_text_range()]
+        assert halaman
+        teks = halaman[0].get_textpage().get_text_range()
+        assert "Keterangan ikon" in teks and "Instansi Eksternal" in teks
+        img = halaman[0].render(scale=3).to_pil().convert("RGB")
+        px = list(img.getdata())
+        for k, (r, g, b) in warna.items():
+            dekat = sum(1 for (x, y, z) in px
+                        if abs(x - r) < 40 and abs(y - g) < 40 and abs(z - b) < 40)
+            assert dekat > 15, f"ikon {k} tak tergambar ({dekat} piksel)"

@@ -105,7 +105,9 @@ async def _data_pemantauan(ambang_hari: int, user=None):
         {"nip": {"$nin": ["", None]}},
         {"_id": 0, "id": 1, "nama": 1, "nip": 1, "status": 1,
          "tgl_selesai_kontrak": 1, "tanggal_meninggal": 1,
-         "pemberitahuan_ahli_waris_tanggal": 1})
+         "pemberitahuan_ahli_waris_tanggal": 1,
+         # PGW-09: temuan menyebut kelompok + instansinya.
+         "kelompok": 1, "tataran": 1, "instansi_nama": 1})
         if str(p.get("nip") or "").strip() not in _nip_internal]
     peta_aset_nip = await _jumlah_aset_per_nip(user)
     # Integrasi Pengamanan → Wasdal: dokumen kepemilikan (STNK/pajak/IMB)

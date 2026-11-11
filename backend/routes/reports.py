@@ -18,6 +18,7 @@ import laporan_tataletak as ltl
 import laporan_jenjang as ljj
 import laporan_blok as lbk
 import laporan_kolom as lkl
+import ikon_kelompok
 import laporan_linimasa as llm
 import kodefikasi_utils as kod
 import data_aset_pdf as dap
@@ -5639,7 +5640,25 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         nip_p = str(_p.get("nip") or "").strip()
         if nip_p:
             peg_master[nip_p] = _p
+    # Orang luar (PGW-09): direktori bersama tanpa scope, hanya untuk NIP yang
+    # tak dikenali Master Pegawai satker kegiatan (internal menang).
+    _sisa_nip = [n for n in _nip_dipakai if n not in peg_master]
+    if _sisa_nip:
+        async for _p in db.pegawai_luar.find(
+                {"nip": {"$in": _sisa_nip}},
+                {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1, "jabatan": 1,
+                 "kelompok": 1, "tataran": 1, "instansi_nama": 1,
+                 "satker_luar_nama": 1, "provinsi_nama": 1}):
+            nip_p = str(_p.get("nip") or "").strip()
+            if nip_p:
+                peg_master[nip_p] = _p
     pengguna_rows, pengguna_ringkas = distribusi_pengguna(all_assets, peg_master)
+    # Pengguna luar dibagi tersendiri SESUDAH pengguna internal; jalur eselon
+    # organisasi lain tak dilebur ke pohon satker ini.
+    _peg_luar = [r for r in pengguna_rows
+                 if r.get("kelompok") in ("eksternal", "pihak_ketiga")]
+    pengguna_rows = [r for r in pengguna_rows
+                     if r.get("kelompok") not in ("eksternal", "pihak_ketiga")]
     # ── Pengguna DIBAGI menurut jalur eselon unit kerjanya ──────────────
     #
     # Permintaan pemilik: *"pada bagian unit kerja menjadi pembagi row langsung
@@ -5661,9 +5680,17 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     pengguna_hier = ljj.baris_hierarki_pengguna(
         [{**r, "nama": (r["nama"] or ""), "jabatan": (r["jabatan"] or "")}
          for r in pengguna_rows], _peg_levels)
+    ljj.tandai_batang_daun(pengguna_hier)
+    _hier_luar = ljj.baris_hierarki_pengguna_luar(_peg_luar)
+    # Batang ditandai PER kelompok luar: kedalaman daunnya berbeda (Daerah
+    # punya satu jenjang lebih), dan menandai sekaligus hanya memberi batang
+    # pada kelompok yang terdalam.
+    _awal = [i for i, b in enumerate(_hier_luar) if b["depth"] == 0] + [len(_hier_luar)]
+    for _a, _z in zip(_awal, _awal[1:]):
+        ljj.tandai_batang_daun(_hier_luar[_a:_z])
+    pengguna_hier = pengguna_hier + _hier_luar
     for b in pengguna_hier:
         b["value_fmt"] = fmt(b["value"])
-    ljj.tandai_batang_daun(pengguna_hier)
     pengguna_jenjang_label = [_LABEL_ESELON.get(lv, str(lv))
                               for lv in _peg_levels] + ["Pengguna"]
     pengguna_total = {
@@ -6017,7 +6044,7 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     rencana_lok = lkl.rencana_kolom(loc_hier, _teks_nama)
     rencana_peg = lkl.rencana_kolom(
         pengguna_hier, lkl.tinggi_pengguna,
-        catatan_px=lkl.tinggi_catatan(catatan_pengguna))
+        catatan_px=lkl.tinggi_catatan(catatan_pengguna) + lkl.TINGGI_LEGENDA_IKON)
     cat_pages = len(rencana_kat["halaman"])
     loc_pages = len(rencana_lok["halaman"])
     peg_pages = len(rencana_peg["halaman"])
@@ -6133,6 +6160,9 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
         "jalur_induk": lkl.jalur_induk,
         "rencana_kat": rencana_kat, "rencana_lok": rencana_lok,
         "rencana_peg": rencana_peg,
+        # Ikon kelompok pengguna (PGW-09) — dari data/ikon_kelompok.json.
+        "ikon_svg": ikon_kelompok.peta_svg(8),
+        "legenda_ikon": ikon_kelompok.legenda(8),
         "cat_hier": cat_hier, "cat_hier_total": cat_hier_total,
         "kat_jenjang_label": [kod.LEVEL_LABELS[lv]
                               for lv in KAT_JENJANG_EKSEKUTIF],
@@ -7592,6 +7622,25 @@ async def laporan_satker_pdf(request: Request, activity_id: str,
 # DAFTAR PEMEGANG ASET — dokumen pendukung per kegiatan
 # ============================================================================
 
+
+async def _unit_luar_pemegang(activity, rekap) -> dict:
+    """{nip: "instansi — satker — unit"} untuk pemegang orang luar (PGW-09).
+    Internal menang (Master Pegawai satker kegiatan); internal tak berubah."""
+    import direktori_pegawai as dp
+    ks = str((activity or {}).get("kode_satker") or "").strip()
+
+    def scope(q):
+        return {**q, "kode_satker": {"$in": [ks, "", None]}} if ks else q
+    return await dp.unit_orang_luar_per_nip([p.get("nip") for p in rekap], scope,
+                                            database=db)
+
+
+def _jabatan_pemegang(p, unit_luar, esc, pemisah) -> str:
+    """Sel Jabatan; pemegang orang luar ditambah instansinya (label_unit_orang)."""
+    jab = esc(str(p.get("jabatan") or "-"))
+    unit = unit_luar.get(str(p.get("nip") or "").strip())
+    return f"{jab}{pemisah}{esc(unit)}" if unit else jab
+
 @reports_router.get("/inventory-activities/{activity_id}/daftar-pemegang-pdf")
 async def generate_daftar_pemegang_pdf(activity_id: str,
                                        _user: dict = Depends(require_user_or_query_token)):
@@ -7620,6 +7669,7 @@ async def generate_daftar_pemegang_pdf(activity_id: str,
     ), 100000, "Data aset laporan")
     rekap = rekap_pemegang(assets)
     tanpa_pemegang = [a for a in assets if kunci_pemegang(a) is None]
+    unit_luar = await _unit_luar_pemegang(activity, rekap)
 
     # Rincian aset per pemegang — kunci sama dengan rekap_pemegang
     per_kunci = {}
@@ -7657,7 +7707,7 @@ async def generate_daftar_pemegang_pdf(activity_id: str,
             Paragraph(escape(str(p["nama"])), cell),
             Paragraph(escape(str(p["nip"] or "-")), cellc),
             Paragraph(escape(str(p["melekat_ke"] or "-")), cellc),
-            Paragraph(escape(str(p["jabatan"] or "-")), cell),
+            Paragraph(_jabatan_pemegang(p, unit_luar, escape, "<br/>"), cell),
             Paragraph(str(p["jumlah_aset"]), cellc),
             Paragraph(f"{p['jumlah_bast']}/{p['jumlah_aset']}", cellc),
             Paragraph("Lengkap" if p["lengkap"] else "Belum", cellc),
@@ -7757,6 +7807,7 @@ async def generate_daftar_pemegang_docx(activity_id: str, _user: dict = Depends(
     ), 100000, "Data aset laporan")
     rekap = rekap_pemegang(assets)
     tanpa_pemegang = [a for a in assets if kunci_pemegang(a) is None]
+    unit_luar = await _unit_luar_pemegang(activity, rekap)
     per_kunci = {}
     for a in assets:
         k = kunci_pemegang(a)
@@ -7774,7 +7825,7 @@ async def generate_daftar_pemegang_docx(activity_id: str, _user: dict = Depends(
                f"menghitung dokumen BAST TERUNGGAH per aset.", size=9, space_before=4)
 
     rows_a = [[str(i), p["nama"], str(p["nip"] or "-"), str(p["melekat_ke"] or "-"),
-               str(p["jabatan"] or "-"), str(p["jumlah_aset"]),
+               _jabatan_pemegang(p, unit_luar, str, "\n"), str(p["jumlah_aset"]),
                f"{p['jumlah_bast']}/{p['jumlah_aset']}",
                "Lengkap" if p["lengkap"] else "Belum"]
               for i, p in enumerate(rekap, 1)]

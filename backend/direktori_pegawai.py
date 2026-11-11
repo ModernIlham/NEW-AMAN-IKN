@@ -135,3 +135,22 @@ async def orang_luar_per_nip(nips, proyeksi=None, database=None) -> dict:
         if n in nomor and n not in hasil:
             hasil[n] = tandai_luar(p)
     return hasil
+
+
+async def unit_orang_luar_per_nip(nips, scope_internal=None, database=None) -> dict:
+    """{nip: "instansi — satker — unit"} untuk nomor yang BUKAN pegawai
+    internal (internal menang; `scope_internal` sama dengan `cari_orang`).
+
+    Bahan kolom unit dokumen pemegang (PGW-09): orang luar disebut bersama
+    instansinya, bukan hanya unit kerjanya yang tak bermakna tanpa itu."""
+    from organisasi_luar_utils import label_unit_orang
+    d = _db(database)
+    nomor = _bersihkan_nomor(nips)
+    if not nomor:
+        return {}
+    q = {"nip": {"$in": nomor}}
+    internal = {str(p.get("nip") or "").strip() async for p in d.pegawai.find(
+        scope_internal(dict(q)) if scope_internal else q, {"_id": 0, "nip": 1})}
+    sisa = [n for n in nomor if n not in internal]
+    luar = await orang_luar_per_nip(sisa, database=d) if sisa else {}
+    return {n: label_unit_orang(p) for n, p in luar.items() if label_unit_orang(p)}

@@ -173,6 +173,24 @@ def temuan_pemanfaatan(items, today_iso: str):
     return out
 
 
+_SEBUTAN_KELOMPOK_LUAR = {
+    ("eksternal", "pusat"): "Instansi Eksternal (Pusat)",
+    ("eksternal", "daerah"): "Instansi Eksternal (Daerah)",
+    ("pihak_ketiga", ""): "Pihak Ketiga",
+}
+
+
+def _sebut_orang_luar(peg) -> str:
+    """"Pihak Ketiga — PT X" untuk orang luar; "" untuk pegawai internal."""
+    kel = str((peg or {}).get("kelompok") or "").strip()
+    if kel not in ("eksternal", "pihak_ketiga"):
+        return ""
+    tat = str(peg.get("tataran") or "").strip() if kel == "eksternal" else ""
+    sebut = _SEBUTAN_KELOMPOK_LUAR.get((kel, tat or ("pusat" if kel == "eksternal" else "")), "")
+    instansi = str(peg.get("instansi_nama") or "").strip()
+    return " \u2014 ".join(x for x in (sebut, instansi) if x)
+
+
 def temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip, today_iso: str):
     """Objek PENGGUNAAN: pegawai BERISIKO (keluar/pensiun/mutasi/nonaktif/
     kontrak Non-ASN habis) yang MASIH tercatat memegang aset — perlu serah
@@ -186,7 +204,13 @@ def temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip, today_iso: str):
     jo. PP 38/2016) yang ikut dilampirkan agar terlihat di dasbor.
 
     `asset_name` diisi nama pegawai agar tampil bermakna di kolom nama
-    dasbor/laporan (temuan ini per-pemegang, bukan per-aset)."""
+    dasbor/laporan (temuan ini per-pemegang, bukan per-aset).
+
+    Orang luar (PGW-09): temuan menyebut kelompok + instansinya. Bagi pihak
+    ketiga temuannya bertumpu pada `status` orangnya — field kontraknya
+    nonaktif (3.7c), jadi tak ada "kontrak habis" yang bisa dibaca. Jam 3
+    tahun pemberitahuan ahli waris adalah rezim tuntutan ganti rugi pegawai
+    negeri, jadi tidak dilampirkan pada orang luar (PGW-00, pustaka §2.4d)."""
     # Peta id/NIP → dokumen pegawai (butuh tanggal wafat & tanggal pemberitahuan
     # yang tak dibawa oleh pegawai_perlu_serah_terima).
     peta = {}
@@ -197,8 +221,14 @@ def temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip, today_iso: str):
     out = []
     for h in pegawai_perlu_serah_terima(pegawai, jumlah_aset_per_nip,
                                         today_iso):
+        peg = peta.get(str(h.get("id") or "")) or peta.get(str(h.get("nip") or "")) or {}
+        luar = _sebut_orang_luar(peg)
         dasar = (f"{h.get('jumlah_aset')} aset masih dipegang — "
                  f"{h.get('alasan')}")
+        if luar:
+            dasar = f"{luar}: {dasar}"
+        tambahan = ({"kelompok": peg.get("kelompok"), "tataran": peg.get("tataran") or "",
+                     "instansi_nama": peg.get("instansi_nama") or ""} if luar else {})
         if str(h.get("status") or "") != "meninggal":
             out.append({
                 "jenis": "pemegang_berisiko_keluar",
@@ -206,10 +236,10 @@ def temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip, today_iso: str):
                 "nip": h.get("nip"),
                 "asset_name": h.get("nama"),
                 "detail": dasar,
+                **tambahan,
             })
             continue
-        peg = peta.get(str(h.get("id") or "")) or peta.get(str(h.get("nip") or "")) or {}
-        jam = info_kewajiban_ahli_waris(peg, today_iso)
+        jam = {} if luar else info_kewajiban_ahli_waris(peg, today_iso)
         detail = dasar
         if jam.get("berlaku"):
             detail = (f"{h.get('jumlah_aset')} aset masih dipegang — meninggal "
@@ -228,6 +258,7 @@ def temuan_pemegang_berisiko(pegawai, jumlah_aset_per_nip, today_iso: str):
             "tingkat": jam.get("tingkat", ""),
             "sisa_hari_lapor": jam.get("sisa_hari"),
             "batas_lapor": jam.get("batas_lapor", ""),
+            **tambahan,
         })
     return out
 

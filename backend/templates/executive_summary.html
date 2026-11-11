@@ -379,6 +379,11 @@
         .lanjutan-jalur { font-size: 6px; color: #94a3b8; padding: 0 0 2px 2px; }
         .chart-note { font-weight: 500; color: #94a3b8; text-transform: none; letter-spacing: 0; }
         .dist-catatan { margin-top: 6px; font-size: 7px; color: #64748b; }
+        /* Ikon kelompok pengguna (PGW-09) — satu-satunya naskah berikon (K10). */
+        .ikon-kelompok { display: inline-block; vertical-align: -1px; margin-left: 2px; }
+        .ikon-legenda { display: flex; gap: 10px; font-size: 6.5px; color: #475569; margin: 0 0 4px 2px; white-space: nowrap; }
+        .ikon-legenda span { display: flex; align-items: center; gap: 2px; }
+        .ikon-legenda .ikon-kelompok { margin-left: 0; }
         .hier-table .summary-row td { background: #0f172a; color: #fff; font-weight: 700; font-size: 7px; padding: 3px 8px; border: none; }
         .hier-table .summary-row td.r { text-align: right; }
         .hier-legend { display: flex; gap: 12px; font-size: 6px; color: #64748b; margin: -2px 0 4px 2px; }
@@ -746,7 +751,7 @@
    berbeda pendapat dengan penghitung halaman, dan "Hal 2 dari 3" pada kop lalu
    berbohong tanpa satu pun galat. #}
 {% macro sel_dist(b, jenis, batang, gabung) -%}
-<td class="hier-name" style="padding-left:{{ (4 if gabung else 6) + b.depth * (6 if gabung else 11) }}px">{% if jenis == 'pengguna' and b.daun %}{{ b.name }}{% if gabung %}<span class="sel-nip-gabung">{{ b.nip if b.nip else '—' }}</span>{% endif %}{% if not b.terdaftar and not b.tanpa_pengguna %} <span class="tag-warn">(belum terdaftar)</span>{% endif %}{% else %}{{ b.name }}{% endif %}</td>
+<td class="hier-name" style="padding-left:{{ (4 if gabung else 6) + b.depth * (6 if gabung else 11) }}px">{% if jenis == 'pengguna' and b.daun %}{{ b.name }}{% if b.kunci_ikon and ikon_svg %}{{ ikon_svg[b.kunci_ikon]|safe }}{% endif %}{% if gabung %}<span class="sel-nip-gabung">{{ b.nip if b.nip else '—' }}</span>{% endif %}{% if not b.terdaftar and not b.tanpa_pengguna %} <span class="tag-warn">(belum terdaftar)</span>{% endif %}{% else %}{{ b.name }}{% endif %}</td>
 {%- if jenis == 'pengguna' %}
 {%- if not gabung %}<td class="sel-nip">{% if b.daun %}{{ b.nip if b.nip else '—' }}{% endif %}</td>{% endif %}
 <td class="hier-name sel-jabatan">{% if b.daun %}{{ b.jabatan if b.jabatan else '—' }}{% endif %}</td>
@@ -801,6 +806,12 @@
             <span><i class="sw-d{{ [loop.index0, 5]|min }}"></i>{{ lb }}</span>
             {% endfor %}
         </div>
+        {% if jenis == 'pengguna' and legenda_ikon %}
+        {#- Keterangan ikon kelompok: tetap terbaca bila dicetak hitam-putih
+            (dibedakan bentuk). Tingginya ikut dikurangkan penghitung halaman
+            (`laporan_kolom.TINGGI_LEGENDA_IKON`). -#}
+        <div class="ikon-legenda" data-ikon-legenda>Keterangan ikon:{% for l in legenda_ikon %}<span>{{ l.svg|safe }}{{ l.alt }}</span>{% endfor %}</div>
+        {% endif %}
         {% if rencana.kolom == 1 %}
         {{ tabel_dist(baris, awal, akhir, jenis, rencana.batang, false, judul_kolom, kelas) }}
         {% else %}
