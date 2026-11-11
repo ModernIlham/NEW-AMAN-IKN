@@ -159,7 +159,7 @@ def test_bersihkan_satker_menurunkan_dari_instansi_bukan_klien():
     assert (hasil["kelompok"], hasil["tataran"], hasil["instansi_id"]) == \
         ("eksternal", "daerah", "k1")
     assert hasil["provinsi_nama"] == "Prov. Y"
-    assert hasil["kode_satker"] == ""
+    assert "kode_satker" not in hasil              # invarian 6
 
 
 def test_validate_satker_wajib_instansi():
@@ -179,8 +179,11 @@ def test_kesetaraan_skema_field_nonaktif_ada_di_pegawai_in():
 def test_eksternal_hanya_mengosongkan_pribadi_dan_field_pihak_ketiga():
     masuk = {**_orang_penuh(), **{f: "isi" for f in FIELD_KHUSUS_PIHAK_KETIGA}}
     keluar = olu.sesuaikan_orang_luar(masuk, "eksternal", "kementerian_lembaga")
-    dikosongkan = set(FIELD_PRIBADI_LUAR) | set(FIELD_KHUSUS_PIHAK_KETIGA) | {"kode_satker"}
+    dikosongkan = set(FIELD_PRIBADI_LUAR) | set(FIELD_KHUSUS_PIHAK_KETIGA)
+    assert "kode_satker" not in keluar             # invarian 6
     for k, v in masuk.items():
+        if k == "kode_satker":
+            continue
         if k in dikosongkan:
             assert keluar[k] == "", k
         else:

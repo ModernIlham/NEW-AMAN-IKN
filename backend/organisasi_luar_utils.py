@@ -337,13 +337,14 @@ def validate_satker_luar(doc) -> list:
 def bersihkan_satker_luar(payload, instansi=None) -> dict:
     """Satker luar menyalin kelompok, tataran, jenis, nama instansi, dan
     salinan jenjangnya dari instansi induk — tidak pernah dari klien
-    (aturan penampungan 2 dan 4). `kode_satker` internal selalu kosong."""
+    (aturan penampungan 2 dan 4). Kunci `kode_satker` dibuang: tak ada
+    dokumen luar yang membawanya (invarian 6)."""
     p = dict(payload or {})
     i = instansi or {}
     p["nama_satker"] = _s(p.get("nama_satker"))
     p["nama_kunci"] = nama_kunci(p["nama_satker"])
     p["kode_luar"] = _s(p.get("kode_luar"))
-    p["kode_satker"] = ""
+    p.pop("kode_satker", None)
     if i:
         p["instansi_id"] = _s(i.get("id"))
         p["instansi_nama"] = _s(i.get("nama"))
@@ -366,7 +367,8 @@ def sesuaikan_orang_luar(doc, kelompok, jenis_instansi) -> dict:
     pihak_ketiga : status_kepegawaian dipaksa non_asn; seluruh field 3.7c
                    dikosongkan.
     perorangan   : kapasitas dipaksa diri_sendiri; eselon1..5 dan unit kosong.
-    `kode_satker` selalu kosong — ia kunci isolasi INTERNAL.
+    Kunci `kode_satker` dibuang — ia kunci isolasi INTERNAL; tak ada dokumen
+    luar yang membawanya (invarian 6).
     """
     d = dict(doc or {})
     k = _s(kelompok)
@@ -384,7 +386,7 @@ def sesuaikan_orang_luar(doc, kelompok, jenis_instansi) -> dict:
             for f in FIELD_ESELON:
                 d[f] = ""
             d["unit_kerja"] = ""
-    d["kode_satker"] = ""
+    d.pop("kode_satker", None)
     return d
 
 

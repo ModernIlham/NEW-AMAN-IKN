@@ -196,3 +196,18 @@ def test_app_runtime_tetap_di_skip_collections():
     assert "app_runtime" in SKIP_COLLECTIONS
     assert "app_runtime" not in collections_to_process(
         ["assets", "app_runtime", "users"])
+
+
+def test_direktori_luar_selamat_dari_reset_dan_ikut_backup():
+    """Direktori pegawai luar (PGW-02) adalah master bersama — sama sifatnya
+    dengan pegawai/unit_kerja: ikut backup, selamat dari reset."""
+    from backup_utils import gridfs_dipertahankan_saat_reset
+    luar = ("instansi_luar", "satker_luar", "unit_kerja_luar", "pegawai_luar")
+    db = list(SAMPLE_DB) + list(luar)
+    to_reset = set(collections_to_reset(db))
+    for kol in luar:
+        assert kol in RESET_KEEP_COLLECTIONS
+        assert kol not in to_reset, f"{kol} harus selamat dari reset"
+        assert kol in collections_to_process(db), f"{kol} tetap ikut backup"
+    assert gridfs_dipertahankan_saat_reset({"jenis": "foto_pegawai_luar"})
+    assert gridfs_dipertahankan_saat_reset({"jenis": "foto_pegawai_luar_asli"})

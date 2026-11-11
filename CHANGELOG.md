@@ -18,6 +18,24 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1125] Master Pegawai tiga kelompok — PGW-02: direktori instansi & satker luar (backend) — 2026-11-11
+
+- Rute baru `/api/luar/…` (`routes/organisasi_luar.py`): referensi kode,
+  daftar/ambil/tambah/ubah/hapus instansi luar dan satkernya, riwayat audit
+  per catatan. Belum ada layar — pengguna belum melihat perubahan.
+- Satu direktori untuk seluruh instansi: tanpa `kode_satker`, terlihat semua
+  satker; semua admin boleh menambah/mengubah dengan OCC `If-Match`; setiap
+  tulis teraudit ketat (`strict=True`) beserta field yang berubah; hapus
+  permanen hanya super-admin.
+- Tidak tercampur: satker tak bisa pindah instansi; kelompok/jenis terkunci
+  setelah punya satker; tataran diturunkan server dari jenis; kab/kota wajib
+  berinduk provinsi dan desa berinduk kab/kota, dengan salinan provinsi yang
+  merambat saat nama/induk berubah; kode satker internal ditolak sebagai
+  `kode_luar`; nama dan kode kembar ditolak dengan menunjuk catatan yang ada.
+- Wadah "Masyarakat (Perorangan)" dibuat idempoten dan terkunci.
+- Indeks baru untuk empat koleksi luar; keempatnya selamat dari reset dan ikut
+  backup.
+
 ## [#1124] Master Pegawai tiga kelompok — PGW-01: fondasi logika murni — 2026-11-11
 
 - Modul baru `backend/organisasi_luar_utils.py`, belum dipanggil kode mana
