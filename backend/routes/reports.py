@@ -755,7 +755,9 @@ async def _peta_status_kepegawaian(nips) -> dict:
     if not bersih:
         return {}
     peta = {}
-    for koleksi in (db.pegawai, db.pejabat):  # pejabat terakhir → menimpa
+    # Urutan = prioritas naik: orang luar (PGW-06) lebih dulu supaya Master
+    # Pegawai internal dan registry pejabat selalu menimpanya.
+    for koleksi in (db.pegawai_luar, db.pegawai, db.pejabat):  # pejabat terakhir → menimpa
         async for d in koleksi.find({"nip": {"$in": list(bersih)}},
                                     {"_id": 0, "nip": 1, "status_kepegawaian": 1}):
             if str(d.get("status_kepegawaian") or "").strip():

@@ -245,3 +245,13 @@ def test_rekap_pemegang_memperkaya_orang_luar(dbx, monkeypatch):
     assert "db.pegawai_luar.find(" in blok
     assert 'r["pegawai_master_kelompok"]' in blok and 'r["pegawai_master_instansi"]' in blok
     assert 'scope_query_field_satker(_user, {"nip": {"$in": list(nips)}})' in blok
+
+
+# ── pembaca 7: routes/reports.py ───────────────────────────────────────────
+def test_peta_status_kepegawaian_mengenali_orang_luar_internal_menang(dbx, monkeypatch):
+    import routes.reports as rr
+    monkeypatch.setattr(rr, "db", dbx)
+    _jalan(dbx.pegawai.update_one({"id": "pk"}, {"$set": {"status_kepegawaian": "pns"}}))
+    _jalan(dbx.pegawai_luar.update_many({}, {"$set": {"status_kepegawaian": "non_asn"}}))
+    peta = _jalan(rr._peta_status_kepegawaian(["555", "999", "000"]))
+    assert peta == {"555": "non_asn", "999": "pns"}
