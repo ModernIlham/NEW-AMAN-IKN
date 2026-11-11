@@ -18,6 +18,18 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1133] Master Pegawai tiga kelompok — PGW-10 (kerangka): kebijakan per jenis penerima — 2026-11-11
+
+- Daftar skema penyerahan yang sah per jenis penerima di luar satker
+  (penggunaan sementara untuk K/L, pinjam pakai untuk pemda/desa, sewa dan
+  kerja sama untuk badan usaha, dan seterusnya), dibaca layar dari referensi.
+- Pemeriksaan BAST kepada penerima luar: skema yang tidak sah, dokumen dasar
+  dan jangka waktu yang kurang, dan petugas yang bukan wakil sah badan
+  ditolak dengan pesan yang menyebut apa yang kurang.
+- Penerbitan BAST kepada penerima luar **masih ditahan**: butir pasalnya
+  menunggu verifikasi status PMK 115/2020. BAST untuk pegawai internal tidak
+  berubah.
+
 ## [#1132] Master Pegawai tiga kelompok — PGW-09: laporan & dokumen — 2026-11-11
 
 - Laporan Eksekutif, Distribusi Per Pengguna: tiap pengguna terdaftar
