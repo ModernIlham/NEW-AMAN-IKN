@@ -386,7 +386,7 @@ async def hapus_pegawai_luar(orang_id: str, user: dict = Depends(require_super_a
             {"pengguna_nip": nip, "dihapus": {"$ne": True}})
     dirujuk += await db.bast_serah_terima.count_documents({"$or": [
         {"pihak_kesatu.pegawai_id": orang_id}, {"pihak_kedua.pegawai_id": orang_id},
-        {"pj_tambahan.pegawai_id": orang_id}]})
+        {"penanggung_jawab_tambahan.pegawai_id": orang_id}]})
     if dirujuk:
         raise HTTPException(status_code=409, detail=(
             "Orang ini masih dirujuk aset atau berita acara — nonaktifkan saja"))
