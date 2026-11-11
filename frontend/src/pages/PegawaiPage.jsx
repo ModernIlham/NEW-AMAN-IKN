@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef,
+  useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import {
   ArrowLeft, Search, Plus, Pencil, Trash2, Loader2, IdCard, Upload,
   AlertTriangle, Network, Wand2, FileDown, FileSpreadsheet, UserPlus, RefreshCw,
-  ImagePlus, Crop, MoreVertical,
+  ImagePlus, Crop, MoreVertical, History,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -24,6 +25,13 @@ import { bolehTambah, butuhInduk, labelLevel, levelAkar, levelTampil,
 } from "@/lib/eselonSatker";
 import KropFotoDialog from "@/components/pegawai/KropFotoDialog";
 import KartuTapDialog from "@/components/pegawai/KartuTapDialog";
+import PilihKelompok from "@/components/pegawai/PilihKelompok";
+import BilahLingkupLuar from "@/components/pegawai/BilahLingkupLuar";
+import KelolaOrganisasiLuar from "@/components/pegawai/KelolaOrganisasiLuar";
+import { EMPTY_PIHAK_KETIGA, KELOMPOK, bacaPilihan, kunciTingkat, labelLingkup,
+  paramLingkup, ranah, simpanPilihan,
+} from "@/lib/ranahPegawai";
+import { isSuperAdminPusat } from "@/lib/satkerAktif";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -84,7 +92,7 @@ function namaLengkap(p) {
 // ukuran penuh. LEVEL MODUL (REVIEW-9 R5): definisi di dalam komponen halaman
 // membuat tipe komponen baru tiap render → React me-remount SEMUA avatar
 // (gambar berkedip + fetch ulang) setiap kali state halaman berubah.
-const AvatarPegawai = ({ p, ukur = "w-9 h-9", pratinjau = false, onPreview }) => {
+const AvatarPegawai = ({ p, ukur = "w-9 h-9", pratinjau = false, onPreview, jalur = "/pegawai" }) => {
   if (!p.foto_file_id) {
     return (
       <span className={`${ukur} rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-400 flex items-center justify-center text-[11px] font-bold flex-shrink-0`}>
@@ -93,7 +101,7 @@ const AvatarPegawai = ({ p, ukur = "w-9 h-9", pratinjau = false, onPreview }) =>
     );
   }
   const img = (
-    <img src={authMediaUrl(`${API}/pegawai/${p.id}/foto?v=${p.foto_file_id}`)} alt=""
+    <img src={authMediaUrl(`${API}${jalur}/${p.id}/foto?v=${p.foto_file_id}`)} alt=""
       onError={(e) => { e.currentTarget.style.display = "none"; }}
       className={`${ukur} rounded-full object-cover border border-border flex-shrink-0 ${pratinjau ? "cursor-zoom-in" : ""}`} loading="lazy" />
   );
@@ -119,8 +127,48 @@ const TAMBAH_TAMPIL = 300;
  * halaman ini menampung SELURUH pegawai + unit kerjanya sebagai rujukan
  * lintas modul. Semua user login melihat; admin mengelola (CRUD).
  */
-export default function PegawaiPage({ user, onBack }) {
+// Ranah form: field yang dinonaktifkan untuk kelompok luar TIDAK dirender,
+// dan sebutannya mengikuti kelompok (3.7b–d). Keduanya dibaca dari
+// GET /luar/referensi. Ranah internal memakai konteks kosong → tak berubah.
+const KONTEKS_INTERNAL = { nonaktif: new Set(), label: {} };
+const KonteksRanah = createContext(KONTEKS_INTERNAL);
+
+const LINGKUP_KOSONG = { provinsi: null, instansi: null, satker: null };
+const SEBUTAN_BAWAAN = { instansi: "Instansi", satker: "Satker", level: "Eselon" };
+// Turunan server pada catatan orang luar — tak dikirim balik saat simpan
+// (server menimpanya dari master satker; aturan penampungan 2).
+const TURUNAN_LUAR = ["satker_luar_nama", "instansi_id", "instansi_nama", "kelompok",
+  "tataran", "jenis_instansi", "provinsi_id", "provinsi_nama", "kabkota_id",
+  "kabkota_nama", "label_unit", "info_masa", "version", "dicatat_oleh", "diubah_oleh",
+  "kode_satker"];
+
+/**
+ * `wajibPilihKelompok`: tanpa pilihan tersimpan, tampilkan layar pilih
+ * kelompok dan JANGAN memuat daftar apa pun (3.10). Aplikasi memasangnya;
+ * tanpa prop ini halaman langsung membuka ranah internal — perilaku sebelum
+ * PGW-07 — sehingga pemakai lama halaman ini tidak berubah.
+ */
+export default function PegawaiPage({ user, onBack, wajibPilihKelompok = false }) {
   const isAdmin = user?.role === "admin";
+  const superAdmin = isSuperAdminPusat(user);
+  const [pilihanAwal] = useState(() => bacaPilihan());
+  const [kelompok, setKelompok] = useState(
+    pilihanAwal?.kelompok || (wajibPilihKelompok ? "" : "internal"));
+  const [tataran, setTataran] = useState(pilihanAwal?.tataran || "pusat");
+  const [lingkup, setLingkup] = useState(LINGKUP_KOSONG);
+  const [refLuar, setRefLuar] = useState(null);   // GET /luar/referensi
+  const [rekapLuar, setRekapLuar] = useState(null); // cacah per tataran/instansi/satker
+  const [cacahGerbang, setCacahGerbang] = useState({});
+  const [kelolaOrg, setKelolaOrg] = useState(false);
+  const [versiOrg, setVersiOrg] = useState(0);
+  const [totalLuar, setTotalLuar] = useState(0);
+  const [qLuar, setQLuar] = useState("");
+  const [riwayat, setRiwayat] = useState(null);   // {memuat, items}
+  const rn = ranah(kelompok);
+  const luar = rn.luar;
+  const satkerLuarId = lingkup.satker?.id || "";
+  const perorangan = luar && lingkup.instansi?.jenis === "perorangan";
+  const pihakKetiga = kelompok === "pihak_ketiga";
   const [items, setItems] = useState([]);
   const [ref, setRef] = useState({ jenis_kelamin: [], status_kepegawaian: [], jenis_pelaksana: [], jenis_jabatan: [], kategori_pegawai: [], sub_kategori_non_asn: [], agama: [], status_perkawinan: [], status: [], status_pegawai_satker: [], status_pegawai_satker_berinstansi: [], pendidikan: [] });
   const [search, setSearch] = useState("");
@@ -159,11 +207,22 @@ export default function PegawaiPage({ user, onBack }) {
   const fileRef = useRef(null);
   const { confirm, confirmDialog } = useConfirm();
 
+  // Ranah luar: master unit milik SATU satker luar — tanpa satker terpilih
+  // tak ada unit yang dimuat.
+  const satkerUnit = luar ? satkerLuarId : "";
   const muatUnits = useCallback(() => {
+    if (!kelompok) return;
+    if (luar) {
+      if (!satkerUnit) { setUnits([]); setAkar(levelAkar()); return; }
+      axios.get(`${API}/unit-kerja-luar`, { params: { satker_luar_id: satkerUnit } })
+        .then((r) => { setUnits(r.data?.items || []); setAkar(levelAkar(r.data?.level_akar)); })
+        .catch(() => setUnits([]));
+      return;
+    }
     axios.get(`${API}/unit-kerja`)
       .then((r) => { setUnits(r.data?.items || []); setAkar(levelAkar(r.data?.level_akar)); })
       .catch(() => setUnits([]));
-  }, []);
+  }, [kelompok, luar, satkerUnit]);
 
   // ── Foto pegawai: krop persegi (geser + zoom) → GridFS; avatar di row ──
   const [kropSrc, setKropSrc] = useState(null);       // dataURL sumber krop
@@ -176,7 +235,7 @@ export default function PegawaiPage({ user, onBack }) {
 
   // Diletakkan setelah state foto di atas karena mereset ketiganya.
   const bukaForm = (data) => {
-    setTabForm("identitas"); setForm(data);
+    setTabForm("identitas"); setForm(data); setRiwayat(null);
     setFotoPending(null); setKropAsli(null); setKropInitial(null);
   };
 
@@ -195,7 +254,7 @@ export default function PegawaiPage({ user, onBack }) {
   const bukaAturUlangFoto = async () => {
     if (!form?.id) return;
     try {
-      const r = await axios.get(`${API}/pegawai/${form.id}/foto-asli`,
+      const r = await axios.get(`${API}${rn.pegawai}/${form.id}/foto-asli`,
                                { responseType: "blob" });
       const rd = new FileReader();
       rd.onload = () => {
@@ -214,7 +273,7 @@ export default function PegawaiPage({ user, onBack }) {
     fd.append("file", pending.blob, "foto.jpg");
     if (pending.asli) fd.append("file_asli", pending.asli, pending.asli.name || "asli.jpg");
     if (pending.krop) fd.append("krop", JSON.stringify(pending.krop));
-    await axios.post(`${API}/pegawai/${pegawaiId}/foto`, fd);
+    await axios.post(`${API}${rn.pegawai}/${pegawaiId}/foto`, fd);
   };
   // Krop selesai → SIAPKAN foto (belum diunggah); unggah saat tombol Simpan
   // ditekan — konsisten untuk mode tambah maupun edit.
@@ -251,27 +310,51 @@ export default function PegawaiPage({ user, onBack }) {
 
   const uraian = useCallback((list, kode) => (ref[list] || []).find((o) => o.kode === kode)?.uraian || kode, [ref]);
 
+  // Nomor urut muat: jawaban yang datang sesudah ranah/lingkup berganti
+  // dibuang, supaya daftar kelompok lama tak menimpa daftar yang baru.
+  const muatKe = useRef(0);
   const load = useCallback(async () => {
+    if (!kelompok) return;
+    const ke = ++muatKe.current;
     setLoading(true);
+    if (luar) {
+      const params = { ...paramLingkup(kelompok, tataran, lingkup), semua_status: true,
+        page_size: 200, ...(qLuar ? { q: qLuar } : {}) };
+      try {
+        const r = await axios.get(`${API}/pegawai-luar`, { params });
+        if (ke !== muatKe.current) return;
+        setItems(r.data?.items || []);
+        setTotalLuar(r.data?.total ?? (r.data?.items || []).length);
+      } catch (err) {
+        if (ke === muatKe.current) toast.error(getApiError(err, "Gagal memuat daftar"));
+      } finally {
+        if (ke === muatKe.current) setLoading(false);
+      }
+      axios.get(`${API}/pegawai-luar/perlu-serah-terima`, { params: { kelompok } })
+        .then((r) => { if (ke === muatKe.current) setSerahTerima(r.data?.items || []); })
+        .catch(() => setSerahTerima([]));
+      return;
+    }
     try {
       const r = await axios.get(`${API}/pegawai`);
+      if (ke !== muatKe.current) return;
       setItems(r.data?.items || []);
     } catch (err) {
       toast.error(getApiError(err, "Gagal memuat daftar pegawai"));
     } finally {
-      setLoading(false);
+      if (ke === muatKe.current) setLoading(false);
     }
     // Pegawai berisiko yang masih memegang aset (alert serah terima BMN).
     axios.get(`${API}/pegawai/perlu-serah-terima`)
-      .then((r) => setSerahTerima(r.data?.items || []))
+      .then((r) => { if (ke === muatKe.current) setSerahTerima(r.data?.items || []); })
       .catch(() => setSerahTerima([]));
-  }, []);
+  }, [kelompok, luar, tataran, lingkup, qLuar]);
 
   // Bagian "Foto pegawai"; diletakkan di sini karena memakai `load` di atas.
   const hapusFoto = async () => {
     if (!form?.id) return;
     try {
-      await axios.delete(`${API}/pegawai/${form.id}/foto`);
+      await axios.delete(`${API}${rn.pegawai}/${form.id}/foto`);
       toast.success("Foto dihapus");
       setForm((f) => ({ ...f, foto_file_id: "", foto_asli_file_id: "", foto_krop: null }));
       load();
@@ -293,9 +376,10 @@ export default function PegawaiPage({ user, onBack }) {
     }
     setKelolaUnit((k) => ({ ...k, sibuk: true }));
     try {
-      await axios.post(`${API}/unit-kerja`, {
+      await axios.post(`${API}${rn.unit}`, {
         nama_unit: kelolaUnit.nama.trim(), eselon: String(level),
         parent_id: butuhInduk(level, akar) ? kelolaUnit.parentId : "",
+        ...(rn.luar ? { satker_luar_id: satkerUnit } : {}),
       });
       toast.success(`Unit Eselon ${level} ditambahkan`);
       setKelolaUnit((k) => ({ ...k, nama: "", sibuk: false }));
@@ -311,7 +395,7 @@ export default function PegawaiPage({ user, onBack }) {
     if (!nama) { toast.error("Nama unit wajib diisi"); return; }
     setSuntingUnit((k) => ({ ...k, sibuk: true }));
     try {
-      const r = await axios.put(`${API}/unit-kerja/${suntingUnit.id}`, {
+      const r = await axios.put(`${API}${rn.unit}/${suntingUnit.id}`, {
         nama_unit: nama, parent_id: suntingUnit.parentId || "",
       });
       const ikut = r.data?.ikut_diperbarui || {};
@@ -340,7 +424,7 @@ export default function PegawaiPage({ user, onBack }) {
     });
     if (!ok) return;
     try {
-      await axios.delete(`${API}/unit-kerja/${u.id}`);
+      await axios.delete(`${API}${rn.unit}/${u.id}`);
       toast.success(`Unit ${u.nama_unit} dihapus`);
       muatUnits();
     } catch (err) { toast.error(getApiError(err, "Gagal menghapus unit")); }
@@ -354,7 +438,9 @@ export default function PegawaiPage({ user, onBack }) {
   const bangunDariPegawai = async () => {
     setKelolaUnit((k) => ({ ...k, sibuk: true }));
     try {
-      const r = await axios.post(`${API}/unit-kerja/bangun-dari-pegawai`);
+      const r = rn.luar
+        ? await axios.post(`${API}${rn.unit}/bangun-dari-pegawai`, { satker_luar_id: satkerUnit })
+        : await axios.post(`${API}/unit-kerja/bangun-dari-pegawai`);
       toast.success(`Master unit dibangun: ${r.data.dibuat} unit baru dari data pegawai`);
       muatUnits();
     } catch (err) { toast.error(getApiError(err, "Gagal membangun master unit")); }
@@ -364,7 +450,7 @@ export default function PegawaiPage({ user, onBack }) {
   const bukaDetailAset = async (p) => {
     setDetailAset({ pegawai: p, items: [], memuat: true });
     try {
-      const r = await axios.get(`${API}/pegawai/${p.id}/aset`);
+      const r = await axios.get(`${API}${rn.pegawai}/${p.id}/aset`);
       setDetailAset({ pegawai: p, items: r.data?.items || [], memuat: false });
     } catch (err) {
       toast.error(getApiError(err, "Gagal memuat aset pegawai"));
@@ -372,15 +458,109 @@ export default function PegawaiPage({ user, onBack }) {
     }
   };
 
+  useEffect(() => { load(); }, [load]);
+
+  // Referensi kepegawaian dipakai ketiga ranah — dimuat sekali, begitu satu
+  // kelompok dipilih (layar pilih kelompok tak memuat apa pun selain cacah).
+  const adaKelompok = !!kelompok;
   useEffect(() => {
-    load();
+    if (!adaKelompok) return;
     // Ambil SEMUA kunci referensi apa adanya — pemetaan manual sebelumnya
     // membuang kewarganegaraan/jenis_identitas_wna/pangkat_golongan/digit_bank
     // sehingga dropdown Kewarganegaraan kosong & tak bisa dipakai (bug).
     axios.get(`${API}/pegawai/referensi`)
       .then((r) => setRef((prev) => ({ ...prev, ...(r.data || {}) })))
       .catch(() => {});
-  }, [load]);
+  }, [adaKelompok]);
+
+  // Ranah luar: kode referensi (sebutan, field nonaktif) + cacah lingkup.
+  // Tak satu pun diminta selama ranah internal — himpunan URL internal tetap.
+  useEffect(() => {
+    if (!luar || refLuar) return;
+    axios.get(`${API}/luar/referensi`).then((r) => setRefLuar(r.data || {})).catch(() => {});
+  }, [luar, refLuar]);
+  useEffect(() => {
+    if (!luar) { setRekapLuar(null); return; }
+    axios.get(`${API}/pegawai-luar/rekap-lingkup`, { params: { kelompok } })
+      .then((r) => setRekapLuar(r.data || null)).catch(() => setRekapLuar(null));
+  }, [luar, kelompok, versiOrg]);
+  // Layar pilih kelompok: cacah kelompok luar (agregat, bukan daftar orang).
+  useEffect(() => {
+    if (kelompok) return;
+    for (const k of ["eksternal", "pihak_ketiga"]) {
+      axios.get(`${API}/pegawai-luar/rekap-lingkup`, { params: { kelompok: k } })
+        .then((r) => setCacahGerbang((c) => ({ ...c, [k]: r.data?.jumlah ?? 0,
+          ...(k === "eksternal" ? { pusat: r.data?.per_tataran?.pusat ?? 0,
+            daerah: r.data?.per_tataran?.daerah ?? 0 } : {}) })))
+        .catch(() => {});
+    }
+  }, [kelompok]);
+
+  // Pencarian ranah luar dijalankan di server (direktori bersama bisa besar).
+  useEffect(() => {
+    if (!luar) { setQLuar(""); return undefined; }
+    const t = setTimeout(() => setQLuar(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [luar, search]);
+
+  const gantiKelompok = (k) => {
+    if (k === kelompok) return;
+    simpanPilihan(k, tataran);
+    setKelompok(k); setLingkup(LINGKUP_KOSONG); setItems([]); setSerahTerima([]);
+    setFUnit(""); setSearch("");
+  };
+  const gantiTataran = (t) => {
+    if (t === tataran) return;
+    simpanPilihan(kelompok, t);
+    setTataran(t); setLingkup(LINGKUP_KOSONG); setItems([]);
+    setFUnit("");
+  };
+  const gantiLingkup = (l) => { setLingkup(l); setFUnit(""); };
+
+  const sebutan = useMemo(() => ({ ...SEBUTAN_BAWAAN,
+    ...((refLuar?.label_tingkat || {})[kunciTingkat(kelompok, tataran)] || {}) }),
+  [refLuar, kelompok, tataran]);
+  const konteksForm = useMemo(() => (luar ? {
+    nonaktif: new Set((refLuar?.field_nonaktif || {})[kelompok] || []),
+    label: (refLuar?.label_field || {})[kelompok] || {},
+  } : KONTEKS_INTERNAL), [luar, refLuar, kelompok]);
+  const cacahBilah = useMemo(() => {
+    const c = {};
+    if (rekapLuar) {
+      c[kelompok] = rekapLuar.jumlah;
+      if (kelompok === "eksternal") {
+        c.pusat = rekapLuar.per_tataran?.pusat ?? 0;
+        c.daerah = rekapLuar.per_tataran?.daerah ?? 0;
+      }
+    }
+    return c;
+  }, [rekapLuar, kelompok]);
+  const petaCacah = (daftar) => Object.fromEntries((daftar || []).map((r) => [r.id, r.jumlah]));
+  // Luar: tulis (tambah/impor/ekspor/struktur/kelola unit) butuh SATU satker.
+  const siapTulis = !luar || (!!satkerLuarId && !!refLuar);
+  const labelKelompok = KELOMPOK.find((k) => k.kunci === kelompok)?.label || "";
+  // Hapus permanen orang luar khusus super-admin (catatan milik bersama);
+  // admin satker cukup mengubah statusnya.
+  const bolehHapus = !luar || superAdmin;
+
+  const bukaRiwayat = async () => {
+    if (!form?.id) return;
+    setRiwayat({ memuat: true, items: [] });
+    try {
+      const r = await axios.get(`${API}/luar/riwayat/orang/${form.id}`);
+      setRiwayat({ memuat: false, items: r.data?.items || [] });
+    } catch (err) {
+      toast.error(getApiError(err, "Gagal memuat riwayat"));
+      setRiwayat(null);
+    }
+  };
+  // Form baru di ranah aktif. `EMPTY` sendiri tidak diubah.
+  const formBaru = () => (luar ? {
+    ...EMPTY, ...(pihakKetiga ? EMPTY_PIHAK_KETIGA : {}),
+    ...(pihakKetiga ? { status_kepegawaian: "non_asn" } : {}),
+    ...(perorangan ? { kapasitas_bertindak: "diri_sendiri" } : {}),
+    satker_luar_id: satkerLuarId,
+  } : { ...EMPTY });
 
   // Cermin `form` untuk auto-isi (baca nilai terkini tanpa masuk deps efek).
   useEffect(() => { formRef.current = form; }, [form]);
@@ -433,8 +613,25 @@ export default function PegawaiPage({ user, onBack }) {
   }, [form?.nip, terapkanUrai]);
 
   const unduhTemplate = () => {
+    if (luar) {
+      downloadFileWithProgress(`${API}/pegawai-luar/template-impor?kelompok=${kelompok}`,
+        `template_impor_${kelompok}.csv`, { label: `Template Impor ${labelKelompok} (CSV)` })
+        .catch(() => {});
+      return;
+    }
     downloadFileWithProgress(`${API}/pegawai/template-impor`, "template_impor_pegawai.csv",
       { label: "Template Impor Pegawai (CSV)" }).catch(() => {});
+  };
+  const unduhEkspor = () => {
+    if (luar) {
+      downloadFileWithProgress(
+        `${API}/pegawai-luar/export-xlsx?satker_luar_id=${encodeURIComponent(satkerLuarId)}`,
+        `${kelompok}_${(lingkup.satker?.nama_satker || "satker").replace(/[^\w-]+/g, "_")}.xlsx`,
+        { label: `Ekspor ${labelLingkup(lingkup)} (Excel)` }).catch(() => {});
+      return;
+    }
+    downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
+      "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {});
   };
 
   const pilihBerkas = () => fileRef.current?.click();
@@ -447,7 +644,8 @@ export default function PegawaiPage({ user, onBack }) {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const r = await axios.post(`${API}/pegawai/impor`, fd, {
+      if (luar) fd.append("satker_luar_id", satkerLuarId);
+      const r = await axios.post(`${API}${rn.pegawai}/impor`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
         timeout: 120000,
       });
@@ -465,7 +663,7 @@ export default function PegawaiPage({ user, onBack }) {
   const daftarKartu = async (uid) => {
     if (!form?.id) return;
     try {
-      const r = await axios.post(`${API}/pegawai/${form.id}/kartu`, { uid });
+      const r = await axios.post(`${API}${rn.pegawai}/${form.id}/kartu`, { uid });
       toast.success(`Kartu ${r.data?.kartu_label || ""} terdaftar untuk ${form.nama}`);
       setForm((f) => (f ? { ...f, kartu_label: r.data?.kartu_label || "", kartu_terdaftar_pada: r.data?.kartu_terdaftar_pada || "" } : f));
       load();
@@ -484,7 +682,7 @@ export default function PegawaiPage({ user, onBack }) {
     });
     if (!ok) return;
     try {
-      await axios.delete(`${API}/pegawai/${form.id}/kartu`);
+      await axios.delete(`${API}${rn.pegawai}/${form.id}/kartu`);
       toast.success("Kartu dilepas");
       setForm((f) => (f ? { ...f, kartu_label: "", kartu_terdaftar_pada: "" } : f));
       load();
@@ -518,17 +716,26 @@ export default function PegawaiPage({ user, onBack }) {
     // Field kartu dikelola endpoint kartu terpisah — jangan ikut PUT.
     delete body.kartu_label; delete body.kartu_terdaftar_pada;
     delete body.kartu_terdaftar_oleh; delete body.kartu_uid_hashes;
+    if (luar) {
+      // Instansi & satker hanya berasal dari lingkup aktif / catatan itu —
+      // tak pernah diketik (PGW-07 butir 6).
+      for (const k of TURUNAN_LUAR) delete body[k];
+      body.satker_luar_id = form.satker_luar_id || satkerLuarId;
+    }
     let sinkronInfo = null; let pegSinkron = null;
     try {
       if (form.mode === "tambah") {
-        const r = await axios.post(`${API}/pegawai`, body);
+        const r = await axios.post(`${API}${rn.pegawai}`, body);
         if (fotoPending && r.data?.id) {
           try { await unggahFoto(r.data.id, fotoPending); }
           catch { toast.warning("Pegawai tersimpan, tetapi foto gagal diunggah — coba lagi lewat Edit"); }
         }
         toast.success(`Pegawai ${form.nama} ditambahkan`);
       } else {
-        const r = await axios.put(`${API}/pegawai/${form.id}`, body);
+        const r = luar
+          ? await axios.put(`${API}${rn.pegawai}/${form.id}`, body,
+            { headers: { "If-Match": String(form.version || 1) } })
+          : await axios.put(`${API}${rn.pegawai}/${form.id}`, body);
         // Foto (bila diubah) baru diunggah sekarang — bukan saat pilih krop.
         if (fotoPending) {
           try { await unggahFoto(form.id, fotoPending); }
@@ -567,12 +774,13 @@ export default function PegawaiPage({ user, onBack }) {
   const remove = async (it) => {
     const ok = await confirm({
       title: `Hapus pegawai ${it.nama}?`,
-      description: "Data pegawai ini akan dihapus dari master pegawai.",
+      description: luar ? "Catatan ini dipakai bersama seluruh satker. Ditolak bila masih dirujuk aset atau BAST."
+        : "Data pegawai ini akan dihapus dari master pegawai.",
       confirmLabel: "Hapus", variant: "danger",
     });
     if (!ok) return;
     try {
-      await axios.delete(`${API}/pegawai/${it.id}`);
+      await axios.delete(`${API}${rn.pegawai}/${it.id}`);
       toast.success(`Pegawai ${it.nama} dihapus`);
       load();
     } catch (err) {
@@ -648,6 +856,11 @@ export default function PegawaiPage({ user, onBack }) {
   };
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const formPerorangan = luar && (perorangan || form?.jenis_instansi === "perorangan");
+  // Unit yang dimuat milik satker di bilah lingkup; catatan dari satker lain
+  // tak boleh mengelola unit satker itu dari sini.
+  const unitCocok = !luar || (!!satkerLuarId
+    && (form?.satker_luar_id || satkerLuarId) === satkerLuarId);
 
   return (
     <div className="min-h-screen bg-background" data-testid="pegawai-page">
@@ -664,13 +877,34 @@ export default function PegawaiPage({ user, onBack }) {
           <div className={BLOK_JUDUL}>
             <h1 className={JUDUL_KEPALA}>Master Pegawai</h1>
             <p className={SUBJUDUL_KEPALA}>
-              {items.length} pegawai · data kepegawaian menyeluruh &amp; unit kerja (adopsi SIMAN-G)
+              {!kelompok ? "Pilih kelompok yang ingin dilihat"
+                : luar ? `${labelKelompok} · ${items.length}${totalLuar > items.length ? ` dari ${totalLuar}` : ""} orang`
+                  : `${items.length} pegawai · data kepegawaian menyeluruh & unit kerja (adopsi SIMAN-G)`}
             </p>
           </div>
         </div>
+        {kelompok && (
+          <div className="max-w-5xl mx-auto px-3 sm:px-6 pb-2">
+            <PilihKelompok kelompok={kelompok} tataran={tataran} cacah={cacahBilah}
+              onKelompok={gantiKelompok} onTataran={gantiTataran} />
+          </div>
+        )}
       </header>
 
+      {!kelompok ? (
+        <main className="max-w-3xl mx-auto px-3 sm:px-6 py-6">
+          <PilihKelompok bentuk="layar" kelompok="" tataran={tataran} cacah={cacahGerbang}
+            onKelompok={gantiKelompok} onTataran={gantiTataran} />
+        </main>
+      ) : (
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-4 space-y-3">
+        {luar && (
+          <BilahLingkupLuar kelompok={kelompok} tataran={tataran} lingkup={lingkup}
+            onUbah={gantiLingkup} sebutan={sebutan} jenisInstansi={refLuar?.jenis_instansi}
+            cacahInstansi={petaCacah(rekapLuar?.per_instansi)}
+            cacahSatker={petaCacah(rekapLuar?.per_satker)} versi={versiOrg}
+            bolehKelola={isAdmin} onKelola={() => setKelolaOrg(true)} />
+        )}
         <div className="bg-card rounded-xl border border-border shadow-sm p-2 sm:p-3">
           {/* Baris utama: kolom cari memanjang (aksi jadi tombol ikon-saja).
               Tiap ikon dipilih agar sangat menggambarkan fungsinya + tooltip/
@@ -690,6 +924,7 @@ export default function PegawaiPage({ user, onBack }) {
             <div className="hidden sm:flex items-center gap-2">
               {units.length > 0 && (
                 <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" onClick={() => setStruktur(true)}
+                  disabled={!siapTulis}
                   title="Struktur Organisasi" aria-label="Struktur Organisasi"
                   data-testid="pegawai-struktur">
                   <Network className="w-4 h-4" />
@@ -703,14 +938,13 @@ export default function PegawaiPage({ user, onBack }) {
                     <FileDown className="w-4 h-4" />
                   </Button>
                   <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0"
-                    onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
-                      "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
+                    onClick={unduhEkspor} disabled={!siapTulis}
                     title="Ekspor Excel siap-edit (bisa diimpor kembali)"
                     aria-label="Ekspor Excel siap-edit"
                     data-testid="pegawai-export-xlsx">
                     <FileSpreadsheet className="w-4 h-4" />
                   </Button>
-                  <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" disabled={mengimpor}
+                  <Button variant="outline" className="h-10 w-10 p-0 flex-shrink-0" disabled={mengimpor || !siapTulis}
                     title="Impor Excel/CSV" aria-label="Impor Excel/CSV"
                     onClick={pilihBerkas} data-testid="pegawai-impor">
                     {mengimpor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
@@ -744,12 +978,11 @@ export default function PegawaiPage({ user, onBack }) {
                           <FileDown className="w-4 h-4 mr-2" />Unduh Template Impor
                         </DropdownMenuItem>
                         <DropdownMenuItem className="min-h-[42px]"
-                          onClick={() => downloadFileWithProgress(`${API}/pegawai/export-xlsx`,
-                            "master_pegawai.xlsx", { label: "Ekspor Master Pegawai (Excel)" }).catch(() => {})}
+                          onClick={unduhEkspor} disabled={!siapTulis}
                           data-testid="pegawai-menu-export">
                           <FileSpreadsheet className="w-4 h-4 mr-2" />Ekspor Excel
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="min-h-[42px]" disabled={mengimpor} onClick={pilihBerkas}
+                        <DropdownMenuItem className="min-h-[42px]" disabled={mengimpor || !siapTulis} onClick={pilihBerkas}
                           data-testid="pegawai-menu-impor">
                           {mengimpor ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}Impor Excel/CSV
                         </DropdownMenuItem>
@@ -763,12 +996,18 @@ export default function PegawaiPage({ user, onBack }) {
             {/* Tambah Pegawai — selalu tampil (HP & desktop). */}
             {isAdmin && (
               <Button className="h-10 w-10 p-0 bg-sky-600 hover:bg-sky-700 text-white flex-shrink-0"
-                title="Tambah Pegawai" aria-label="Tambah Pegawai"
-                onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-add">
+                title="Tambah Pegawai" aria-label="Tambah Pegawai" disabled={!siapTulis}
+                onClick={() => bukaForm(formBaru())} data-testid="pegawai-add">
                 <UserPlus className="w-4 h-4" />
               </Button>
             )}
           </div>
+          {!siapTulis && (
+            <p className="mt-2 text-[11px] text-muted-foreground" data-testid="pegawai-pilih-satker-dulu">
+              Pilih satu {sebutan.satker.toLowerCase()} untuk menambah, mengimpor, mengekspor,
+              atau melihat struktur organisasinya.
+            </p>
+          )}
           {/* Baris filter & sortir — di HP jadi grid 2 kolom rapi; mulai
               tablet (md, iPad mini 768) jadi SATU baris penuh (flex-nowrap,
               tiap kontrol flex-1 berbagi lebar rata) agar tak membungkus. */}
@@ -893,9 +1132,9 @@ export default function PegawaiPage({ user, onBack }) {
                 {isAdmin ? "Tambah data pegawai satker (seluruh pegawai & unit kerjanya)."
                   : "Minta admin menambah data pegawai."}
               </p>
-              {isAdmin && items.length === 0 && (
+              {isAdmin && items.length === 0 && siapTulis && (
                 <Button size="sm" className="mt-3 gap-1.5 bg-sky-600 hover:bg-sky-700 text-white"
-                  onClick={() => bukaForm({ ...EMPTY })} data-testid="pegawai-empty-tambah">
+                  onClick={() => bukaForm(formBaru())} data-testid="pegawai-empty-tambah">
                   <Plus className="w-4 h-4" />Tambah Pegawai
                 </Button>
               )}
@@ -911,7 +1150,7 @@ export default function PegawaiPage({ user, onBack }) {
                 return (
                   <li key={it.id} className="p-3 space-y-1" data-testid={`pegawai-card-${it.id}`}>
                     <div className="flex items-start gap-2">
-                      <AvatarPegawai p={it} pratinjau onPreview={setPreviewFoto} />
+                      <AvatarPegawai p={it} pratinjau onPreview={setPreviewFoto} jalur={rn.pegawai} />
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-foreground text-sm leading-tight break-words">{namaLengkap(it)}</p>
                         <p className="text-[10px] text-muted-foreground font-mono">
@@ -925,9 +1164,10 @@ export default function PegawaiPage({ user, onBack }) {
                         {uraian("status", it.status || "aktif")}
                       </span>
                     </div>
-                    {(it.jabatan || it.unit_kerja) && (
+                    {(it.jabatan || it.unit_kerja || (luar && it.label_unit)) && (
                       <p className="text-[11px] text-foreground/80 truncate">
-                        {[it.jabatan, it.unit_kerja].filter(Boolean).join(" · ")}
+                        {[it.jabatan, luar ? (it.label_unit || it.unit_kerja) : it.unit_kerja]
+                          .filter(Boolean).join(" · ")}
                       </p>
                     )}
                     {(it.jenis_pelaksana === "plt" || it.jenis_pelaksana === "plh") && (
@@ -979,12 +1219,14 @@ export default function PegawaiPage({ user, onBack }) {
                             data-testid={`pegawai-edit-${it.id}-m`}>
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
+                          {bolehHapus && (
                           <button type="button" onClick={() => remove(it)}
                             title={`Hapus ${it.nama}`} aria-label={`Hapus ${it.nama}`}
                             className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
                             data-testid={`pegawai-delete-${it.id}-m`}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                          )}
                         </span>
                       )}
                     </div>
@@ -1011,7 +1253,7 @@ export default function PegawaiPage({ user, onBack }) {
                     <tr key={it.id} className="border-b border-border/60 last:border-0 hover:bg-muted/50" data-testid={`pegawai-row-${it.id}`}>
                       <td className="px-2.5 py-1.5">
                         <p className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
-                          <AvatarPegawai p={it} ukur="w-7 h-7" pratinjau onPreview={setPreviewFoto} />
+                          <AvatarPegawai p={it} ukur="w-7 h-7" pratinjau onPreview={setPreviewFoto} jalur={rn.pegawai} />
                           {namaLengkap(it)}
                           {it.status_kepegawaian && (
                             <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-400 text-[9px] font-semibold uppercase">
@@ -1049,7 +1291,9 @@ export default function PegawaiPage({ user, onBack }) {
                             </span>
                           )}
                         </p>
-                        <p className="text-[10px] text-muted-foreground/80">{it.unit_kerja || ""}</p>
+                        <p className="text-[10px] text-muted-foreground/80">
+                          {luar ? (it.label_unit || it.unit_kerja || "") : (it.unit_kerja || "")}
+                        </p>
                       </td>
                       <td className="px-2.5 py-1.5 hidden md:table-cell">
                         {/* Kolom MASA: pensiun / akhir jabatan / kontrak (durasi) */}
@@ -1102,12 +1346,14 @@ export default function PegawaiPage({ user, onBack }) {
                             data-testid={`pegawai-edit-${it.id}`}>
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
+                          {bolehHapus && (
                           <button type="button" onClick={() => remove(it)}
                             title={`Hapus ${it.nama}`} aria-label={`Hapus ${it.nama}`}
                             className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-500/10 min-w-0 min-h-0"
                             data-testid={`pegawai-delete-${it.id}`}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -1129,17 +1375,63 @@ export default function PegawaiPage({ user, onBack }) {
           )}
         </div>
       </main>
+      )}
+
+      {luar && (
+        <KelolaOrganisasiLuar open={kelolaOrg} onClose={() => setKelolaOrg(false)}
+          kelompok={kelompok} tataran={tataran} lingkup={lingkup} refLuar={refLuar || {}}
+          sebutan={sebutan} user={user} onPilih={gantiLingkup}
+          onBerubah={() => setVersiOrg((v) => v + 1)} />
+      )}
 
       {/* ── Dialog tambah / edit ── */}
       <Dialog open={!!form} onOpenChange={(o) => { if (!o) setForm(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{form?.mode === "tambah" ? "Tambah Pegawai" : `Ubah Pegawai — ${form?.nama}`}</DialogTitle>
+            <DialogTitle>{form?.mode === "tambah" ? (luar ? `Tambah — ${labelKelompok}` : "Tambah Pegawai")
+              : `${luar ? "Ubah" : "Ubah Pegawai"} — ${form?.nama}`}</DialogTitle>
             <DialogDescription className="text-xs">
-              Data kepegawaian menyeluruh — dipakai sebagai rujukan lintas modul (pemegang barang, penanggung jawab ruangan, dll.).
+              {luar ? "Direktori ini dipakai bersama seluruh satker. Instansi dan satker mengikuti lingkup yang dipilih — tidak diketik."
+                : "Data kepegawaian menyeluruh — dipakai sebagai rujukan lintas modul (pemegang barang, penanggung jawab ruangan, dll.)."}
             </DialogDescription>
+            {luar && form && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="flex-1 min-w-0 text-xs font-semibold text-foreground rounded-md bg-muted px-2 py-1.5 break-words"
+                  data-testid="pegawai-form-lingkup">
+                  {form.mode === "tambah" ? labelLingkup(lingkup)
+                    : [form.instansi_nama, form.satker_luar_nama].filter(Boolean).join(" — ")}
+                </p>
+                {form.id && (
+                  <button type="button" onClick={bukaRiwayat}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 dark:text-sky-400 rounded-md px-2 min-h-[44px] lg:min-h-0 lg:h-8 hover:bg-muted"
+                    data-testid="pegawai-riwayat">
+                    <History className="w-3.5 h-3.5" aria-hidden="true" />Riwayat perubahan
+                  </button>
+                )}
+              </div>
+            )}
+            {riwayat && (
+              <div className="rounded-md border border-border p-2 max-h-48 overflow-y-auto text-[11px] space-y-1"
+                data-testid="pegawai-riwayat-isi">
+                {riwayat.memuat ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : riwayat.items.length === 0 ? <p className="text-muted-foreground">Belum ada jejak perubahan.</p>
+                    : riwayat.items.map((r, i) => (
+                      <div key={`${r.timestamp}-${i}`} className="border-b border-border/60 last:border-0 pb-1">
+                        <p><b>{r.username || "—"}</b>{r.kode_satker ? ` (satker ${r.kode_satker})` : ""}
+                          {" · "}{String(r.timestamp || "").slice(0, 16).replace("T", " ")}</p>
+                        <p className="text-muted-foreground">{r.detail}</p>
+                        {(r.changes || []).length > 0 && (
+                          <p className="text-muted-foreground">
+                            {(r.changes || []).map((c) => c.field).join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+              </div>
+            )}
           </DialogHeader>
           {form && (
+            <KonteksRanah.Provider value={konteksForm}>
             <div className="space-y-4">
               {/* Form 5-TAB (pola KERJA-BARENG): Identitas · Pribadi ·
                   Kepegawaian · Jabatan & Unit · Kontak & Bank. */}
@@ -1173,7 +1465,7 @@ export default function PegawaiPage({ user, onBack }) {
                         <img src={fotoPending.url} alt="Pratinjau foto"
                           className="w-16 h-16 rounded-full object-cover border border-border cursor-zoom-in" />
                       ) : (
-                        <AvatarPegawai p={form} ukur="w-16 h-16" />
+                        <AvatarPegawai p={form} ukur="w-16 h-16" jalur={rn.pegawai} />
                       )}
                     </button>
                     <div className="flex items-center gap-1.5">
@@ -1245,7 +1537,7 @@ export default function PegawaiPage({ user, onBack }) {
                   </div>
                   {(form.kewarganegaraan || "wni") === "wni" ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 rounded-lg bg-sky-500/5 border border-sky-500/30">
-                      <Field label={deteksi?.jenis ? deteksi.label : "NIP / NIK / NRP"}>
+                      <Field nama="nip" label={deteksi?.jenis ? deteksi.label : "NIP / NIK / NRP"}>
                         <Input value={form.nip} onChange={set("nip")} className="font-mono" inputMode="numeric" placeholder="8–20 digit (opsional)" data-testid="pegawai-form-nip" />
                         {/* Deteksi jenis nomor OTOMATIS (server, satu sumber
                             logika): NIP PNS / NI PPPK / NRP / NIK. */}
@@ -1276,7 +1568,7 @@ export default function PegawaiPage({ user, onBack }) {
                           </button>
                         )}
                       </Field>
-                      <Field label="NPWP"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>
+                      <Field nama="npwp" label="NPWP"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/30">
@@ -1284,7 +1576,7 @@ export default function PegawaiPage({ user, onBack }) {
                         <Select value={form.jenis_identitas_wna} onChange={set("jenis_identitas_wna")} opts={ref.jenis_identitas_wna} data-testid="pegawai-form-wna-jenis" />
                       </Field>
                       <Field label="Nomor Identitas"><Input value={form.nomor_identitas_wna} onChange={set("nomor_identitas_wna")} className="font-mono" placeholder="No. Paspor/KITAS/KITAP" /></Field>
-                      <Field label="NPWP (opsional)"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>
+                      <Field nama="npwp" label="NPWP (opsional)"><Input value={form.npwp} onChange={set("npwp")} className="font-mono" /></Field>
                     </div>
                   )}
                 </div>
@@ -1296,16 +1588,16 @@ export default function PegawaiPage({ user, onBack }) {
                     <Select value={form.jenis_kelamin} onChange={set("jenis_kelamin")} data-testid="pegawai-form-jk" opts={ref.jenis_kelamin} />
                   </Field>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="Tempat Lahir"><Input value={form.tempat_lahir} onChange={set("tempat_lahir")} /></Field>
+                    <Field nama="tempat_lahir" label="Tempat Lahir"><Input value={form.tempat_lahir} onChange={set("tempat_lahir")} /></Field>
                     <Field label="Tgl Lahir"><InputTanggalRoda name="tanggal_lahir" value={form.tanggal_lahir} onChange={set("tanggal_lahir")} minYear={1940} maxYear={new Date().getFullYear()} data-testid="pegawai-form-tgl-lahir" /></Field>
                   </div>
-                  <Field label="Agama">
+                  <Field nama="agama" label="Agama">
                     <Select value={form.agama} onChange={set("agama")} opts={ref.agama} />
                   </Field>
-                  <Field label="Status Perkawinan">
+                  <Field nama="status_perkawinan" label="Status Perkawinan">
                     <Select value={form.status_perkawinan} onChange={set("status_perkawinan")} opts={ref.status_perkawinan} />
                   </Field>
-                  <Field label="Pendidikan Terakhir">
+                  <Field nama="pendidikan_terakhir" label="Pendidikan Terakhir">
                     <Select value={form.pendidikan_terakhir} onChange={set("pendidikan_terakhir")}
                       data-testid="pegawai-form-pendidikan"
                       opts={(() => {
@@ -1315,7 +1607,7 @@ export default function PegawaiPage({ user, onBack }) {
                           ? [...base, { kode: cur, uraian: cur }] : base;
                       })()} />
                   </Field>
-                  <Field label="Alamat"><Input value={form.alamat} onChange={set("alamat")} /></Field>
+                  <Field nama="alamat" label="Alamat"><Input value={form.alamat} onChange={set("alamat")} /></Field>
                 </div>
               )}
 
@@ -1323,12 +1615,13 @@ export default function PegawaiPage({ user, onBack }) {
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="Status Kepegawaian">
-                      <Select value={form.status_kepegawaian} onChange={set("status_kepegawaian")} data-testid="pegawai-form-status-peg" opts={ref.status_kepegawaian} />
+                      <Select value={form.status_kepegawaian} onChange={set("status_kepegawaian")} data-testid="pegawai-form-status-peg" opts={ref.status_kepegawaian}
+                        disabled={pihakKetiga} title={pihakKetiga ? "Pihak ketiga selalu Non-ASN" : undefined} />
                     </Field>
                     {/* Pangkat hanya utk PNS/CPNS/PPPK/TNI/POLRI — Non-ASN
                         tidak punya pangkat/golongan (riset PER-31/PB/2016). */}
                     {form.status_kepegawaian !== "non_asn" && (
-                      <Field label={form.status_kepegawaian === "pppk" ? "Golongan PPPK (I–XVII)"
+                      <Field nama="pangkat_golongan" label={form.status_kepegawaian === "pppk" ? "Golongan PPPK (I–XVII)"
                         : ["tni", "polri"].includes(form.status_kepegawaian) ? "Pangkat"
                         : "Pangkat / Golongan"}>
                         <Input value={form.pangkat_golongan} onChange={set("pangkat_golongan")} list="opsi-pangkat"
@@ -1341,19 +1634,19 @@ export default function PegawaiPage({ user, onBack }) {
                       </Field>
                     )}
                     {form.status_kepegawaian === "non_asn" && (
-                      <Field label="Sub-Kategori Non-ASN">
+                      <Field nama="sub_kategori_non_asn" label="Sub-Kategori Non-ASN">
                         <Select value={form.sub_kategori_non_asn} onChange={set("sub_kategori_non_asn")} opts={ref.sub_kategori_non_asn} />
                       </Field>
                     )}
                     {/* Status pegawai (REFERENSI SIMPEG) = hubungan kerja dgn
                         satker; terpisah dari Status Keberadaan (aktif/cuti/
                         pensiun). Sebagian status merujuk instansi lain. */}
-                    <Field label="Status Pegawai (Satker)">
+                    <Field nama="status_pegawai_satker" label="Status Pegawai (Satker)">
                       <Select value={form.status_pegawai_satker} onChange={set("status_pegawai_satker")}
                         data-testid="pegawai-form-status-pegawai-satker" opts={ref.status_pegawai_satker} />
                     </Field>
                     {(ref.status_pegawai_satker_berinstansi || []).includes(form.status_pegawai_satker) && (
-                      <Field label="Instansi/Satker Terkait" span2>
+                      <Field nama="status_pegawai_instansi" label="Instansi/Satker Terkait" span2>
                         <Input value={form.status_pegawai_instansi} onChange={set("status_pegawai_instansi")}
                           placeholder="Instansi asal/tujuan (perbantuan / dipekerjakan)"
                           data-testid="pegawai-form-status-instansi" />
@@ -1381,19 +1674,20 @@ export default function PegawaiPage({ user, onBack }) {
                           <Input value={form.penyebab_meninggal} onChange={set("penyebab_meninggal")}
                             placeholder="cth. sakit / kecelakaan kerja (tewas)" />
                         </Field>
-                        <Field label="Nama Ahli Waris">
+                        <Field nama="ahli_waris_nama" label="Nama Ahli Waris">
                           <Input value={form.ahli_waris_nama} onChange={set("ahli_waris_nama")}
                             placeholder="penerima/penyerah BMN almarhum"
                             data-testid="pegawai-form-ahli-waris" />
                         </Field>
-                        <Field label="Hubungan Ahli Waris">
+                        <Field nama="ahli_waris_hubungan" label="Hubungan Ahli Waris">
                           <Input value={form.ahli_waris_hubungan} onChange={set("ahli_waris_hubungan")}
                             placeholder="cth. Istri / Suami / Anak" />
                         </Field>
-                        <Field label="Kontak Ahli Waris" span2>
+                        <Field nama="ahli_waris_kontak" label="Kontak Ahli Waris" span2>
                           <Input value={form.ahli_waris_kontak} onChange={set("ahli_waris_kontak")}
                             placeholder="No. HP / alamat untuk pemberitahuan resmi" />
                         </Field>
+                        {!luar && (<>
                         <Field label="Tgl Pemberitahuan Ahli Waris">
                           <InputTanggalRoda name="pemberitahuan_ahli_waris_tanggal" value={form.pemberitahuan_ahli_waris_tanggal}
                             onChange={set("pemberitahuan_ahli_waris_tanggal")} minYear={1990}
@@ -1412,12 +1706,13 @@ export default function PegawaiPage({ user, onBack }) {
                           hapus demi hukum. Isi tanggal &amp; nomor surat pemberitahuan di atas bila sudah
                           dilakukan.
                         </div>
+                        </>)}
                       </>
                     )}
                     {form.status_kepegawaian !== "non_asn" && (
                       <>
-                        <Field label="TMT Jabatan"><InputTanggalRoda name="tmt_jabatan" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} minYear={1970} maxYear={new Date().getFullYear() + 1} data-testid="pegawai-form-tmt-jabatan" /></Field>
-                        <Field label="Akhir Periode Jabatan (ops.)">
+                        <Field nama="tmt_jabatan" label="TMT Jabatan"><InputTanggalRoda name="tmt_jabatan" value={form.tmt_jabatan} onChange={set("tmt_jabatan")} minYear={1970} maxYear={new Date().getFullYear() + 1} data-testid="pegawai-form-tmt-jabatan" /></Field>
+                        <Field nama="tanggal_akhir_jabatan" label="Akhir Periode Jabatan (ops.)">
                           <InputTanggalRoda name="tanggal_akhir_jabatan" value={form.tanggal_akhir_jabatan} onChange={set("tanggal_akhir_jabatan")} minYear={1970} data-testid="pegawai-form-akhir-jabatan" />
                         </Field>
                       </>
@@ -1426,7 +1721,7 @@ export default function PegawaiPage({ user, onBack }) {
                   {/* Kontrak Non-ASN — internal instansi vs OUTSOURCING (riset
                       PER-31/PB/2016 + Perpres 16/2018); pemantauan pemegang
                       aset saat kontrak berakhir. */}
-                  {form.status_kepegawaian === "non_asn" && (
+                  {form.status_kepegawaian === "non_asn" && !pihakKetiga && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-2.5 rounded-lg bg-muted/40 border border-border/60">
                       <Field label="Jenis Kontrak">
                         <Select value={form.jenis_kontrak_non_asn} onChange={set("jenis_kontrak_non_asn")}
@@ -1443,16 +1738,20 @@ export default function PegawaiPage({ user, onBack }) {
                       <Field label="Selesai Kontrak"><InputTanggalRoda name="tgl_selesai_kontrak" value={form.tgl_selesai_kontrak} onChange={set("tgl_selesai_kontrak")} minYear={2000} data-testid="pegawai-form-selesai-kontrak" /></Field>
                     </div>
                   )}
+                  {pihakKetiga && (
+                    <BagianKapasitas form={form} setForm={setForm} refLuar={refLuar}
+                      perorangan={perorangan || form.jenis_instansi === "perorangan"} />
+                  )}
                 </div>
               )}
 
               {tabForm === "jabatan" && (
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="Jabatan (definitif)" span2><Input value={form.jabatan} onChange={set("jabatan")} placeholder="cth. Analis Pengelolaan BMN" /></Field>
+                    <Field nama="jabatan" label="Jabatan (definitif)" span2><Input value={form.jabatan} onChange={set("jabatan")} placeholder="cth. Analis Pengelolaan BMN" /></Field>
                     {/* Rangkap jabatan struktural sementara: Plt (jabatan lowong)
                         / Plh (pejabat definitif berhalangan sementara). */}
-                    <Field label="Rangkap Jabatan Struktural (Plt/Plh)">
+                    <Field nama="jenis_pelaksana" label="Rangkap Jabatan Struktural (Plt/Plh)">
                       <select value={form.jenis_pelaksana || ""} onChange={set("jenis_pelaksana")}
                         className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
                         data-testid="pegawai-form-jenis-pelaksana">
@@ -1461,7 +1760,7 @@ export default function PegawaiPage({ user, onBack }) {
                       </select>
                     </Field>
                     {form.jenis_pelaksana && (
-                      <Field label={`Jabatan yang di-${form.jenis_pelaksana === "plt" ? "Plt" : "Plh"}-kan`}>
+                      <Field nama="jabatan_pelaksana" label={`Jabatan yang di-${form.jenis_pelaksana === "plt" ? "Plt" : "Plh"}-kan`}>
                         <Input value={form.jabatan_pelaksana} onChange={set("jabatan_pelaksana")}
                           placeholder="cth. Kepala Bagian Umum" data-testid="pegawai-form-jabatan-pelaksana" />
                       </Field>
@@ -1472,22 +1771,25 @@ export default function PegawaiPage({ user, onBack }) {
                         Pada naskah dinas ditulis <span className="font-semibold">{form.jenis_pelaksana === "plt" ? "“Plt.”" : "“Plh.”"}</span> di depan jabatan tersebut.
                       </p>
                     )}
-                    <Field label="Jenis Jabatan">
+                    <Field nama="jenis_jabatan" label="Jenis Jabatan">
                       <Select value={form.jenis_jabatan} onChange={set("jenis_jabatan")} opts={ref.jenis_jabatan} />
                     </Field>
-                    <Field label="Kategori Pegawai (UU ASN)">
+                    <Field nama="kategori_pegawai" label="Kategori Pegawai (UU ASN)">
                       <Select value={form.kategori_pegawai} onChange={set("kategori_pegawai")} opts={ref.kategori_pegawai} />
                     </Field>
-                    <Field label="Eselon (teks)"><Input value={form.eselon} onChange={set("eselon")} placeholder="cth. IV.a" /></Field>
+                    <Field nama="eselon" label="Eselon (teks)"><Input value={form.eselon} onChange={set("eselon")} placeholder="cth. IV.a" /></Field>
                     {/* Penghubung lintas modul: kode satker 6 digit + KODE
                         LOKASI BMN 20 karakter (selaras Master Satker & stiker
                         label). Kode 20 karakter itu memuat kode satker 6 digit
                         di dalamnya, jadi keduanya harus konsisten. */}
+                    {/* Orang luar tak pernah berkunci kode satker (invarian 6). */}
+                    {!luar && (
                     <Field label="Kode Satker (6 digit)">
                       <Input value={form.kode_satker} onChange={set("kode_satker")} className="font-mono"
                         inputMode="numeric" maxLength={6} placeholder="cth. 527010" data-testid="pegawai-form-kode-satker" />
                     </Field>
-                    <Field label="Kode Satker Lengkap (20 karakter)">
+                    )}
+                    <Field nama="kode_satker_lengkap" label="Kode Satker Lengkap (20 karakter)">
                       {/* `inputMode` BUKAN numeric: dua karakter terakhir adalah
                           huruf kewenangan (KP/KD/TP/DK). Papan tik angka di HP
                           akan menyembunyikan huruf yang justru wajib diketik. */}
@@ -1525,7 +1827,9 @@ export default function PegawaiPage({ user, onBack }) {
                   {/* Unit kerja berjenjang — pilihan BERTINGKAT dari master unit;
                       jenjang terdalam otomatis jadi Unit Kerja. Dimulai di
                       tingkat SATKERNYA: Eselon I sebuah Lapas adalah Ditjen di
-                      kementeriannya, bukan bagian struktur satker itu. */}
+                      kementeriannya, bukan bagian struktur satker itu.
+                      Perorangan tak punya unit — bagian ini tidak dirender. */}
+                  {!formPerorangan && (<>
                   {akar > 1 && (
                     <p className="text-[11px] text-muted-foreground -mb-1" data-testid="pegawai-akar-eselon">
                       Satker ini {labelLevel(akar)} — pengisian dimulai dari sana.
@@ -1534,7 +1838,7 @@ export default function PegawaiPage({ user, onBack }) {
                   )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {levelForm.map((lv) => (
-                      <Field key={lv} label={`Eselon ${lv}`}>
+                      <Field key={lv} nama={`eselon${lv}`} label={`Eselon ${lv}`}>
                         <Input value={form[`eselon${lv}`]} onChange={set(`eselon${lv}`)}
                           list={`opsi-eselon-${lv}`}
                           placeholder={["cth. Kedeputian / Sekretariat", "cth. Direktorat / Biro", "cth. Bagian / Subdirektorat", "cth. Subbagian / Seksi", ""][lv - 1]}
@@ -1547,6 +1851,8 @@ export default function PegawaiPage({ user, onBack }) {
                     {isAdmin && (
                       <div className="flex items-end">
                         <Button type="button" variant="outline" size="sm" className="h-10 gap-1.5 w-full"
+                          disabled={!unitCocok}
+                          title={unitCocok ? undefined : `Pilih ${sebutan.satker.toLowerCase()} orang ini di bilah lingkup untuk mengelola unitnya`}
                           onClick={() => setKelolaUnit({ eselon: String(akar), nama: "", parentId: "", sibuk: false })}
                           data-testid="pegawai-kelola-unit">
                           <Network className="w-3.5 h-3.5" />Kelola Unit Kerja ({units.length})
@@ -1555,19 +1861,20 @@ export default function PegawaiPage({ user, onBack }) {
                     )}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Field label="Unit Kerja (ringkas)">
+                    <Field nama="unit_kerja" label="Unit Kerja (ringkas)">
                       {/* Terhubung Master Unit Kerja yang sudah dimuat (audit W4 #9) */}
                       <Input value={form.unit_kerja} list="pegawai-unit-list" onChange={set("unit_kerja")} placeholder="otomatis dari Eselon terdalam bila kosong" data-testid="pegawai-form-unit" />
                       <datalist id="pegawai-unit-list">
                         {[...new Set(units.map((u) => u.nama_unit || "").filter(Boolean))].sort().map((u) => <option key={u} value={u} />)}
                       </datalist>
                     </Field>
-                    <Field label="Unit Organisasi / Satker"><Input value={form.unit_organisasi} onChange={set("unit_organisasi")} /></Field>
+                    <Field nama="unit_organisasi" label="Unit Organisasi / Satker"><Input value={form.unit_organisasi} onChange={set("unit_organisasi")} /></Field>
                   </div>
+                  </>)}
                   {/* Sinkronkan data pemegang ke aset yang dipegang (setelah
                       kenaikan pangkat / pindah unit / ganti nama). BAST yang
                       sudah terbit tidak berubah. */}
-                  {form.id && form.nip && (
+                  {!luar && form.id && form.nip && (
                     <div className="pt-1">
                       <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5"
                         onClick={sinkronManual} data-testid="pegawai-sinkron-aset">
@@ -1586,13 +1893,13 @@ export default function PegawaiPage({ user, onBack }) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="No. HP"><Input value={form.no_hp} onChange={set("no_hp")} inputMode="tel" placeholder="cth. 0812…" /></Field>
                     <Field label="Email"><Input type="email" value={form.email} onChange={set("email")} placeholder="nama@instansi.go.id" data-testid="pegawai-form-email" /></Field>
-                    <Field label="Nama Bank">
+                    <Field nama="nama_bank" label="Nama Bank">
                       <Input value={form.nama_bank} onChange={set("nama_bank")} list="opsi-bank" placeholder="cth. BRI" data-testid="pegawai-form-bank" />
                       <datalist id="opsi-bank">
                         {["BRI", "BNI", "Mandiri", "BTN", "BSI", "BCA", "CIMB Niaga", "Danamon", "Permata", "Maybank"].map((b) => <option key={b} value={b} />)}
                       </datalist>
                     </Field>
-                    <Field label="No. Rekening"><Input value={form.no_rekening} onChange={set("no_rekening")} className="font-mono" inputMode="numeric" data-testid="pegawai-form-rekening" /></Field>
+                    <Field nama="no_rekening" label="No. Rekening"><Input value={form.no_rekening} onChange={set("no_rekening")} className="font-mono" inputMode="numeric" data-testid="pegawai-form-rekening" /></Field>
                   </div>
                   {(() => {
                     // Peringatan LUNAK digit rekening per bank (non-blocking).
@@ -1611,6 +1918,7 @@ export default function PegawaiPage({ user, onBack }) {
                 </div>
               )}
             </div>
+            </KonteksRanah.Provider>
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setForm(null)}>Batal</Button>
@@ -1879,12 +2187,12 @@ export default function PegawaiPage({ user, onBack }) {
             ) : previewFoto?.id ? (
               /* Utamakan file asli (foto-asli); jatuh ke versi krop bila foto
                  lama belum menyimpan berkas asli. */
-              <img src={authMediaUrl(`${API}/pegawai/${previewFoto.id}/foto-asli`)}
+              <img src={authMediaUrl(`${API}${rn.pegawai}/${previewFoto.id}/foto-asli`)}
                 alt={`Foto ${previewFoto?.nama || ""}`}
                 onError={(e) => {
                   if (!e.currentTarget.dataset.fb) {
                     e.currentTarget.dataset.fb = "1";
-                    e.currentTarget.src = authMediaUrl(`${API}/pegawai/${previewFoto.id}/foto`);
+                    e.currentTarget.src = authMediaUrl(`${API}${rn.pegawai}/${previewFoto.id}/foto`);
                   }
                 }}
                 className="max-h-[70vh] max-w-full object-contain" />
@@ -1934,11 +2242,51 @@ function PohonUnit({ unit, units, depth, buka, onToggle, jumlah, onFilter }) {
   );
 }
 
-function Field({ label, children, span2 }) {
+function Field({ label, children, span2, nama }) {
+  const { nonaktif, label: sebutan } = useContext(KonteksRanah);
+  if (nama && nonaktif.has(nama)) return null;
+  if (nama && sebutan[nama]) label = sebutan[nama];
   return (
     <div className={span2 ? "col-span-full sm:col-span-2" : ""}>
       <label className="text-xs font-medium text-foreground block mb-1">{label}</label>
       {children}
+    </div>
+  );
+}
+
+// "Kapasitas & Dasar Kewenangan" — khusus pihak ketiga (3.7a). Nilainya
+// bawaan untuk form BAST; yang mengikat adalah yang dibekukan di naskah.
+function BagianKapasitas({ form, setForm, refLuar, perorangan }) {
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const opsi = (peta) => Object.entries(peta || {}).map(([kode, uraian]) => ({ kode, uraian }));
+  return (
+    <div className="space-y-2 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/30"
+      data-testid="pegawai-form-bagian-kapasitas">
+      <p className="text-xs font-semibold text-foreground">Kapasitas &amp; Dasar Kewenangan</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Kapasitas Bertindak">
+          <Select value={perorangan ? "diri_sendiri" : form.kapasitas_bertindak}
+            onChange={set("kapasitas_bertindak")} disabled={perorangan}
+            opts={opsi(refLuar?.kapasitas_bertindak)} data-testid="pegawai-form-kapasitas" />
+        </Field>
+        <Field label="Dasar Kewenangan">
+          <Select value={form.dasar_kewenangan_jenis} onChange={set("dasar_kewenangan_jenis")}
+            opts={opsi(refLuar?.dasar_kewenangan)} data-testid="pegawai-form-dasar-kewenangan" />
+        </Field>
+        <Field label="Nomor Dokumen Kewenangan">
+          <Input value={form.dasar_kewenangan_nomor} onChange={set("dasar_kewenangan_nomor")}
+            placeholder="nomor akta / surat kuasa / surat tugas" />
+        </Field>
+        <Field label="Tanggal Dokumen Kewenangan">
+          <InputTanggalRoda name="dasar_kewenangan_tanggal" value={form.dasar_kewenangan_tanggal}
+            onChange={set("dasar_kewenangan_tanggal")} minYear={1970} />
+        </Field>
+      </div>
+      {form.kapasitas_bertindak === "petugas" && !perorangan && (
+        <p className="text-[11px] text-amber-800 dark:text-amber-300" data-testid="pegawai-form-peringatan-petugas">
+          Petugas/karyawan bukan pihak yang sah menandatangani atas nama badan.
+        </p>
+      )}
     </div>
   );
 }

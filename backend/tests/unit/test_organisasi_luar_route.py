@@ -199,6 +199,22 @@ def test_wadah_perorangan_idempoten_dan_terkunci(dbx):
         kelompok="pihak_ketiga", jenis="perorangan", nama="Budi"), user=ADMIN_A)).status_code == 400
 
 
+def test_rute_wadah_perorangan_admin_saja_dan_idempoten(dbx):
+    """Layar Master Pegawai (PGW-07) membuka wadah lewat rute ini; tanpa rute,
+    pembantu `pastikan_wadah_perorangan` tak pernah terpanggil dari mana pun."""
+    from auth_utils import require_admin
+    rute = next(r for r in rol.organisasi_luar_router.routes
+                if r.path == "/luar/wadah-perorangan")
+    assert rute.methods == {"POST"}
+    assert any(d.call is require_admin for d in rute.dependant.dependencies)
+    w1 = _jalan(rol.buka_wadah_perorangan(user=ADMIN_A))
+    w2 = _jalan(rol.buka_wadah_perorangan(user=ADMIN_B))
+    assert w1["instansi"]["id"] == w2["instansi"]["id"]
+    assert w1["satker"]["instansi_id"] == w1["instansi"]["id"]
+    assert w1["instansi"]["wadah"] is True and w1["satker"]["wadah"] is True
+    assert _jalan(dbx.satker_luar.count_documents({})) == 1
+
+
 def test_field_badan_pada_eksternal_tersimpan_kosong(dbx):
     i = _buat(nomor_induk="123", npwp="99.999", badan_penyelenggara="Yayasan X")["instansi"]
     simpan = _jalan(dbx.instansi_luar.find_one({"id": i["id"]}, {"_id": 0}))

@@ -343,6 +343,16 @@ async def referensi_luar(_user: dict = Depends(require_user)):
     }
 
 
+# ── wadah perorangan ───────────────────────────────────────────────────────
+@organisasi_luar_router.post("/luar/wadah-perorangan")
+async def buka_wadah_perorangan(user: dict = Depends(require_admin)):
+    """Pasangan wadah "Masyarakat (Perorangan)" — dibuat saat pertama
+    dibutuhkan (3.3), yaitu saat admin memilih Perorangan di layar Master
+    Pegawai. Idempoten; tidak menulis audit karena tidak ada data pengguna
+    yang berubah selain wadah sistem itu sendiri."""
+    return await pastikan_wadah_perorangan(user)
+
+
 # ── riwayat ────────────────────────────────────────────────────────────────
 @organisasi_luar_router.get("/luar/riwayat/{jenis}/{record_id}")
 async def riwayat_luar(jenis: str, record_id: str,

@@ -18,6 +18,28 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1130] Master Pegawai tiga kelompok — PGW-07: layar Master Pegawai — 2026-11-11
+
+- Master Pegawai kini dibuka pada layar **pilih kelompok**: Pegawai Internal,
+  Instansi Eksternal (lalu Pusat/Daerah), atau Pihak Ketiga. Pilihan diingat
+  di perangkat; sesudahnya ketiganya menjadi bilah di kepala halaman. Tidak
+  ada daftar "semua kelompok".
+- Tab luar punya bilah lingkup instansi → satker (Daerah: provinsi dulu,
+  lalu pemprov atau kab/kotanya). Mengganti tingkat atas mengosongkan
+  pilihan di bawahnya. Tambah, impor, dan ekspor menunggu satu satker dipilih.
+- Dialog **Kelola** instansi & satker luar: menampilkan yang mirip sebelum
+  simpan, field badan pihak ketiga (NIB/NPSN, NPWP, akta pendirian),
+  keterangan batas pusat/daerah, Nonaktifkan untuk semua admin, hapus
+  permanen khusus super-admin.
+- Form orang luar: instansi & satker mengikuti lingkup (tak diketik);
+  eksternal tanpa tujuh field pribadi; pihak ketiga tanpa field kepegawaian
+  ASN, Status Kepegawaian terkunci Non-ASN, dan bagian baru Kapasitas &
+  Dasar Kewenangan; tautan Riwayat perubahan. Tanpa Sinkron aset dan tanpa
+  jam pemberitahuan ahli waris.
+- Rute baru `POST /api/luar/wadah-perorangan` untuk membuka wadah
+  "Masyarakat (Perorangan)".
+- Layar Pegawai Internal tidak berubah: URL yang dipanggil dibekukan di uji.
+
 ## [#1129] Master Pegawai tiga kelompok — PGW-06: direktori gabungan & pembaca backend — 2026-11-11
 
 - Rute baru `/api/direktori-pegawai` (pemilih lintas modul: internal
