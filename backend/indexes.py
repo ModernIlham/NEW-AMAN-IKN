@@ -482,6 +482,20 @@ async def create_indexes() -> None:
         await _idx(db.pegawai_luar, [("kelompok", 1), ("satker_luar_id", 1), ("nama", 1)])
         await _idx(db.pegawai_luar, [("kelompok", 1), ("tataran", 1), ("nama", 1)])
         await _idx(db.pegawai_luar, [("provinsi_id", 1), ("nama", 1)])
+        # NIP/NIK unik se-direktori luar; string kosong dikecualikan (invarian 4).
+        try:
+            await db.pegawai_luar.create_index(
+                "nip", unique=True, name="unique_nip_luar",
+                partialFilterExpression={"nip": {"$gt": ""}})
+        except Exception:
+            await _idx(db.pegawai_luar, "nip", name="nip_luar_lookup")
+        # Kartu: sama dengan pegawai internal — unik+sparse, jatuh ke non-unik.
+        try:
+            await db.pegawai_luar.create_index("kartu_uid_hashes", unique=True,
+                                               sparse=True,
+                                               name="unique_kartu_luar")
+        except Exception:
+            await _idx(db.pegawai_luar, "kartu_uid_hashes", name="kartu_luar_lookup")
         # Register impor SIMAN: riwayat terbaru dulu.
         await _idx(db.siman_imports, "waktu")
         # Register e-sign: daftar per pembuat, terbaru dulu.

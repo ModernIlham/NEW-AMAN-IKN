@@ -158,7 +158,8 @@ class TestKontrakLolosUntukEkstensiTakDikenal:
         akan mematikan penjaga ini tanpa error apa pun."""
         pola = re.compile(r"\.jpe?g|\.png|\.webp")
         for berkas in ("routes/ttd.py", "routes/bast.py", "routes/assets.py",
-                       "routes/pemanfaatan.py", "routes/pegawai.py"):
+                       "routes/pemanfaatan.py", "routes/pegawai.py",
+                       "routes/pegawai_luar.py"):
             with open(os.path.join(BACKEND, berkas), encoding="utf-8") as f:
                 src = f.read()
             assert "cek_magic_gambar" in src and pola.search(src), berkas

@@ -462,7 +462,7 @@ class TestSapuanModulTerpasang:
         "routes/penggunaan.py", "routes/penghapusan.py", "routes/wasdal.py",
         "routes/pengesahan.py", "routes/persediaan.py", "routes/bast.py",
         "routes/assets.py", "routes/spasial.py", "routes/pegawai.py",
-        "routes/activities.py",
+        "routes/activities.py", "routes/pegawai_luar.py",
     ])
     def test_modul_memanggil_gerbang(self, rel):
         assert "tulis_media(" in self._src(rel), f"{rel} tak memanggil gerbang"
