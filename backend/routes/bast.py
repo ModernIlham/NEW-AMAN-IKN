@@ -42,6 +42,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from bast_pasal import validate_pj_tambahan
+import kebijakan_penerima as kp
 from auth_utils import (
     require_user, require_user_or_query_token, require_writer,
     require_writer_satker,
@@ -183,6 +184,11 @@ class BastIn(BaseModel):
     tanggal: Optional[str] = ""               # default hari ini
     jangka_dari: Optional[str] = ""           # khusus penggunaan_sementara
     jangka_sampai: Optional[str] = ""
+    # Penerima di luar satker (PGW-10): skema + dokumen dasar yang
+    # dilaksanakan BAST fisik ini. Diperiksa `kebijakan_penerima`.
+    skema: Optional[str] = ""
+    dokumen_dasar_nomor: Optional[str] = ""
+    dokumen_dasar_tanggal: Optional[str] = ""
     penanggung_jawab_tambahan: Optional[List[PjTambahanIn]] = None
     # Khusus `pengembalian_almarhum`: identitas almarhum (dasar BA) + saksi.
     almarhum: Optional[AlmarhumIn] = None
@@ -440,6 +446,31 @@ async def kirim_bast_ke_ttd(bast_id: str, payload: KirimTtdIn | None = None,
     return hasil
 
 
+async def _periksa_bast_luar(payload, user):
+    """BAST kepada/dari penerima di luar satker (PGW-10, kerangka).
+
+    PIHAK KEDUA harus orang luar dari direktori (bukan diketik bebas): jenis
+    instansi dan kapasitas bertindaknya dibaca dari sana, bukan dari klien.
+    Galat kelengkapan → 400 dengan rinciannya; lolos → 409 selama butir
+    pasalnya belum disahkan (`kebijakan_penerima.NASKAH_LUAR_SIAP`)."""
+    nip = str(payload.pihak_kedua.nip or "").strip()
+    orang = await db.pegawai_luar.find_one(
+        {"nip": nip}, {"_id": 0, "jenis_instansi": 1, "kapasitas_bertindak": 1,
+                       "kelompok": 1}) if nip else None
+    if not orang:
+        raise HTTPException(status_code=400, detail=(
+            "PIHAK KEDUA BAST penerima luar harus dipilih dari direktori orang "
+            "luar (instansi eksternal atau pihak ketiga)"))
+    galat = kp.periksa_penyerahan(
+        payload.skema, orang.get("jenis_instansi"), orang.get("kapasitas_bertindak"),
+        {"nomor": payload.dokumen_dasar_nomor, "tanggal": payload.dokumen_dasar_tanggal,
+         "jangka_dari": payload.jangka_dari, "jangka_sampai": payload.jangka_sampai})
+    if galat:
+        raise HTTPException(status_code=400, detail="; ".join(galat))
+    if not kp.NASKAH_LUAR_SIAP:
+        raise HTTPException(status_code=409, detail=kp.PESAN_GERBANG)
+
+
 @bast_router.post("/bast")
 async def buat_bast(payload: BastIn, request: Request = None,
                     user: dict = Depends(require_writer_satker)):
@@ -463,6 +494,8 @@ async def buat_bast(payload: BastIn, request: Request = None,
                 status_code=409,
                 detail="Permintaan dengan kunci idempotensi ini sedang "
                        "diproses, coba lagi sebentar")
+    if payload.jenis in kp.JENIS_BAST_LUAR:
+        await _periksa_bast_luar(payload, user)
     if payload.jenis not in JENIS_BAST:
         raise HTTPException(status_code=400,
                             detail=f"Jenis BAST tidak dikenal: {payload.jenis}")
@@ -753,7 +786,10 @@ async def buat_bast(payload: BastIn, request: Request = None,
     if nip2:
         record["pihak_kedua_terdaftar"] = bool(peg)
     from portal_bast import siapkan_otomasi_bast
-    record["portal_otomasi"] = await siapkan_otomasi_bast(db, record, aset)
+    # Penerima luar tidak memicu otomasi BMN Saya (PGW-10 butir 5): akses
+    # portal hanya untuk pegawai internal; pemegang diperbarui lewat tinjauan.
+    if record.get("jenis") not in kp.JENIS_BAST_LUAR:
+        record["portal_otomasi"] = await siapkan_otomasi_bast(db, record, aset)
     await db.bast_serah_terima.insert_one({**record})
 
     if sumber_revisi:

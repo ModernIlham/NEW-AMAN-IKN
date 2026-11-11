@@ -29,6 +29,7 @@ from auth_utils import require_admin, require_super_admin, require_user
 from db import db
 from shared_utils import kode_satker_user, log_audit
 import organisasi_luar_utils as olu
+import kebijakan_penerima as kp
 from pegawai_utils import kode_satker_lengkap_sah, normalisasi_kode_satker_lengkap
 
 organisasi_luar_router = APIRouter()
@@ -340,6 +341,8 @@ async def referensi_luar(_user: dict = Depends(require_user)):
         "field_khusus_pihak_ketiga": list(olu.FIELD_KHUSUS_PIHAK_KETIGA),
         "label_field": olu.LABEL_FIELD,
         "kunci_ikon": list(olu.KUNCI_IKON),
+        # PGW-10 (kerangka): skema per jenis penerima + gerbang naskah.
+        **kp.ringkas_referensi(),
     }
 
 

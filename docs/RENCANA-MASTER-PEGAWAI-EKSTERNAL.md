@@ -1056,7 +1056,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-07 | Layar Master Pegawai | 03, 04, 05 | **selesai** | #1121 |
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a + 08b) |
 | PGW-09 | Laporan & dokumen | 06 | **selesai** | #1123 |
-| PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | belum | |
+| PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | **kerangka selesai**; butir pasal & form menunggu verifikasi PMK 115/2020 | #1124 (kerangka) |
 | PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | belum | |
 | PGW-12 | Data uji & dokumentasi | 07–10 | belum | |
 
@@ -1810,6 +1810,29 @@ hanya boleh membangun kerangka dan uji, **bukan** teks pasal.
 menghasilkan pasal yang **identik** dengan sebelum paket (bekukan keluaran);
 `test_sitasi_regulasi.py` lulus; naskah tetap ≤ 2 halaman pada kasus uji
 terpanjang; tak ada kata "hukuman disiplin" di naskah penerima luar.
+
+
+**Hasil kerangka (2026-11-11):** prasyarat keras belum terpenuhi — status
+PMK 115/2020 masih bertentangan antarsumber (pustaka §2.4d, §14 butir 26)
+dan belum ada yang membuka riwayat dokumennya di JDIH. Sesuai aturan paket,
+yang dibangun hanya kerangka dan uji:
+- `backend/kebijakan_penerima.py`: matriks terkunci 6.6, `kebijakan`,
+  `periksa_penyerahan` (skema tak sah menyebut skema yang tersedia; dokumen
+  dasar & jangka waktu yang kurang disebut satu per satu; `petugas` ditolak
+  sebagai PIHAK KEDUA), `catatan_penyerahan` (KSPI hanya PT), `komparisi`
+  (kalimat identitas, tanpa rujukan peraturan). Dibuka ke layar lewat
+  `GET /luar/referensi` beserta `naskah_luar_siap`.
+- `POST /bast` jenis `penyerahan_pihak_luar`/`pengembalian_pihak_luar`:
+  PIHAK KEDUA wajib dari direktori orang luar (jenis instansi & kapasitas
+  dibaca server); galat kelengkapan → 400; lolos → **409 gerbang**
+  (`NASKAH_LUAR_SIAP = False`) karena tanpa butir pasal khusus naskahnya akan
+  memakai pasal internal. `JENIS_BAST` lama tidak diubah. Otomasi BMN Saya
+  tidak dipicu untuk jenis luar.
+- **Belum** (menunggu verifikasi): butir pasal `antar_pemerintah` dan
+  `pihak_ketiga` di `bast_pasal.py`, sitasi, dan form BAST (butir 6). Saat
+  diverifikasi: tulis butirnya, setel `NASKAH_LUAR_SIAP = True`, tambahkan
+  jenis luar ke form — uji gerbang di `test_kebijakan_penerima.py` menunjuk
+  tempat yang harus diubah.
 
 ---
 
