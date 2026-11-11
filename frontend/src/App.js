@@ -536,7 +536,7 @@ function InternalApp() {
       <div className="App">
       <SatkerAktifBar user={user} />
         <HalamanLazy fallback={<PageLoader />}>
-          <PegawaiPage user={user} onBack={() => setShowPegawai(false)} />
+          <PegawaiPage user={user} onBack={() => setShowPegawai(false)} wajibPilihKelompok />
         </HalamanLazy>
         <Toaster position="top-right" richColors />
       </div>
