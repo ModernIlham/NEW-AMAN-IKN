@@ -967,6 +967,12 @@ async def status_kepegawaian_by_nip(nip, kode_satker: str = "") -> str:
             {"nip": n, **q_scope}, {"_id": 0, "status_kepegawaian": 1})
         if doc and str(doc.get("status_kepegawaian") or "").strip():
             return str(doc["status_kepegawaian"]).strip()
+    # Orang luar (PGW-06): direktori bersama, tanpa scope satker. Pihak ketiga
+    # selalu non_asn, jadi NIK-nya tidak tercetak di blok tanda tangan.
+    doc = await db.pegawai_luar.find_one(
+        {"nip": n}, {"_id": 0, "status_kepegawaian": 1})
+    if doc and str(doc.get("status_kepegawaian") or "").strip():
+        return str(doc["status_kepegawaian"]).strip()
     return ""
 
 
@@ -1409,6 +1415,10 @@ async def enforce_pegawai_terdaftar(pengguna_nip, nip_lama=""):
         from pegawai_utils import is_meninggal
         peg = await db.pegawai.find_one(
             {"nip": nip}, {"_id": 0, "status": 1, "nama": 1})
+        if not peg:
+            # Orang luar (PGW-06) ikut ditolak bila berstatus Meninggal Dunia.
+            peg = await db.pegawai_luar.find_one(
+                {"nip": nip}, {"_id": 0, "status": 1, "nama": 1})
         if peg and is_meninggal(peg):
             raise HTTPException(
                 status_code=400,
@@ -1420,7 +1430,10 @@ async def enforce_pegawai_terdaftar(pengguna_nip, nip_lama=""):
         {"type": "global"}, {"_id": 0, "wajib_pegawai_terdaftar": 1}) or {}
     if not settings.get("wajib_pegawai_terdaftar"):
         return
-    if not await db.pegawai.find_one({"nip": nip}, {"_id": 1}):
+    # Terdaftar = ada di Master Pegawai internal ATAU di direktori orang luar
+    # (PGW-06). Semantiknya tetap tanpa scope satker, seperti sebelumnya.
+    if not (await db.pegawai.find_one({"nip": nip}, {"_id": 1})
+            or await db.pegawai_luar.find_one({"nip": nip}, {"_id": 1})):
         raise HTTPException(
             status_code=400,
             detail=f"NIP/NIK pengguna '{nip}' belum terdaftar di Master Pegawai. "

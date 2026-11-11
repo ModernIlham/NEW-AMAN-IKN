@@ -141,3 +141,24 @@ def test_identifikasi_kartu_internal_dulu_lalu_luar(dbx):
     assert "kartu_uid_hashes" not in hasil["pegawai"]
     assert _galat(rdp.identifikasi_kartu_direktori(
         _req(), rdp.KartuDirektoriIn(uid="04112233445566"), user=USER_A)).status_code == 404
+
+
+# ── pembaca 1: shared_utils ────────────────────────────────────────────────
+def test_status_kepegawaian_mengenali_orang_luar_dan_internal_tetap(dbx):
+    import shared_utils as su
+    _jalan(dbx.pegawai.update_one({"id": "pa"}, {"$set": {"status_kepegawaian": "pns"}}))
+    _jalan(dbx.pegawai_luar.update_one({"id": "l3"}, {"$set": {"status_kepegawaian": "non_asn"}}))
+    assert _jalan(su.status_kepegawaian_by_nip("555")) == "non_asn"
+    assert _jalan(su.status_kepegawaian_by_nip("111")) == "pns"
+    assert _jalan(su.status_kepegawaian_by_nip("000")) == ""
+
+
+def test_enforce_pegawai_terdaftar_mengenali_orang_luar(dbx):
+    import shared_utils as su
+    _jalan(dbx.report_settings.insert_one({"type": "global", "wajib_pegawai_terdaftar": True}))
+    _jalan(su.enforce_pegawai_terdaftar("555"))          # luar terdaftar → lolos
+    _jalan(su.enforce_pegawai_terdaftar("111"))          # internal → tetap lolos
+    assert _galat(su.enforce_pegawai_terdaftar("000")).status_code == 400
+    _jalan(dbx.pegawai_luar.update_one({"id": "l3"}, {"$set": {"status": "meninggal"}}))
+    assert _galat(su.enforce_pegawai_terdaftar("555")).status_code == 400
+    _jalan(su.enforce_pegawai_terdaftar("555", nip_lama="555"))   # pemegang tak berubah
