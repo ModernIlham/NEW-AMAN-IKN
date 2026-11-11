@@ -116,6 +116,11 @@ class PihakIn(BaseModel):
     nip: str = ""
     jabatan: str = ""
     alamat: str = ""
+    # Kelompok pihak (PGW-06) — DIISI SERVER dari direktori lewat NIP dan
+    # dibekukan pada BAST; kiriman klien ditimpa.
+    kelompok: str = ""
+    tataran: str = ""
+    instansi_nama: str = ""
 
 
 class PjTambahanIn(BaseModel):
@@ -131,6 +136,10 @@ class PjTambahanIn(BaseModel):
     # NIP (ASN) atau NIK (non-ASN) — satu kolom, karena dokumen ini dipakai
     # keduanya dan memisahkannya hanya melahirkan kolom yang selalu kosong.
     nip: str = ""
+    # Kelompok (PGW-06) — diisi server dari direktori, dibekukan.
+    kelompok: str = ""
+    tataran: str = ""
+    instansi_nama: str = ""
     unit_tempat_tugas: str = ""
     # Unit eselon TERDALAM tempat orang ini bekerja — terisi otomatis saat
     # namanya dipilih dari Master Pegawai. Tetap bisa diketik manual: tidak
@@ -214,6 +223,21 @@ class BastIn(BaseModel):
     revisi_dari: Optional[str] = ""
     revisi_mode: Optional[str] = "mengubah"
     revisi_alasan: Optional[str] = ""
+
+
+async def _bekukan_kelompok(user, pihak: dict) -> dict:
+    """Isi kelompok/tataran/instansi satu pihak dari direktori lewat NIP-nya
+    (PGW-06) — internal satker pengguna dulu, lalu orang luar. Nilai kiriman
+    klien selalu ditimpa; pihak tanpa NIP atau tak dikenal → kosong."""
+    from functools import partial
+    import direktori_pegawai as _dp
+    d = dict(pihak or {})
+    orang = await _dp.cari_orang(partial(scope_query_field_satker, user),
+                                 d.get("nip"), database=db)
+    d["kelompok"] = (orang or {}).get("kelompok", "")
+    d["tataran"] = (orang or {}).get("tataran", "")
+    d["instansi_nama"] = (orang or {}).get("instansi_nama", "")
+    return d
 
 
 @bast_router.get("/bast/referensi")
@@ -591,6 +615,10 @@ async def buat_bast(payload: BastIn, request: Request = None,
         peg1 = await db.pegawai.find_one(
             scope_query_field_satker(user, {"nip": nip1}),
             {"_id": 0, "nama": 1, "status": 1})
+        if not peg1:
+            # Orang luar (PGW-06): direktori bersama, tanpa scope satker.
+            peg1 = await db.pegawai_luar.find_one(
+                {"nip": nip1}, {"_id": 0, "nama": 1, "status": 1})
         if peg1 and is_meninggal(peg1):
             raise HTTPException(status_code=400, detail=(
                 f"{peg1.get('nama') or nip1} berstatus Meninggal Dunia di "
@@ -656,8 +684,8 @@ async def buat_bast(payload: BastIn, request: Request = None,
         "surat_id": surat_id,
         "tanggal": (str(payload.tanggal or "").strip()[:10]
                     or now.date().isoformat()),
-        "pihak_pertama": pihak_pertama,
-        "pihak_kedua": payload.pihak_kedua.model_dump(),
+        "pihak_pertama": await _bekukan_kelompok(user, pihak_pertama),
+        "pihak_kedua": await _bekukan_kelompok(user, payload.pihak_kedua.model_dump()),
         "asset_ids": [a["id"] for a in aset],
         # Snapshot identitas utk dokumen (foto TIDAK disnapshot — diambil
         # saat render bila sertakan_foto).
@@ -668,7 +696,8 @@ async def buat_bast(payload: BastIn, request: Request = None,
         "jangka_dari": str(payload.jangka_dari or "").strip()[:10],
         "jangka_sampai": str(payload.jangka_sampai or "").strip()[:10],
         "penanggung_jawab_tambahan": [
-            p.model_dump() for p in (payload.penanggung_jawab_tambahan or [])
+            await _bekukan_kelompok(user, p.model_dump())
+            for p in (payload.penanggung_jawab_tambahan or [])
             if str(p.nama or "").strip()],
         # Pilihan lampiran DIBEKUKAN pada dokumen, bukan dibaca dari kebijakan
         # saat mencetak: BAST yang sudah ditandatangani harus tercetak sama

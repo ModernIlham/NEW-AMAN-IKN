@@ -181,3 +181,28 @@ def test_periksa_penerima_mengenali_orang_luar_dan_internal_tetap(dbx):
     _jalan(dbx.pegawai_luar.update_one({"id": "l3"}, {"$set": {"status": "meninggal"}}))
     with pytest.raises(pnu.PenerimaMeninggal):
         _jalan(pnu.periksa_penerima(dbx, sc, "555"))
+
+
+# ── pembaca 3: routes/bast.py ──────────────────────────────────────────────
+def test_bast_membekukan_kelompok_pihak_dari_direktori(dbx, monkeypatch):
+    import routes.bast as rb
+    monkeypatch.setattr(rb, "db", dbx)
+    luar = _jalan(rb._bekukan_kelompok(USER_A, {"nama": "x", "nip": "444",
+                                                "kelompok": "internal"}))
+    assert (luar["kelompok"], luar["tataran"], luar["instansi_nama"]) == \
+        ("eksternal", "daerah", "Kab Y")
+    internal = _jalan(rb._bekukan_kelompok(USER_A, {"nama": "Ani", "nip": "111"}))
+    assert (internal["kelompok"], internal["instansi_nama"]) == ("internal", "")
+    asing = _jalan(rb._bekukan_kelompok(USER_A, {"nama": "Budi", "nip": "222",
+                                                 "kelompok": "pihak_ketiga"}))
+    assert asing["kelompok"] == ""          # internal satker lain tak dikenali
+    assert set(rb.PihakIn.model_fields) >= {"kelompok", "tataran", "instansi_nama"}
+
+
+def test_bast_pihak_kesatu_orang_luar_meninggal_ditolak_lewat_sumber():
+    """Cek PIHAK KESATU meninggal kini juga membaca pegawai_luar."""
+    from pathlib import Path
+    import routes.bast as rb
+    src = Path(rb.__file__).read_text(encoding="utf-8")
+    blok = src.split("nip1 = str(pihak_pertama.get(\"nip\")", 1)[1][:1200]
+    assert "db.pegawai_luar.find_one" in blok and "is_meninggal(peg1)" in blok
