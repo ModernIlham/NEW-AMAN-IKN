@@ -139,3 +139,53 @@ def test_cli_main_menulis_ndjson(tmp_path):
     for b in baris:
         rec = json.loads(b)  # tiap baris JSON valid
         assert rec["asset_code"] and rec["asset_name"]
+
+
+# ── PGW-12: direktori luar ─────────────────────────────────────────────────
+def test_organisasi_luar_valid_berjenjang_dan_tanpa_kode_satker():
+    import organisasi_luar_utils as olu
+    from scripts.synthdata import generate_organisasi_luar
+
+    d = generate_organisasi_luar(seed=7, orang_per_satker=2)
+    ins = {i["id"]: i for i in d["instansi"]}
+    sat = {s["id"]: s for s in d["satker"]}
+    for i in d["instansi"]:
+        assert olu.validate_instansi_luar(i) == [], i["nama"]
+        induk = ins.get(i.get("induk_id"))
+        assert olu.periksa_jenjang_daerah(i, induk) == [], i["nama"]
+    for s in d["satker"]:
+        assert olu.validate_satker_luar(s) == [], s["nama_satker"]
+        assert s["instansi_id"] in ins
+    for o in d["orang"]:
+        s = sat[o["satker_luar_id"]]
+        assert olu.validate_orang_luar(o, o["kelompok"], o["jenis_instansi"]) == [], o["nama"]
+        assert o["kelompok"] == s["kelompok"] and o["instansi_id"] == s["instansi_id"]
+    for kol in ("instansi", "satker", "orang"):
+        assert all("kode_satker" not in r for r in d[kol]), kol
+    jenis = {i["jenis"] for i in d["instansi"]}
+    assert {"kementerian_lembaga", "pemerintah_provinsi", "pemerintah_kabkota",
+            "pemerintah_desa", "perorangan"} <= jenis
+    assert sum(1 for i in d["instansi"] if i.get("wadah")) == 1
+    # Desa menyalin provinsi lewat kab/kotanya.
+    desa = next(i for i in d["instansi"] if i["jenis"] == "pemerintah_desa")
+    assert desa["provinsi_nama"] == "Provinsi Kalimantan Timur" and desa["kabkota_nama"]
+    # Pihak ketiga selalu Non-ASN; NIK unik.
+    p3 = [o for o in d["orang"] if o["kelompok"] == "pihak_ketiga"]
+    assert p3 and all(o["status_kepegawaian"] == "non_asn" for o in p3)
+    nip = [o["nip"] for o in d["orang"]]
+    assert len(nip) == len(set(nip))
+
+
+def test_organisasi_luar_deterministik_dan_cli():
+    import subprocess
+    import sys
+    from pathlib import Path
+    from scripts.synthdata import generate_organisasi_luar
+
+    assert generate_organisasi_luar(seed=3) == generate_organisasi_luar(seed=3)
+    backend = Path(__file__).resolve().parents[2]
+    out = subprocess.run([sys.executable, "-m", "scripts.synthdata", "--kind", "luar",
+                          "-n", "1", "--format", "ndjson"], cwd=backend,
+                         capture_output=True, text=True, check=True).stdout
+    baris = [json.loads(b) for b in out.splitlines()]
+    assert {b["_koleksi"] for b in baris} == {"instansi", "satker", "orang"}
