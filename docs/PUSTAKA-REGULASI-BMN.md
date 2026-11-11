@@ -226,6 +226,118 @@ ruangan, distribusi DBR/KIR). Logika murni teruji unit (`pegawai_utils.py`:
 (`routes/pegawai.py`, endpoint `/pegawai`, `/pegawai/referensi`,
 `/pegawai/rekap-unit`) + UI kelola (`PegawaiPage.jsx`, dibuka dari Beranda Modul).
 
+**2.4d Tiga kelompok pegawai & matriks jenis penerima × skema (riset Nov 2026,
+PGW-00 rencana `docs/RENCANA-MASTER-PEGAWAI-EKSTERNAL.md`).** Master Pegawai
+dibagi menjadi tiga kelompok menurut **tempat orang itu bekerja**, bukan
+menurut status kepegawaiannya:
+
+| Kelompok | Isi | Dasar pembedaan |
+|---|---|---|
+| **Internal** | Pegawai satker-satker instansi sendiri (§2.4c, tidak berubah) | Pengguna Barang yang sama |
+| **Instansi eksternal** | Pegawai K/L lain (**pusat**) dan pemerintah provinsi, kabupaten/kota, desa (**daerah**) | PMK 115/2020 Ps. 1 angka 22 menyebut "Kementerian/Lembaga, Pemerintah Daerah, dan Pemerintah Desa" sebagai lawan dari Pihak Lain |
+| **Pihak ketiga** | Wakil badan di luar pemerintahan: BUMN/BUMD/BUMDes, badan usaha swasta, koperasi, yayasan dan satuan pendidikan swasta, badan hukum lain, kelompok masyarakat, perorangan, pemerintah negara lain/organisasi internasional | "Pihak Lain adalah pihak-pihak selain Kementerian/Lembaga, Pemerintah Daerah, dan Pemerintah Desa" (PMK 115/2020 Ps. 1 angka 22) |
+
+Tanda keyakinan di bagian ini: **[F]** = dibaca langsung dari naskah di
+`docs/regulasi/` (pasal disebut); **[S]** = sumber sekunder lewat mesin
+pencari, naskahnya tidak ada di repo; **[P]** = rumusan penyusun, bukan bunyi
+peraturan.
+
+**Matriks jenis penerima × skema penyerahan BMN.** Yang dicatat hanyalah
+apakah naskah **menyebut** jenis penerima itu sebagai pihak yang sah; syarat
+objek, persetujuan, dan tata caranya tetap di §6–§7 dan di naskahnya.
+
+| Jenis penerima (kode) | Penggunaan sementara | Pinjam pakai | Sewa | KSP | BGS/BSG | KSPI | Dioperasikan Pihak Lain | Hibah (pemindahtanganan) |
+|---|---|---|---|---|---|---|---|---|
+| `kementerian_lembaga` | **ya** — PMK 40/2024 Ps. 32(1) [F] | tidak — PP 28/2020 penjelasan Ps. 30: pengalihan penggunaan antar-Pengguna Barang bukan pinjam pakai [F] | tidak disebut Ps. 10(2) [F] | tidak | tidak | tidak | bukan Pihak Lain | — (antar-K/L = pengalihan status, modul Penggunaan) |
+| `pemerintah_provinsi`, `pemerintah_kabkota` | tidak (bukan Pengguna Barang BMN) | **ya** — PP 28/2020 Ps. 30(1); PMK 115/2020 Ps. 32(2) [F] | tidak disebut [F] | tidak | tidak | tidak | bukan Pihak Lain | **ya** — PMK 165/2021 Ps. 86(1) huruf e [F] |
+| `pemerintah_desa` | tidak | **ya** — PMK 115/2020 Ps. 32(2) [F]; PP 28/2020 Ps. 30(1) hanya menyebut Pemda — lihat catatan 1 | tidak disebut | tidak | tidak | tidak | bukan Pihak Lain | **ya** — PMK 165/2021 Ps. 86(1) huruf e "Pemerintah Daerah/Desa" [F] |
+| `bumn` | — | tidak [F] | **ya** — Ps. 10(2) huruf a [F] | **ya** — Ps. 40(2) [F] | **ya** — Ps. 59(2) [F] | **ya** — Ps. 74(2) [F] | **ya** — PMK 40/2024 Ps. 28(1) huruf a [F] | terbatas — perum untuk stabilitas ketahanan pangan, atau BUMN lain dalam rangka penugasan pemerintah yang ditetapkan Presiden (Ps. 86(1) huruf f) [F] |
+| `bumd` | — | tidak | **ya** — Ps. 10(2) huruf a | **ya** — Ps. 40(2) | **ya** — Ps. 59(2) | **ya** — Ps. 74(2) | mungkin — hanya bila tergolong "badan hukum lain" Ps. 28(1) huruf a [P] | tidak disebut |
+| `bumdes` | — | tidak | **ya** — Ps. 10(2) huruf a "Badan Usaha Milik Negara/Daerah/Desa" [F] | tidak disebut Ps. 40(2) [F] | tidak disebut | tidak disebut | perlu verifikasi | tidak disebut |
+| `badan_usaha_swasta` (PT, persekutuan perdata/firma/komanditer) | — | tidak | **ya** — Ps. 10(4) [F] | **ya** — "Swasta, kecuali perorangan" Ps. 40(2) [F] | **ya** — Ps. 59(2) | **hanya PT** — Ps. 74(2) huruf a [F] | **hanya badan hukum** — Ps. 28(1) huruf a "badan hukum lain" [P] | tidak disebut |
+| `koperasi` | — | tidak | **ya** — Ps. 10(4) huruf c [F] | mungkin — tergolong "swasta" [P] | mungkin [P] | **ya** — Ps. 74(2) huruf f [F] | **ya** — Ps. 28(1) huruf a [F] | tidak disebut |
+| `yayasan` | — | tidak | **ya** — Ps. 10(4) huruf b [F] | mungkin — "swasta" [P] | **ya** — "badan hukum lainnya" Ps. 59(2) huruf d [F] | tidak disebut | mungkin — badan hukum + kegiatan Ps. 19(2) [P] | **ya** bila lembaga sosial/budaya/keagamaan/kemanusiaan/pendidikan non komersial — Ps. 86(1) huruf a [F] |
+| `satuan_pendidikan_swasta` | — | **tidak** [F] | **ya, atas nama badan penyelenggaranya** (yayasan/perkumpulan) — lihat catatan 2 | mungkin [P] | lewat badan penyelenggara | tidak | mungkin — Ps. 19(2) huruf c menyebut fungsi pendidikan tinggi [F] | **ya** bila non komersial — Ps. 86(1) huruf a [F] |
+| `badan_hukum_lain` (PTN-BH, lembaga/organisasi independen yang bukan pengguna anggaran) | — | tidak | perlu verifikasi | perlu verifikasi | **ya** — "badan hukum lainnya" Ps. 59(2) huruf d | tidak | **ya** — Ps. 28(1) huruf a [F] | Ps. 86(1) huruf g bila ditetapkan Pengelola |
+| `kelompok_masyarakat` (termasuk ormas/perkumpulan tak berbadan hukum) | — | tidak | **tidak** — tak termasuk daftar Ps. 10(2)/(4) [F] | tidak | tidak | tidak | tidak | **ya** — "masyarakat … kelompok, untuk menjalankan kebijakan pemerintah" Ps. 86(1) huruf b [F] |
+| `perorangan` | — | tidak | **ya** — Ps. 10(2) huruf b [F] | **tidak** — "kecuali perorangan" Ps. 40(2) [F] | **tidak** — Ps. 59(2) | tidak | tidak | **ya** — Ps. 86(1) huruf b [F] |
+| `lembaga_internasional` (pemerintah negara lain/organisasi internasional) | — | tidak | tidak disebut | tidak | tidak | badan hukum asing hanya bila sudah PT Indonesia — Ps. 74(3) | **ya** — Ps. 28(1) huruf c–d; Ps. 30(3) [F] | **ya** — Ps. 86(1) huruf c–d [F] |
+| `lainnya` | — | — | ditetapkan per kasus | — | — | — | — | — |
+
+Sumber kolom: Sewa = PMK 115/2020 Ps. 10; Pinjam pakai = Ps. 32 jo. PP 28/2020
+Ps. 30; KSP = Ps. 40; BGS/BSG = Ps. 59; KSPI = Ps. 74; Penggunaan sementara
+dan Dioperasikan Pihak Lain = PMK 40/2024 Ps. 19, 28, 32–33; Hibah = PMK
+111/2016 Ps. 86 sebagaimana diubah PMK 165/2021. **KETUPI tidak dimasukkan:**
+pelaksananya hanya PJPB (Menteri/Pimpinan Lembaga selaku PJPK) dan BLU yang
+ditunjuk Pengelola Barang (PMK 115/2020 Ps. 84) — bukan satker. **KSPI** hanya
+untuk BMN infrastruktur dan dilaksanakan Pengguna Barang dengan persetujuan
+Pengelola (Ps. 74(1)); dicatat demi kelengkapan, bukan jalur lazim satker.
+
+Catatan:
+1. **Pemerintah desa.** PP 28/2020 Ps. 30(1) berbunyi "antara Pemerintah
+   Pusat dan Pemerintah Daerah atau antar Pemerintah Daerah"; PMK 115/2020
+   Ps. 31 dan 32(2) menyebut Pemerintah Desa sebagai peminjam pakai [F].
+   Bawaan: desa boleh menjadi peminjam pakai, mengikuti PMK 115/2020 sebagai
+   peraturan pelaksana yang lebih rinci [P]. Hierarki keduanya
+   perlu verifikasi Biro Hukum.
+2. **Satuan pendidikan swasta bukan subjek hukum tersendiri.** Pihak dalam
+   perjanjian adalah badan penyelenggaranya (yayasan/perkumpulan berbadan
+   hukum) [P]. Karena itu `instansi_luar` pihak ketiga menyimpan
+   `badan_penyelenggara`, dan komparisi naskah menyebut badan itu. Pinjam
+   pakai **tidak** tersedia baginya; bentuk yang tersisa adalah sewa,
+   pengoperasian (bila kegiatannya masuk Ps. 19(2) PMK 40/2024), atau hibah
+   bila non komersial. Faktor penyesuai tarif sewa untuk kegiatan sosial/
+   pendidikan ada di rezim sewa (§6) — besarannya perlu verifikasi.
+   Untuk hibah, status "lembaga" dibuktikan dengan akta pendirian, anggaran
+   dasar/anggaran rumah tangga, atau pernyataan tertulis instansi teknis
+   (PMK 165/2021 Ps. 86(2)) [F] — padanan field `dasar_pendirian_*`.
+3. **Ormas/perkumpulan yang tidak berbadan hukum** tidak tercantum dalam
+   daftar penyewa Ps. 10(4), yang memakai kata "meliputi" dengan enam bentuk.
+   Bawaan konservatif: tidak ditawarkan sewa; hanya hibah kepada kelompok
+   masyarakat [P].
+4. **BAST penyerahan pihak luar hanya untuk skema yang menyerahkan
+   PENGUASAAN SEMENTARA** (penggunaan sementara, pinjam pakai, sewa, KSP,
+   BGS/BSG, KSPI, dioperasikan Pihak Lain). Hibah dan bentuk pemindahtanganan
+   lain memindahkan kepemilikan dan tetap di modul Pemindahtanganan [P].
+
+**Jawaban atas pertanyaan wajib PGW-00.**
+
+| Pertanyaan | Jawaban | Keyakinan & dasar | Bawaan yang dipakai |
+|---|---|---|---|
+| Keberlakuan PMK 40/2024 | Berlaku; basis data BPK berstatus "Berlaku"; tidak ditemukan perubahan 2025–2026 | [S] Sedang — peraturan.bpk.go.id/Details/292599; pasal.id | Dipakai apa adanya |
+| Keberlakuan PP 27/2014 jo. PP 28/2020 | Tidak ditemukan perubahan sesudahnya | [S] Sedang — tidak ada hasil pencarian yang menyebut pengganti | Dipakai apa adanya |
+| Keberlakuan PMK 53/2023 (IKN) | Berlaku, tanpa riwayat perubahan; diturunkan oleh **Peraturan Kepala Otorita IKN No. 9 Tahun 2024** (Pengelolaan BMN di IKN dalam Penguasaan dan Kewenangan Otorita) | [S] Sedang — peraturan.bpk.go.id/Details/249043 dan /329457; isi Perka OIKN 9/2024 **belum terbaca** | Perka OIKN 9/2024 perlu diunduh dan dibaca sebelum PGW-10 |
+| Keberlakuan **PMK 115/2020** | **BERTENTANGAN.** Halaman JDIH Kemenkeu menampilkan label "Dicabut" tanpa menyebut pencabutnya; basis data BPK menyebut "Berlaku"; KMK 39/KM.6/2025 masih merujuknya. Tidak ditemukan PMK pengganti | [S] **Rendah** — sumber saling bertentangan | Matriks tetap bertumpu pada PMK 115/2020 (satu-satunya naskah pemanfaatan yang ada). **PGW-10 tidak boleh mencetak pasal PMK 115/2020 sebelum seseorang membuka riwayat dokumennya di JDIH.** Ditambahkan ke §14 butir 26 |
+| Rezim khusus IKN | Bentuk pemanfaatan sama (PMK 53/2023 Ps. 21(1)); tata caranya mengikuti ketentuan umum (Ps. 21(2)); persetujuan pemanfaatan BMN pada Otorita didelegasikan kepada Kepala Otorita (Ps. 7(2) huruf c). Rumah negara/rumah susun negara dapat dihuni "pihak lain yang memiliki surat izin penghunian" yang diterbitkan Otorita (Ps. 20) | [F] untuk PMK 53/2023 | Pihak penerima **tidak** diperluas atau dipersempit oleh PMK 53/2023. Penghunian rumah negara adalah rezim tersendiri, di luar BAST penyerahan pihak luar |
+| Sekolah swasta, yayasan, kelompok masyarakat | Lihat matriks dan catatan 2–3 | [F] atas daftar pihak; [P] atas penggolongan satuan pendidikan lewat badan penyelenggara | Pinjam pakai ditolak bagi ketiganya |
+| Rezim ganti rugi | PP 27/2014 Ps. 99: "Setiap kerugian Negara/daerah akibat kelalaian, penyalahgunaan atau pelanggaran hukum atas pengelolaan BMN/D diselesaikan melalui tuntutan ganti rugi"; ayat (2) berlaku bagi "setiap pihak" [F]. Tata cara TGR bagi pegawai negeri bukan bendahara diatur PP 38/2016; bagi pihak ketiga, sejumlah peraturan K/L mengatur TGR terhadap "orang atau badan yang bukan Bendahara dan bukan Pegawai Negeri" [S]. Untuk skema berperjanjian, kewajiban pemeliharaan, pengamanan, dan pengembalian dalam kondisi semula tertuang di perjanjian (PMK 40/2024 Ps. 29 huruf f, Ps. 31(4); PP 28/2020 Ps. 30(3) huruf c) [F] | [F] untuk PP 27/2014 dan PMK 40/2024; [S] Sedang untuk TGR pihak ketiga — naskah PP 38/2016 tidak ada di repo | Naskah penerima luar memuat tanggung jawab **menurut perjanjian/dokumen dasar dan peraturan perundang-undangan**, boleh merujuk PP 27/2014 Ps. 99. **Tidak** memuat hukuman disiplin, surat tugas atasan, atau TGR pegawai satker. Field ahli waris tetap nonaktif bagi pihak ketiga |
+| Penanda tangan pihak satker | BAST penyerahan fisik = KPB atau petugas a.n. KPB (§11B, tidak berubah). Dokumen dasarnya ditandatangani pihak lain: perjanjian pinjam pakai oleh peminjam pakai dan Pengguna Barang (PMK 115/2020 Ps. 36(1)); perjanjian pengoperasian oleh Pengguna Barang atau pejabat struktural yang dikuasakan (PMK 40/2024 Ps. 28(1)) [F] | [F] untuk bunyi pasal; [P] bahwa BAST fisik melaksanakan dokumen dasar | BAST luar wajib menyebut nomor dan tanggal dokumen dasar |
+| Penanda tangan pihak penerima | Badan usaha: "direktur utama/pimpinan perusahaan", "penerima kuasa … yang namanya tercantum dalam akta pendirian atau perubahannya", atau "kepala cabang perusahaan yang diangkat oleh kantor pusat yang dibuktikan dengan dokumen otentik" (KMK 213/KM.6/2021, lampiran tata cara pemilihan mitra) [F]. Pengoperasian: "pimpinan" badan dan "pejabat yang berwenang" pemerintah negara lain/organisasi internasional (PMK 40/2024 Ps. 28(1)) [F]. Pemda/desa: peminjam pakai (Ps. 36(1)); siapa pejabatnya perlu verifikasi | [F] untuk bunyi; [P] untuk penerapan konteks pemilihan mitra ke BAST | `kapasitas_bertindak` ∈ {pengurus_berwenang, penerima_kuasa, petugas, diri_sendiri}; `petugas` **tidak** boleh menjadi PIHAK KEDUA |
+| Data pribadi orang luar (UU 27/2022) | Pasal 16 ayat (2) huruf a: pengumpulan data pribadi "dilakukan secara terbatas dan spesifik, sah secara hukum, dan transparan" | [S] Sedang — teks dari pasal.id dan hukumonline; naskah UU tidak ada di repo | **Menguatkan K8**: tujuh field pribadi tidak dikumpulkan bagi kedua kelompok luar; NIK pihak ketiga opsional (K5) |
+| Bentuk kode resmi | Kode BA K/L 3 digit, eselon I 2 digit, satker 6 digit [S, satu sumber K/L]. Kode wilayah kab/kota berbentuk `PP.KK` dengan dua digit awal kode provinsi (mis. 64.71), ditetapkan Kepmendagri kode dan data wilayah — yang terbaru disebut bernomor 300.2.2-2138 dan 300.2.2-2430 Tahun 2025, belum jelas mana yang berlaku [S] | [S] Sedang–rendah | **Kode hanya diperiksa keunikannya**, bukan bentuk dan bukan kecocokan awalan dengan induk. Tidak ada data benih kode K/L atau wilayah |
+
+**Sitasi yang akan tercetak (PGW-10).** PP 27/2014, PP 28/2020, PMK 40/2024,
+PMK 115/2020, PMK 111/2016, PMK 165/2021, dan KMK 213/KM.6/2021 sudah
+terdaftar `teks-primer` di `backend/sitasi_regulasi.py`. UU 27/2022, PP
+38/2016, PMK 53/2023, dan Perka OIKN 9/2024 **tidak** didaftarkan sekarang:
+uji `test_registry_tidak_menyimpan_sitasi_hantu` menolak entri yang belum
+dipakai kode mana pun. Mendaftarkannya ikut PR yang mencetaknya. Bila PGW-10
+mencetak PMK 115/2020, statusnya wajib ditinjau ulang terhadap temuan JDIH di
+atas.
+
+**Naskah yang sebaiknya ditambahkan ke workflow "Unduh Regulasi":** Perka OIKN
+9/2024, PP 38/2016, UU 27/2022, dan halaman riwayat JDIH PMK 115/2020.
+
+Sumber sekunder bagian ini (riset 2026-11-11): jdih.kemenkeu.go.id/dok/115-pmk-06-2020;
+peraturan.bpk.go.id/Details/144664 (PMK 115/2020); djkn.kemenkeu.go.id
+(KMK 39/KM.6/2025); peraturan.bpk.go.id/Details/292599 (PMK 40/2024);
+peraturan.bpk.go.id/Details/249043 (PMK 53/2023); peraturan.bpk.go.id/Details/329457
+(Perka OIKN 9/2024); pasal.id/peraturan/uu/uu-no-27-tahun-2022;
+hukumonline.com (prinsip pemrosesan UU PDP); pasal.id (Permenkes 39/2012,
+definisi pihak ketiga dalam TGR); kemhan.go.id (struktur kode BA/satker);
+github.com/cahyadsn/wilayah/wiki dan komunitasbelajar.id (nomor Kepmendagri
+kode wilayah 2025 — tidak resmi).
+
 ### 2.6 Pembukuan sebagai INDUK — jurnal mutasi & reklasifikasi (riset terverifikasi Jul 2026, G7)
 
 Riset internet (sumber: modul Penatausahaan DJKN 2017 mirror kemhan.go.id;
@@ -504,6 +616,8 @@ nilai buku per golongan + ringkasan telaah) — memenuhi harapan auditor §5.
 ## 6. Pemanfaatan (PMK 115/PMK.06/2020 + PMK 18/2024)
 
 **Status regulasi.** PMK 115/PMK.06/2020 MASIH BERLAKU (pokok pemanfaatan;
+[Nov 2026: status ini dipertanyakan — halaman JDIH menampilkan label
+"Dicabut" tanpa menyebut pencabutnya; lihat §2.4d dan §14 butir 26]
 mencabut PMK 78/2014, 164/2014, 57/2016). **PMK 18/2024 BUKAN pengganti**
 — isinya fasilitas penyiapan & pelaksanaan transaksi (ala PDF: kajian,
 market sounding, pendampingan tender) bagi PJPB. KETUPI = bentuk ke-6
@@ -1334,6 +1448,16 @@ memindahkan tanda tangan lama ke PDF pengganti secara diam-diam.
     mekanisme ambang pada PMPP; kutipan verbatim UU 1/2004 Ps. 45-46 &
     PP 27/2014 Ps. 55-58. Saran jenjang AMAN (#201) bersifat indikatif —
     JANGAN dijadikan validasi keras sampai terverifikasi.
+26. Tiga kelompok pegawai & penerima luar (riset Nov 2026, §2.4d):
+    (a) status PMK 115/2020 — JDIH berlabel "Dicabut" tanpa pencabut,
+    BPK "Berlaku", KMK 39/KM.6/2025 masih merujuknya; buka riwayat dokumen
+    JDIH sebelum mencetak pasalnya; (b) isi Perka OIKN 9/2024; (c) hierarki
+    PP 28/2020 Ps. 30(1) (tanpa desa) vs PMK 115/2020 Ps. 32(2) (dengan
+    desa); (d) pejabat penanda tangan perjanjian pinjam pakai di pihak
+    pemda/desa; (e) tata cara TGR terhadap pihak ketiga (PP 38/2016 tidak
+    ada di repo); (f) kelayakan BUMD, BUMDes, koperasi, dan yayasan pada
+    KSP serta pengoperasian oleh Pihak Lain; (g) nomor Kepmendagri kode
+    wilayah yang berlaku dan bentuk kode BA/satker resmi.
 
 ---
 

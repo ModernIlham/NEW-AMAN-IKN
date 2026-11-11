@@ -267,6 +267,32 @@ instansi tetap perlu ditetapkan; rancangan aplikasi bukan opini kepatuhan hukum.
 
 ---
 
+## 5M. Kontrak Master Pegawai Tiga Kelompok — dikunci PGW-00 (2026-11-11)
+
+Rencana lengkap: `docs/RENCANA-MASTER-PEGAWAI-EKSTERNAL.md`. Dasar regulasi:
+`docs/PUSTAKA-REGULASI-BMN.md` §2.4d. Kontrak ini **aditif**: koleksi dan rute
+Master Pegawai internal (`pegawai`, `unit_kerja`, `satker`) tidak berubah.
+
+| Data / proses | Sumber dan batas penulisan |
+|---|---|
+| Kelompok | `internal` (koleksi lama), `eksternal` (K/L lain dan pemda/pemdes), `pihak_ketiga` (Pihak Lain = selain K/L, Pemda, Pemdes — PMK 115/2020 Ps. 1 angka 22). Kelompok diturunkan server dari instansinya, tidak diisi pengguna. |
+| Direktori luar | `instansi_luar` → `satker_luar` → `unit_kerja_luar` → `pegawai_luar`, **satu direktori untuk seluruh instansi**, tanpa `kode_satker`. Semua admin boleh menambah dan mengubah; setiap tulis tercatat di audit dengan field yang berubah. Hapus permanen hanya super-admin. Modul luar tidak pernah menulis koleksi internal maupun `assets`. |
+| Isi direktori | Hanya identitas. Tujuh field pribadi tidak dikumpulkan bagi kedua kelompok luar (UU 27/2022 Ps. 16(2) huruf a, keputusan pemilik K8). Fakta hubungan per satker — perjanjian, jangka waktu, nilai — tinggal di dokumen transaksinya, bukan di direktori. |
+| Tataran & jenjang | Eksternal dipilah **pusat** (K/L) dan **daerah** (pemda); kab/kota berinduk provinsinya, desa berinduk kab/kotanya. Satker tetap di satu instansi; pusat dan daerah tidak bercampur. |
+| Kebijakan penerima | `kebijakan_penerima.py` (murni) menjawab skema sah per **jenis instansi** menurut matriks §2.4d. Modul lain bertanya kepadanya, tidak menulis `if` sendiri. Pinjam pakai hanya untuk pemda/pemdes; K/L lain hanya penggunaan sementara; pihak ketiga lewat sewa/KSP/BGS-BSG/KSPI/dioperasikan Pihak Lain sesuai jenisnya. |
+| BAST penerima luar | Berita acara penyerahan **fisik** yang melaksanakan dokumen dasar (persetujuan Pengelola Barang dan/atau perjanjian), bukan dasar hukumnya. Wajib menyebut skema, nomor dan tanggal dokumen dasar, serta jangka waktu. Penyerah tetap KPB atau a.n. KPB (§11B pustaka). Penerima harus pengurus berwenang, penerima kuasa, pejabat instansi, atau perorangan atas nama sendiri — bukan `petugas`. Tidak memicu otomasi portal BMN Saya. |
+| Pasal | Butir internal (`butir_waktu`, `butir_risiko`) tidak disentuh. Naskah penerima luar tidak memuat hukuman disiplin, surat tugas atasan, atau TGR pegawai satker; tanggung jawab kerusakan/kehilangan menurut perjanjian dan PP 27/2014 Ps. 99. Teks pasal baru ditulis di PGW-10, sesudah status PMK 115/2020 dipastikan (pustaka §14 butir 26). |
+| Ikon | Empat kunci (`internal`, `eksternal_pusat`, `eksternal_daerah`, `pihak_ketiga`) di semua layar kecuali persuratan dan naskah cetak; Laporan Eksekutif memberi ikon pada penggunanya. |
+| Kode resmi | Kode K/L, satker, dan wilayah hanya diperiksa keunikannya. Tidak ada data benih kode yang ditulis dari ingatan. |
+
+**Yang tidak termasuk kontrak ini:** akses portal BMN Saya bagi orang luar
+(K3), pemindahan tenaga alih daya internal (K4), orang luar sebagai pejabat
+penatausahaan (K7), dan hibah/pemindahtanganan kepada pihak luar (tetap di modul
+Pemindahtanganan). Rancangan aplikasi bukan opini kepatuhan hukum; SOP dan
+kewenangan instansi tetap perlu ditetapkan.
+
+---
+
 ## 5A. Status Integrasi Antar-Modul & Daftar Gap (audit 2026-07-13)
 
 Audit lintas-modul terhadap 5 prinsip Bab 5. Kepatuhan saat ini:

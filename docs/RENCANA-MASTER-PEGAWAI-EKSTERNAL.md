@@ -217,6 +217,11 @@ atas bunyi teksnya; **[keyakinan sedang]** atas keberlakuannya hari ini —
 repo tidak dapat memastikan perubahan sesudah naskah diunduh. PGW-00 membaca
 ulang pasal demi pasal sebelum apa pun dicetak.
 
+> **Diperbarui PGW-00 (2026-11-11):** matriks lengkap per jenis penerima,
+> jawaban pertanyaan wajib, dan temuan status PMK 115/2020 kini ada di
+> `docs/PUSTAKA-REGULASI-BMN.md` §2.4d. Tabel di bawah dipertahankan sebagai
+> ringkasan awal; bila berbeda, pustaka yang berlaku.
+
 | Penerima | Skema yang dikenal naskah | Sumber di repo |
 |---|---|---|
 | Pengguna Barang lain (K/L lain) | **Penggunaan sementara** — setelah persetujuan Pengelola Barang | `pmk-40-2024-penggunaan.txt` (Pasal 32) |
@@ -456,8 +461,9 @@ server, tak berkolom di Excel pihak ketiga)
   `status_perkawinan`, `pendidikan_terakhir`, `npwp` (pribadi), `nama_bank`,
   `no_rekening`.
 - Ahli waris: `ahli_waris_*`, `pemberitahuan_ahli_waris_*` — rezim tuntutan
-  ganti kerugian pegawai negeri; berlaku tidaknya bagi pihak ketiga belum
-  diriset (PGW-00). `status: meninggal` + tanggalnya **tetap ada** karena
+  ganti kerugian pegawai negeri. PGW-00: tanggung jawab pihak ketiga
+  bertumpu pada perjanjian dan PP 27/2014 Ps. 99, bukan rezim TGR pegawai —
+  field ini tetap nonaktif (pustaka §2.4d). `status: meninggal` + tanggalnya **tetap ada** karena
   itulah yang memblokir penugasan baru.
 - Fakta hubungan dengan satu satker: `nomor_kontrak`, `tgl_mulai_kontrak`,
   `tgl_selesai_kontrak`. Bagi pihak ketiga ini perjanjian dengan satker
@@ -529,7 +535,8 @@ anti-ganda saat impor.
 Satu modul murni, `backend/kebijakan_penerima.py`, menjawab untuk tiap
 **jenis instansi** (5.6): skema apa yang sah, dokumen dasar apa yang wajib
 dirujuk, siapa yang layak menandatangani, rezim ganti rugi mana, dan butir
-pasal mana yang dipakai. Modul lain **bertanya** kepadanya. Isi awalnya
+pasal mana yang dipakai. Modul lain **bertanya** kepadanya. Isinya dikunci
+PGW-00 (6.6, pustaka §2.4d). Isi awalnya
 diturunkan dari tabel 2.9 dan baru dikunci setelah PGW-00.
 
 ### 3.10 Pilih kelompok dulu; lalu instansi; lalu satker
@@ -762,8 +769,9 @@ JENIS_INSTANSI = {
         "badan_usaha_swasta": "Badan Usaha Swasta",
         "satuan_pendidikan_swasta": "Satuan Pendidikan Swasta",
         "koperasi": "Koperasi",
-        "yayasan_ormas": "Yayasan/Organisasi Masyarakat",
-        "kelompok_masyarakat": "Kelompok Masyarakat",
+        "yayasan": "Yayasan",
+        "badan_hukum_lain": "Badan Hukum/Lembaga Lain (bukan pengguna anggaran)",
+        "kelompok_masyarakat": "Kelompok Masyarakat/Ormas",
         "perorangan": "Perorangan",
         "lembaga_internasional": "Pemerintah Negara Lain/Organisasi Internasional",
         "lainnya": "Lainnya",
@@ -803,7 +811,14 @@ LABEL_TINGKAT = {
 }
 ```
 
-Usulan kerja; dikunci di PGW-00. Tidak ada data benih instansi selain
+**Dikunci PGW-00 (2026-11-11).** Perubahan dari usulan: `yayasan_ormas`
+dipecah — yayasan adalah badan hukum yang disebut sebagai penyewa (PMK
+115/2020 Ps. 10(4) huruf b), sedangkan ormas/perkumpulan tak berbadan hukum
+tidak disebut sehingga digabung ke `kelompok_masyarakat`; `badan_hukum_lain`
+ditambah untuk PTN-BH dan lembaga/organisasi independen yang bukan pengguna
+anggaran, yang disebut tersendiri sebagai pengoperasi BMN (PMK 40/2024 Ps.
+28(1) huruf a). Jenis BAST baru dikunci bernama `penyerahan_pihak_luar` dan
+`pengembalian_pihak_luar` (belum ada di `JENIS_BAST`). Tidak ada data benih instansi selain
 wadah perorangan (3.3) — daftar kode K/L/pemda tidak boleh ditulis dari
 ingatan.
 
@@ -936,6 +951,35 @@ def periksa_penyerahan(skema, jenis_instansi, kapasitas, dasar) -> list[str]
 
 Dibuka ke layar lewat `GET /luar/referensi`.
 
+**Isi terkunci PGW-00** (sumber per sel: pustaka §2.4d). `skema_sah` hanya
+memuat skema yang menyerahkan **penguasaan sementara**; hibah dan
+pemindahtanganan lain tetap di modul Pemindahtanganan.
+
+| Jenis | `skema_sah` | Dokumen dasar wajib | `butir_pasal` | Komparisi |
+|---|---|---|---|---|
+| (pegawai internal) | yang ada hari ini | — | `internal` | — |
+| `kementerian_lembaga` | `penggunaan_sementara` | persetujuan Pengelola Barang; ≤ 6 bulan cukup perjanjian antar-Pengguna Barang (PMK 40/2024 Ps. 33(2)) | `antar_pemerintah` | atas nama instansi |
+| `pemerintah_provinsi`, `pemerintah_kabkota`, `pemerintah_desa` | `pinjam_pakai` | persetujuan Pengelola Barang + perjanjian pinjam pakai | `antar_pemerintah` | atas nama pemda/pemdes |
+| `bumn` | `sewa`, `ksp`, `bgs_bsg`, `kspi`, `dioperasikan_pihak_lain` | persetujuan/penetapan Pengelola Barang + perjanjian | `pihak_ketiga` | atas nama badan + dasar kewenangan |
+| `bumd` | `sewa`, `ksp`, `bgs_bsg`, `kspi` | idem | `pihak_ketiga` | idem |
+| `bumdes` | `sewa` | idem | `pihak_ketiga` | idem |
+| `badan_usaha_swasta` | `sewa`, `ksp`, `bgs_bsg`; `kspi` hanya PT | idem | `pihak_ketiga` | idem |
+| `koperasi` | `sewa`, `kspi`, `dioperasikan_pihak_lain` | idem | `pihak_ketiga` | idem |
+| `yayasan` | `sewa`, `bgs_bsg` | idem | `pihak_ketiga` | idem |
+| `satuan_pendidikan_swasta` | `sewa` (atas nama badan penyelenggara) | idem | `pihak_ketiga` | atas nama **badan penyelenggara** |
+| `badan_hukum_lain` | `bgs_bsg`, `dioperasikan_pihak_lain` | idem | `pihak_ketiga` | atas nama badan |
+| `kelompok_masyarakat` | — (tidak ada skema penguasaan sementara; hanya hibah) | — | — | — |
+| `perorangan` | `sewa` | persetujuan Pengelola Barang + perjanjian sewa | `pihak_ketiga` | untuk diri sendiri |
+| `lembaga_internasional` | `dioperasikan_pihak_lain` | penetapan Pengelola Barang + perjanjian | `pihak_ketiga` | atas nama pemerintah/organisasi |
+| `lainnya` | — (ditetapkan per kasus; `periksa_penyerahan` mengembalikan peringatan) | — | — | — |
+
+Sel bertanda "mungkin"/"perlu verifikasi" di pustaka **tidak** dimasukkan
+ke `skema_sah` (bawaan konservatif) — mis. KSP bagi koperasi/yayasan dan
+pengoperasian oleh BUMD/badan usaha swasta. Menambahkannya kelak cukup
+dengan mengubah tabel data ini, tanpa menyentuh pemanggil.
+`rezim_ganti_rugi` semua penerima luar = `"perjanjian"` (perjanjian/dokumen
+dasar + PP 27/2014 Ps. 99); `"tgr_pegawai"` hanya untuk internal.
+
 ---
 
 ## 7. Peta perubahan
@@ -1002,7 +1046,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 
 | Paket | Isi | Bergantung | Status | PR |
 |---|---|---|---|---|
-| PGW-00 | Regulasi & kontrak modul | — | belum | |
+| PGW-00 | Regulasi & kontrak modul | — | **selesai** | #1114 |
 | PGW-01 | Fondasi murni | 00 | belum | |
 | PGW-02 | Master instansi & satker luar (backend) | 01 | belum | |
 | PGW-03 | Orang luar (backend) | 02 | belum | |
@@ -1052,6 +1096,16 @@ pengguna tidak melihat perubahan apa pun.
 5. Daftarkan sitasi yang akan tercetak ke `backend/sitasi_regulasi.py`
    dengan status yang jujur; "terverifikasi" menuntut naskahnya di
    `docs/regulasi/` (ditagih `test_sitasi_regulasi.py`).
+   **Koreksi saat dikerjakan:** `test_registry_tidak_menyimpan_sitasi_hantu`
+   menolak entri yang belum tercetak oleh kode mana pun, jadi pendaftaran
+   ikut PR yang mencetaknya (PGW-10). Sitasi utama sudah `teks-primer`.
+
+**Hasil (2026-11-11):** pustaka §2.4d (definisi tiga kelompok, matriks
+jenis penerima × skema bersumber pasal, jawaban tiap pertanyaan beserta
+keyakinan dan bawaannya), kontrak masterplan §5M, kode 5.6 dan tabel 6.6
+terkunci. **Temuan yang menahan PGW-10:** status PMK 115/2020 bertentangan
+antarsumber (JDIH berlabel "Dicabut" tanpa pencabut; BPK "Berlaku") — pustaka
+§14 butir 26. PGW-01 s.d. PGW-09 tidak terhalang.
 
 **Terima:** matriks ada di pustaka dan bersumber; tiap pertanyaan berjawaban
 atau bertanda "perlu verifikasi" dengan bawaan konservatif yang dipakai.
@@ -1532,12 +1586,12 @@ hanya boleh membangun kerangka dan uji, **bukan** teks pasal.
    | `pemerintah_provinsi`, `_kabkota`, `_desa` | pinjam pakai | persetujuan + perjanjian | `antar_pemerintah` |
    | `bumn`, `bumd`, `bumdes`, `badan_usaha_swasta` | sewa; KSP; BGS/BSG; KSPI; KETUPI; dioperasikan pihak lain | persetujuan + perjanjian | `pihak_ketiga` |
    | `perorangan` | sewa | persetujuan + perjanjian | `pihak_ketiga` |
-   | `satuan_pendidikan_swasta`, `yayasan_ormas`, `koperasi`, `kelompok_masyarakat`, `lembaga_internasional`, `lainnya` | **ditetapkan PGW-00** | **ditetapkan PGW-00** | `pihak_ketiga` |
+   | jenis lainnya | **lihat tabel terkunci 6.6** | **lihat 6.6** | `pihak_ketiga` |
 
 2. **BAST kepada penerima luar adalah berita acara penyerahan FISIK yang
    melaksanakan dokumen dasar**, bukan dasar hukum itu sendiri.
-   - Jenis BAST baru (nama dikunci PGW-00), mis. `penyerahan_pihak_luar` dan
-     pengembaliannya. Jenis lama tidak diubah.
+   - Jenis BAST baru (dikunci PGW-00): `penyerahan_pihak_luar` dan
+     `pengembalian_pihak_luar`. Jenis lama tidak diubah.
    - Wajib: `skema`, nomor & tanggal dokumen dasar, jangka waktu. Tanpa itu
      → 400 dengan pesan yang menyebut dokumen apa yang kurang.
    - `periksa_penyerahan` menolak kombinasi yang tak sah (mis. pinjam pakai
