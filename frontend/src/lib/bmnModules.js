@@ -251,6 +251,7 @@ export const SIKLUS_MODULES = [
     ],
     fitur: [
       "✅ Rekap aset per pemegang lintas kegiatan + kelengkapan BAST/NIP",
+      "✅ Pemegang dari tiga kelompok — pegawai internal, instansi eksternal (pusat/daerah), pihak ketiga — bertanda ikon kelompok; pemilih pihak BAST mencari direktori orang luar",
       "✅ Portal BMN Saya: pemantauan barang berbasis BAST sah, tema terang/gelap, pembaruan dan riwayat per barang; ringkasan serta tinjauan operator, tanpa perubahan akuntansi otomatis",
       "✅ Daftar Barang yang Digunakan per pemegang (PDF lampiran BAST, tanda tangan pemegang + KPB)",
       "✅ Daftar pantau BMN idle (PMK 120/2024): kandidat otomatis + tiket klarifikasi → usul serah → diserahkan + ekspor CSV register tiket",

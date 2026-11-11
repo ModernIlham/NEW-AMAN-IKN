@@ -33,6 +33,9 @@ python -m scripts.synthdata -n 100000 -p edge --format ndjson --out aset.ndjson
 python -m scripts.synthdata --kind pegawai -n 200 --out pegawai.json
 python -m scripts.synthdata --kind satker
 python -m scripts.synthdata --kind kegiatan -n 20
+# Direktori luar: instansi eksternal (K/L, pemprov→kab/kota→desa), pihak
+# ketiga, dan wadah perorangan — {instansi, satker, orang}; -n = orang/satker
+python -m scripts.synthdata --kind luar -n 3 --out luar.json
 
 # Isi activity_id agar siap di-POST ke /api/assets
 python -m scripts.synthdata -n 1000 --activity-id <id-kegiatan> -o aset.ndjson
@@ -43,8 +46,11 @@ python -m scripts.synthdata -n 1000 --activity-id <id-kegiatan> -o aset.ndjson
 ```python
 from scripts.synthdata import (
     generate_assets, generate_pegawai, generate_satker, generate_activity,
+    generate_organisasi_luar,
 )
 aset = generate_assets(500, seed=42, profile="mixed", activity_id="keg-1")
+luar = generate_organisasi_luar(seed=42)   # dokumen siap sisip ke koleksi *_luar
+# Lolos validator rute yang sama, tanpa kode_satker, tanpa kode resmi tebakan.
 ```
 
 ### Profil

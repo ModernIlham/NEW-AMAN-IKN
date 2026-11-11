@@ -29,6 +29,8 @@ pengelolaan BMN — baca `docs/MASTERPLAN-SIKLUS-BMN.md` sebelum menambah modul.
 | Offline | `frontend/src/lib/offlineSnapshot.js`, `hooks/useOptimisticQueue*` | Snapshot IndexedDB + antrean simpan persisten |
 | Registry modul siklus | `frontend/src/lib/bmnModules.js` | Beranda Modul + status aktif/segera; modul baru daftar di sini |
 | CI/CD | `.github/workflows/ci.yml`, `deploy.yml`, `scripts/deploy_vps.sh` | CI tiap PR; auto-deploy ke VPS saat merge ke main |
+| Orang & organisasi LUAR | `backend/organisasi_luar_utils.py` (murni), `routes/organisasi_luar.py`, `routes/pegawai_luar.py`, `routes/unit_kerja_luar.py`, `direktori_pegawai.py` + `routes/direktori_pegawai.py`, `kebijakan_penerima.py` | Instansi eksternal (pusat/daerah) & pihak ketiga — rencana `docs/RENCANA-MASTER-PEGAWAI-EKSTERNAL.md`. Koleksi `instansi_luar`, `satker_luar`, `pegawai_luar`, `unit_kerja_luar` **SENGAJA BERSAMA** (lihat di bawah) |
+| Ikon kelompok orang | `backend/data/ikon_kelompok.json` (= salinan identik `frontend/src/lib/ikonKelompok.json`), `frontend/src/lib/kelompokOrang.js`, `components/pegawai/IkonKelompok.jsx`, `hooks/useKelompokOrang.js` | Ikon kelompok HANYA lewat `IkonKelompok` (atau `svgIkonKelompok` untuk DOM non-React) — tak ada berkas lain yang memilih ikon/warna kelompok; registry `PERMUKAAN_IKON`/`LARANGAN_IKON` ditagih `permukaanIkon.test.js`. Naskah cetak tanpa ikon kecuali Laporan Eksekutif (K10) |
 
 ## Konvensi WAJIB
 
@@ -185,6 +187,17 @@ sunyi: fitur tetap "jalan", hanya datanya terpecah diam-diam.
 Contoh trap-nya: menstempel koleksi yang seluruh dokumennya memang tanpa
 `kode_satker` DAN memang dipakai bersama (kodefikasi barang, akun BAS, masa
 manfaat) akan memecah satu referensi nasional jadi salinan per satker.
+
+**Direktori luar — SENGAJA BERSAMA (keputusan pemilik, Nov 2026;
+`docs/RENCANA-MASTER-PEGAWAI-EKSTERNAL.md` 3.4, invarian 6):**
+`instansi_luar`, `satker_luar`, `pegawai_luar`, dan `unit_kerja_luar` tidak
+pernah berkunci `kode_satker` dan tidak boleh di-scope. Satu instansi/orang
+luar dipakai bersama seluruh satker; tata kelolanya OCC + audit ketat (jejak
+`dicatat_oleh`/`diubah_oleh` menyebut satker penulisnya) dan hapus permanen
+khusus super-admin. Yang TETAP ber-scope: aset/BAST yang merujuk orang luar
+itu (milik satker pemanggil), dan Master Pegawai internal. Sapuan isolasi
+berikutnya JANGAN menambahkan `scope_query_field_satker` ke keempat koleksi
+ini.
 
 Tetapi hati-hati juga pada bukti yang TERLIHAT meyakinkan padahal bukan:
 
