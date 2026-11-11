@@ -18,6 +18,25 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1123] Master Pegawai tiga kelompok — PGW-00: regulasi dan kontrak modul — 2026-11-11
+
+- Hanya dokumen; tidak ada kode yang berubah.
+- Pustaka §2.4d: definisi kelompok internal, instansi eksternal, dan pihak
+  ketiga; matriks jenis penerima × skema (penggunaan sementara, pinjam pakai,
+  sewa, KSP, BGS/BSG, KSPI, dioperasikan Pihak Lain, hibah) yang dibaca pasal
+  demi pasal dari naskah di `docs/regulasi/`; jawaban tiap pertanyaan wajib
+  PGW-00 beserta keyakinan dan bawaan konservatifnya.
+- Temuan penting: status PMK 115/2020 bertentangan antarsumber (JDIH berlabel
+  "Dicabut" tanpa menyebut pencabut; BPK "Berlaku"). PGW-10 tidak boleh
+  mencetak pasalnya sebelum riwayat dokumen di JDIH dibuka — pustaka §14
+  butir 26.
+- Satuan pendidikan swasta, kelompok masyarakat, dan badan usaha tidak dapat
+  menerima pinjam pakai; yayasan dan koperasi tercantum sebagai penyewa.
+- Masterplan §5M: kontrak Master Pegawai tiga kelompok.
+- Rencana: kode jenis instansi dan tabel kebijakan penerima dikunci
+  (`yayasan_ormas` dipecah, `badan_hukum_lain` ditambah); nama jenis BAST
+  `penyerahan_pihak_luar`/`pengembalian_pihak_luar` dikunci.
+
 ## [#1122] Uji browser CI: penyalaan Chromium dicoba ulang, kegagalan menyebut barisnya — 2026-11-10
 
 - Pemeriksaan "Chromium (aplikasi nyata dan MongoDB)" gagal tiga kali dari
