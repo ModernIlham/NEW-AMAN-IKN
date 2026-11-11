@@ -18,20 +18,7 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
-## [#1132] Master Pegawai tiga kelompok — PGW-08b: ikon & orang luar di layar lain — 2026-11-11
-
-- Tombol "Orang luar" di pemilih Persediaan (penerima), Pemeliharaan
-  (pelaksana & BAPP), TTD (penanda tangan), dan tim peneliti/pendukung
-  kegiatan: cari orang instansi eksternal (Pusat/Daerah) atau pihak ketiga
-  di direktori bersama. Pemilih internal tiap layar tidak berubah.
-- Ikon kelompok di daftar & kartu aset, field sheet inventarisasi, edit
-  massal, popup peta, jejak audit pengguna, riwayat SPPB, baris penanda
-  tangan, dan temuan Wasdal. Nomor yang tampil ditanyakan bersama — tidak
-  ada permintaan per baris; nomor yang sedang diketik ditanyakan setelah
-  berhenti mengetik.
-- Penerima persediaan membekukan tataran instansinya (pusat/daerah).
-
-## [#1131] Master Pegawai tiga kelompok — PGW-08a: ikon kelompok, pemilih aset & BAST — 2026-11-11
+## [#1131] Master Pegawai tiga kelompok — PGW-08: ikon kelompok & pemilih orang lintas modul — 2026-11-11
 
 - Ikon kelompok orang — Internal, Eksternal Pusat, Eksternal Daerah, Pihak
   Ketiga — dibedakan bentuk (bukan hanya warna), bernama untuk pembaca
@@ -48,6 +35,16 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
   pemegang, dan riwayat BAST.
 - Perbaikan: hapus permanen orang luar kini juga ditolak bila ia tercatat
   sebagai PIHAK KESATU BAST, atau dirujuk BAST lewat NIP-nya.
+- Tombol "Orang luar" di pemilih Persediaan (penerima), Pemeliharaan
+  (pelaksana & BAPP), TTD (penanda tangan), dan tim peneliti/pendukung
+  kegiatan: cari orang instansi eksternal (Pusat/Daerah) atau pihak ketiga
+  di direktori bersama. Pemilih internal tiap layar tidak berubah.
+- Ikon kelompok di daftar & kartu aset, field sheet inventarisasi, edit
+  massal, popup peta, jejak audit pengguna, riwayat SPPB, baris penanda
+  tangan, dan temuan Wasdal. Nomor yang tampil ditanyakan bersama — tidak
+  ada permintaan per baris; nomor yang sedang diketik ditanyakan setelah
+  berhenti mengetik.
+- Penerima persediaan membekukan tataran instansinya (pusat/daerah).
 
 ## [#1130] Master Pegawai tiga kelompok — PGW-07: layar Master Pegawai — 2026-11-11
 

@@ -1054,7 +1054,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-05 | Unit kerja luar (backend) | 03 | **selesai** | #1119 |
 | PGW-06 | Direktori gabungan, penjawab kelompok, pembaca backend | 03 | **selesai** | #1120 |
 | PGW-07 | Layar Master Pegawai | 03, 04, 05 | **selesai** | #1121 |
-| PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a), #1123 (08b) |
+| PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a + 08b) |
 | PGW-09 | Laporan & dokumen | 06 | belum | |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | belum | |
 | PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | belum | |
