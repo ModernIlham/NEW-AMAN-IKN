@@ -1057,7 +1057,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a + 08b) |
 | PGW-09 | Laporan & dokumen | 06 | **selesai** | #1123 |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | **kerangka selesai**; butir pasal & form menunggu verifikasi PMK 115/2020 | #1124 (kerangka) |
-| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | belum | |
+| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan | |
 | PGW-12 | Data uji & dokumentasi | 07–10 | **selesai** | #1125 |
 
 PGW-04, 05, 06 boleh paralel setelah PGW-03. Sampai PGW-07 ter-merge,
@@ -1844,6 +1844,27 @@ Urutan K6. Pola aditif: kolom teks yang ada (`mitra`, `pihak`, `penyedia`, …)
 `GET /luar/instansi` dan menampilkan ikon kelompok; tanpa backfill. Modul
 Pemanfaatan dan Penggunaan (PSP) memanggil `periksa_penyerahan` sebagai
 **peringatan lunak** — keputusan sahnya tetap pada persetujuan Pengelola.
+
+**Hasil Pemanfaatan (2026-11-12):** field opsional `mitra_instansi_id` di
+perjanjian dan usulan; server menyalin snapshot `mitra_kelompok`,
+`mitra_tataran`, `mitra_jenis_instansi` dari direktori (id tak dikenal → 400;
+mitra yang dibuat tanpa tautan tetap sah). Usulan perpanjangan mewarisi
+tautan perjanjian induknya; usulan yang menjadi perjanjian membawa tautannya.
+Teks `mitra` tetap disimpan apa adanya. Layar: `IsianInstansiLuar` (teks
+ber-datalist dari `GET /luar/instansi` eksternal + pihak ketiga; memilih
+saran menautkan, mengubah teks melepas tautan) dan ikon kelompok di baris
+usulan & register.
+Penyimpangan dari rencana: yang dipanggil bukan `periksa_penyerahan` (itu
+memeriksa orang penerima BAST), melainkan fungsi baru
+`kebijakan_penerima.periksa_skema(skema, jenis_instansi)` — mencocokkan
+bentuk pemanfaatan dengan skema yang lazim untuk jenis mitra. Hasilnya
+dikembalikan sebagai `peringatan_kebijakan` dan ditampilkan sebagai toast
+peringatan; **tidak pernah menolak simpan**. Mitra nonaktif di direktori juga
+diberi peringatan. Isi tabel skema per jenis mitra masih menunggu verifikasi
+PMK 115/2020 yang sama dengan PGW-10 — sampai itu, anggap peringatannya
+petunjuk, bukan rujukan hukum.
+Modul berikutnya menurut K6: Penggunaan (PSP) → Pemeliharaan → Pengadaan →
+Pemindahtanganan → Persediaan.
 
 ---
 

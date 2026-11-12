@@ -15,6 +15,9 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import MenuKepala from "@/components/ui/MenuKepala";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import IsianInstansiLuar from "@/components/pegawai/IsianInstansiLuar";
+import { kunciIkon } from "@/lib/kelompokOrang";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -30,7 +33,7 @@ const WARNA_STATUS = {
 };
 
 const FORM_KOSONG = {
-  bentuk: "sewa", mitra: "", jenis_mitra: "", mulai: "", berakhir: "",
+  bentuk: "sewa", mitra: "", jenis_mitra: "", mitra_instansi_id: "", mulai: "", berakhir: "",
   nilai: "", nomor_persetujuan: "", nomor_perjanjian: "", ntpn: "",
   kontribusi_tahunan: "", dasar_fasilitas: "tanpa_fasilitas",
   nomor_penetapan_fasilitas: "", pelaksana_fasilitas: "", keterangan: "",
@@ -56,8 +59,16 @@ const DOK_USULAN = {
 };
 
 const FORM_USULAN_KOSONG = {
-  bentuk: "sewa", mitra: "", jenis_mitra: "", mulai: "", berakhir: "",
+  bentuk: "sewa", mitra: "", jenis_mitra: "", mitra_instansi_id: "", mulai: "", berakhir: "",
   nilai: "", kontribusi_tahunan: "", keterangan: "",
+};
+
+// Ikon mitra hanya bila tertaut ke direktori instansi luar (PGW-11).
+const ikonMitra = (p) => (p?.mitra_instansi_id ? kunciIkon(p.mitra_kelompok, p.mitra_tataran) : null);
+
+// Peringatan lunak kebijakan skema × jenis mitra — tak menghalangi simpan.
+const tampilkanPeringatan = (res) => {
+  for (const p of res?.data?.peringatan_kebijakan || []) toast.warning(p, { duration: 9000 });
 };
 
 /**
@@ -130,8 +141,10 @@ export default function PemanfaatanPage({ user, onBack }) {
     setForm(p ? {
       id: p.id, saving: false,
       aset: p.asset_id ? { id: p.asset_id, asset_name: p.asset_name, asset_code: p.asset_code, NUP: p.NUP } : null,
+      mitra: p.mitra_instansi_id ? { id: p.mitra_instansi_id, kelompok: p.mitra_kelompok, tataran: p.mitra_tataran } : null,
       data: {
         bentuk: p.bentuk, mitra: p.mitra, jenis_mitra: p.jenis_mitra || "",
+        mitra_instansi_id: p.mitra_instansi_id || "",
         mulai: p.mulai, berakhir: p.berakhir, nilai: String(p.nilai ?? ""),
         nomor_persetujuan: p.nomor_persetujuan || "", nomor_perjanjian: p.nomor_perjanjian || "",
         ntpn: p.ntpn || "", kontribusi_tahunan: String(p.kontribusi_tahunan ?? ""),
@@ -163,9 +176,10 @@ export default function PemanfaatanPage({ user, onBack }) {
         kontribusi_tahunan: parseFloat(form.data.kontribusi_tahunan) || 0,
         asset_id: form.aset?.id || "",
       };
-      if (form.id) await axios.put(`${API}/pemanfaatan/${form.id}`, payload);
-      else await axios.post(`${API}/pemanfaatan`, payload);
+      const res = form.id ? await axios.put(`${API}/pemanfaatan/${form.id}`, payload)
+        : await axios.post(`${API}/pemanfaatan`, payload);
       toast.success("Register pemanfaatan tersimpan");
+      tampilkanPeringatan(res);
       setForm(null);
       muat();
     } catch (e) {
@@ -250,7 +264,7 @@ export default function PemanfaatanPage({ user, onBack }) {
     if (!formU) return;
     setFormU((f) => ({ ...f, saving: true }));
     try {
-      await axios.post(`${API}/pemanfaatan/usulan`, {
+      const res = await axios.post(`${API}/pemanfaatan/usulan`, {
         jenis: "baru",
         ...formU.data,
         nilai: parseFloat(formU.data.nilai) || 0,
@@ -258,6 +272,7 @@ export default function PemanfaatanPage({ user, onBack }) {
         asset_id: formU.aset?.id || "",
       });
       toast.success("Usulan pemanfaatan dibuka — status Draf");
+      tampilkanPeringatan(res);
       setFormU(null);
       muat();
     } catch (e) {
@@ -471,7 +486,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                         <span className="px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400 text-[10px] font-semibold">
                           {labelJenisUsulan[u.jenis] || u.jenis} · {labelBentuk[u.bentuk] || u.bentuk}
                         </span>
-                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate" title={u.mitra}>{u.mitra}</p>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate" title={u.mitra}>{u.mitra}{" "}<IkonKelompok kunciIkon={ikonMitra(u)} /></p>
                         {Number(u.nilai) > 0 && (
                           <span className="text-xs font-bold text-foreground whitespace-nowrap tabular-nums">{fmtRp(u.nilai)}</span>
                         )}
@@ -540,7 +555,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                             {p.nomor_perjanjian}
                           </span>
                         )}
-                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate" title={p.mitra}>{p.mitra}</p>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate" title={p.mitra}>{p.mitra}{" "}<IkonKelompok kunciIkon={ikonMitra(p)} /></p>
                         <span className="text-xs font-bold text-foreground whitespace-nowrap tabular-nums" title={fmtRp(p.nilai)}>{fmtRp(p.nilai)}</span>
                       </div>
                       {(p.asset_name || p.keterangan) && (
@@ -664,9 +679,11 @@ export default function PemanfaatanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-mitra">Mitra</label>
-                <Input id="pmf-mitra" placeholder="cth. PT Maju Bersama"
-                  value={form.data.mitra} onChange={(e) => setField("mitra", e.target.value)}
-                  data-testid="pemanfaatan-mitra" />
+                <IsianInstansiLuar id="pmf-mitra" placeholder="cth. PT Maju Bersama"
+                  teks={form.data.mitra} instansiId={form.data.mitra_instansi_id} instansi={form.mitra}
+                  onUbah={({ teks, instansi }) => setForm((f) => ({ ...f, mitra: instansi,
+                    data: { ...f.data, mitra: teks, mitra_instansi_id: instansi?.id || "" } }))}
+                  testId="pemanfaatan-mitra" />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-jmitra">Jenis Mitra</label>
@@ -807,9 +824,11 @@ export default function PemanfaatanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-mitra">Calon mitra</label>
-                <Input id="pmf-u-mitra" placeholder="cth. PT Maju Bersama" value={formU.data.mitra}
-                  onChange={(e) => setFormU((f) => ({ ...f, data: { ...f.data, mitra: e.target.value } }))}
-                  data-testid="pemanfaatan-usulan-mitra" />
+                <IsianInstansiLuar id="pmf-u-mitra" placeholder="cth. PT Maju Bersama"
+                  teks={formU.data.mitra} instansiId={formU.data.mitra_instansi_id} instansi={formU.mitra}
+                  onUbah={({ teks, instansi }) => setFormU((f) => ({ ...f, mitra: instansi,
+                    data: { ...f.data, mitra: teks, mitra_instansi_id: instansi?.id || "" } }))}
+                  testId="pemanfaatan-usulan-mitra" />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pmf-u-jmitra">Jenis mitra</label>

@@ -185,3 +185,11 @@ def test_referensi_luar_membawa_kebijakan_dan_gerbang():
     assert ref["naskah_luar_siap"] is False
     assert ref["kebijakan_penerima"]["pemerintah_desa"]["skema_sah"] == ["pinjam_pakai"]
     assert "penyerahan_pihak_luar" in ref["jenis_bast_luar"]
+
+
+def test_periksa_skema_lunak_untuk_pemanfaatan():
+    assert kp.periksa_skema("pinjam_pakai", "pemerintah_desa") == []
+    assert "yang tersedia" in kp.periksa_skema("pinjam_pakai", "bumn")[0]
+    assert kp.periksa_skema(None, "bumn") == [] and kp.periksa_skema("sewa", "") == []
+    assert "hibah" in kp.periksa_skema("sewa", "kelompok_masyarakat")[0]
+    assert set(kp.SKEMA_DARI_BENTUK.values()) <= set(kp.SKEMA)

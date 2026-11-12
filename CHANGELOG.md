@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1136] Pemanfaatan — mitra dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
+
+- Isian Mitra pada perjanjian dan usulan pemanfaatan kini menyarankan nama
+  dari direktori instansi luar (eksternal dan pihak ketiga). Memilih saran
+  menautkan catatan ke direktori; mengetik teks lain melepas tautan. Teks
+  bebas tetap boleh dan disimpan apa adanya seperti sebelumnya.
+- Mitra yang tertaut ditandai ikon kelompoknya di daftar usulan dan register
+  perjanjian.
+- Usulan perpanjangan mewarisi tautan perjanjian induknya; usulan yang
+  disahkan menjadi perjanjian membawa tautannya.
+- Saat menyimpan, aplikasi memberi peringatan (tanpa menolak) bila bentuk
+  pemanfaatan tidak lazim untuk jenis mitranya atau mitranya nonaktif di
+  direktori. Tabel kelaziman masih menunggu verifikasi PMK 115/2020.
+
 ## [#1135] Master Pegawai tiga kelompok — rapikan tampilan hasil pemeriksaan visual — 2026-11-12
 
 - Bilah pilihan kelompok kini sejajar dengan judul halaman; di tataran

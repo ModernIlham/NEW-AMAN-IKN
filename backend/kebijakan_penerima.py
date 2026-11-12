@@ -151,6 +151,32 @@ def periksa_penyerahan(skema, jenis_instansi, kapasitas, dasar) -> list:
     return galat
 
 
+#: Bentuk pemanfaatan (pemanfaatan_utils.BENTUK_PEMANFAATAN) → skema di sini.
+#: KETUPI tak punya baris di matriks 6.6 → tak diperiksa.
+SKEMA_DARI_BENTUK = {"sewa": "sewa", "pinjam_pakai": "pinjam_pakai", "ksp": "ksp",
+                     "bgs_bsg": "bgs_bsg", "kspi": "kspi"}
+
+
+def periksa_skema(skema, jenis_instansi) -> list:
+    """Hanya kecocokan skema × jenis penerima — untuk PERINGATAN LUNAK di
+    modul yang keputusan sahnya ada pada persetujuan Pengelola Barang
+    (Pemanfaatan, PSP). Tanpa skema/jenis → [] (tak ada yang diperiksa)."""
+    j, s = _s(jenis_instansi), _s(skema)
+    if not j or not s:
+        return []
+    if j == "kelompok_masyarakat":
+        return ["Kelompok masyarakat/ormas tidak dapat menerima penguasaan "
+                "sementara BMN; penyerahannya hanya lewat hibah"]
+    if j == "lainnya" or j not in MATRIKS:
+        return ["Jenis mitra \"lainnya\" tidak punya skema baku — pastikan "
+                "penetapan Pengelola Barang untuk kasus ini"]
+    k = kebijakan(j)
+    if s not in k["skema_sah"]:
+        return [f"Skema \"{SKEMA.get(s, s)}\" tidak lazim untuk jenis mitra ini; "
+                "yang tersedia: " + ", ".join(SKEMA[x] for x in k["skema_sah"])]
+    return list(catatan_penyerahan(s, j))
+
+
 def catatan_penyerahan(skema, jenis_instansi) -> list:
     """Peringatan tak menghalangi (mis. KSPI hanya PT)."""
     c = kebijakan(jenis_instansi)["catatan"].get(_s(skema))
