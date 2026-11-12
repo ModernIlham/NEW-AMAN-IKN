@@ -46,6 +46,9 @@ _STATUS_PT_AKTIF = ("diusulkan", "disetujui", "dilaksanakan")
 class UsulanPtIn(BaseModel):
     bentuk: str
     pihak: str = Field(min_length=1)   # penerima hibah / pembeli / mitra / BUMN
+    # Tautan opsional ke direktori instansi luar (PGW-11); teks `pihak`
+    # tetap disimpan apa adanya.
+    pihak_instansi_id: str = ""
     keterangan: str = ""
     # Input untuk saran jenjang persetujuan (indikatif, tak memblok)
     jenis_bmn: str = "selain_tanah_bangunan"
@@ -179,6 +182,12 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_write
                           "NUP": a.get("NUP"), "asset_name": a.get("asset_name"),
                           "harga": a.get("purchase_price"),
                           "kondisi": a.get("condition")})
+    # Pemindahtanganan sengaja di luar matriks kebijakan penerima (lihat
+    # kebijakan_penerima.py) → tanpa pemeriksaan skema; hanya peringatan
+    # bila instansinya nonaktif di direktori.
+    import tautan_instansi as ti
+    tautan, ins = await ti.tautkan(db, data, "pihak", "Pihak")
+    peringatan_kebijakan = ti.peringatan_nonaktif(ins, "Pihak")
     now = datetime.now(timezone.utc).isoformat()
     from shared_utils import kode_satker_efektif_dari_aset
     _ks = await kode_satker_efektif_dari_aset(
@@ -188,6 +197,7 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_write
         "kode_satker": _ks,
         "bentuk": data["bentuk"],
         "pihak": data["pihak"].strip(),
+        **tautan,
         "keterangan": str(data.get("keterangan") or "").strip(),
         "jenis_bmn": (data.get("jenis_bmn") if data.get("jenis_bmn") in JENIS_BMN_PT
                       else "selain_tanah_bangunan"),
@@ -218,6 +228,7 @@ async def buat_usulan_pt(payload: UsulanPtIn, user: dict = Depends(require_write
         for aid, labels in peta.items()
         if [x for x in labels if x != "usulan pemindahtanganan"]][:10]
     record["saran_jenjang"] = _saran_untuk(record)
+    record["peringatan_kebijakan"] = peringatan_kebijakan
     return record
 
 
