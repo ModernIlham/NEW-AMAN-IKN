@@ -1,5 +1,5 @@
 import PencarianAset from "@/components/assets/PencarianAset";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Wrench, Plus, Trash2, X, CalendarDays, Coins, Boxes, ClipboardList, Download, FileText, CalendarClock, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
@@ -16,6 +16,8 @@ import { downloadFileWithProgress } from "@/lib/downloadFile";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import IsianInstansiLuar from "@/components/pegawai/IsianInstansiLuar";
+import { kunciIkon } from "@/lib/kelompokOrang";
 import TombolOrangLuar from "@/components/pegawai/TombolOrangLuar";
 import BookingNomorButton from "@/components/persuratan/BookingNomorButton";
 
@@ -47,6 +49,7 @@ const FORM_KOSONG = {
   uraian: "",
   biaya: "",
   pelaksana: "",
+  pelaksana_instansi_id: "",
   no_bukti: "",
   kondisi_setelah: "",
   keterangan: "",
@@ -69,9 +72,8 @@ export default function PemeliharaanPage({ user, onBack }) {
   const [jenisList, setJenisList] = useState([]);
   // Referensi Master Pegawai — saran pelaksana internal (penyedia jasa tetap ketik bebas)
   const [pegawaiList, setPegawaiList] = useState([]);
-  // Orang luar yang dipilih dari direktori (PGW-08) — pelaksana tercatat
-  // sebagai teks, jadi ikonnya hanya ditampilkan selama form terbuka.
-  const [pelaksanaLuar, setPelaksanaLuar] = useState(null);
+  const saranPegawai = useMemo(() => pegawaiList.map((p) => ({
+    nilai: p.nama, label: [p.jabatan, p.unit].filter(Boolean).join(" · ") })), [pegawaiList]);
   const [kapPetugas, setKapPetugas] = useState(""); // nama pelaksana BAPP yang berkapasitas petugas
   // Jadwal berkala: {items, jumlah, terlambat, segera} | null
   const [jadwal, setJadwal] = useState(null);
@@ -210,8 +212,9 @@ export default function PemeliharaanPage({ user, onBack }) {
     if (!form.data.uraian.trim()) { toast.error("Uraian pekerjaan wajib diisi"); return; }
     setForm((f) => ({ ...f, saving: true }));
     try {
-      await axios.post(`${API}/pemeliharaan`, { ...form.data, asset_id: form.aset.id });
+      const res = await axios.post(`${API}/pemeliharaan`, { ...form.data, asset_id: form.aset.id });
       toast.success("Catatan pemeliharaan tersimpan");
+      (res.data?.peringatan_kebijakan || []).forEach((w) => toast.warning(w));
       setForm(null);
       setPage(1);
       muatRekap();
@@ -316,7 +319,9 @@ export default function PemeliharaanPage({ user, onBack }) {
               Riwayat & biaya per aset — bahan Daftar Hasil Pemeliharaan (PP 27/2014)
             </p>
           </div>
-          <Button size="sm" onClick={bukaForm}
+          {/* Panggil tanpa argumen: `onClick={bukaForm}` meneruskan event klik
+              sebagai `aset` — pemilih aset hilang dan simpan gagal. */}
+          <Button size="sm" onClick={() => bukaForm()}
             className="h-9 w-9 p-0 bg-orange-600 hover:bg-orange-700 text-white flex-shrink-0"
             title="Catat pemeliharaan" aria-label="Catat pemeliharaan"
             data-testid="pemeliharaan-tambah">
@@ -606,9 +611,19 @@ export default function PemeliharaanPage({ user, onBack }) {
                       <p className="text-sm font-semibold text-foreground mt-1">{r.uraian}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                         {r.asset_name || "-"} <span className="font-mono">({r.asset_code} · {r.NUP})</span>
-                        {r.pelaksana && ` · ${r.pelaksana}`}
                         {r.no_bukti && ` · Bukti: ${r.no_bukti}`}
                       </p>
+                      {/* Baris sendiri: nama aset panjang tak menelan pelaksana & ikonnya. */}
+                      {r.pelaksana && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 min-w-0"
+                          title={r.pelaksana} data-testid={`pemeliharaan-pelaksana-${r.id}`}>
+                          <span className="flex-shrink-0">Pelaksana:</span>
+                          <span className="truncate min-w-0">{r.pelaksana}</span>
+                          {r.pelaksana_instansi_id && (
+                            <IkonKelompok kunciIkon={kunciIkon(r.pelaksana_kelompok, r.pelaksana_tataran)} />
+                          )}
+                        </p>
+                      )}
                       {r.keterangan && <p className="text-[11px] text-muted-foreground/80 mt-0.5">{r.keterangan}</p>}
                     </div>
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -726,30 +741,28 @@ export default function PemeliharaanPage({ user, onBack }) {
                   data-testid="pemeliharaan-biaya" />
               </div>
               <div>
-                <label className="text-xs font-medium text-foreground mb-1 flex items-center gap-1.5" htmlFor="pml-pelaksana">
-                  Pelaksana
-                  {pelaksanaLuar && form.data.pelaksana === pelaksanaLuar.teks && (
-                    <IkonKelompok kunciIkon={pelaksanaLuar.kunci} />
-                  )}
-                </label>
+                <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pml-pelaksana">Pelaksana</label>
+                {/* Teks bebas / pegawai internal / penyedia dari direktori instansi
+                    luar (PGW-11). Orang luar yang dipilih lewat tombol menautkan
+                    instansinya, jadi ikonnya ikut tersimpan. */}
                 <div className="flex items-start gap-1.5">
-                <Input id="pml-pelaksana" placeholder="petugas / penyedia jasa" list="pml-pegawai-list"
-                  className="flex-1 min-w-0" data-testid="pemeliharaan-pelaksana"
-                  value={form.data.pelaksana} onChange={(e) => setField("pelaksana", e.target.value)} />
-                <TombolOrangLuar testId="pemeliharaan-pelaksana-luar"
-                  onPilih={(o) => {
-                    const teks = [o.nama, o.instansi_nama].filter(Boolean).join(" — ");
-                    setPelaksanaLuar({ teks, kunci: o.kunci_ikon });
-                    setField("pelaksana", teks);
-                  }} />
+                  <div className="flex-1 min-w-0">
+                    <IsianInstansiLuar id="pml-pelaksana" placeholder="petugas / penyedia jasa"
+                      teks={form.data.pelaksana} instansiId={form.data.pelaksana_instansi_id}
+                      instansi={form.pelaksanaInstansi} saranTambahan={saranPegawai}
+                      onUbah={({ teks, instansi }) => setForm((f) => ({ ...f, pelaksanaInstansi: instansi,
+                        data: { ...f.data, pelaksana: teks, pelaksana_instansi_id: instansi?.id || "" } }))}
+                      testId="pemeliharaan-pelaksana" />
+                  </div>
+                  <TombolOrangLuar testId="pemeliharaan-pelaksana-luar"
+                    onPilih={(o) => {
+                      const teks = [o.nama, o.instansi_nama].filter(Boolean).join(" — ");
+                      const instansi = o.instansi_id ? { id: o.instansi_id, nama: o.instansi_nama,
+                        kelompok: o.kelompok, tataran: o.tataran } : null;
+                      setForm((f) => ({ ...f, pelaksanaInstansi: instansi,
+                        data: { ...f.data, pelaksana: teks, pelaksana_instansi_id: instansi?.id || "" } }));
+                    }} />
                 </div>
-                <datalist id="pml-pegawai-list">
-                  {pegawaiList.map((p, i) => (
-                    <option key={`${p.nama}-${i}`} value={p.nama}>
-                      {[p.jabatan, p.unit].filter(Boolean).join(" · ")}
-                    </option>
-                  ))}
-                </datalist>
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pml-bukti">No. Bukti</label>
