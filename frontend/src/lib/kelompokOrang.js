@@ -103,11 +103,11 @@ export const PERMUKAAN_IKON = [
   "pages/WasdalPage.jsx",
   "pages/PemanfaatanPage.jsx",
   "components/pegawai/IsianInstansiLuar.jsx",
+  "pages/PengadaanPage.jsx",
 ];
 /** Menyusul PGW-11: ikon di samping mitra/pihak yang tertaut `instansi_luar`. */
 export const PERMUKAAN_IKON_MENYUSUL = [
   "pages/PemindahtangananPage.jsx",
-  "pages/PengadaanPage.jsx",
 ];
 /** Naskah & layar persuratan: tanpa ikon (K10). Akhiran "/" = seisi folder. */
 export const LARANGAN_IKON = [

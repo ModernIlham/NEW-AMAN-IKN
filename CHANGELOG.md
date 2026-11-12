@@ -18,6 +18,21 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1139] Pengadaan — penyedia/pemberi dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
+
+- Isian Penyedia/pemberi pada register perolehan kini menyarankan nama dari
+  direktori instansi luar. Memilih saran menautkan register; teks bebas tetap
+  boleh. Penyedia yang tertaut ditandai ikon kelompoknya di daftar register.
+- Tautan ikut terkunci bersama identitas dokumen: setelah BAST PPK→KPB terbit
+  atau ada LPB yang menunjuk register, penyedianya tidak dapat diganti.
+- Bila penyedia berstatus nonaktif di direktori, aplikasi memberi peringatan
+  tanpa menolak simpan.
+- Direktori instansi luar: instansi yang masih dirujuk Pemanfaatan,
+  Penggunaan, Pemeliharaan, atau Pengadaan tidak dapat dihapus — nonaktifkan
+  saja.
+- Mengubah perjanjian Pemanfaatan atau register Pengadaan tidak lagi gagal
+  hanya karena instansi tertautnya sudah tidak ada di direktori.
+
 ## [#1138] Pemeliharaan — pelaksana dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
 
 - Perbaikan: tombol "+" Catat Pemeliharaan kini membuka pemilih aset.

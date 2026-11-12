@@ -1057,7 +1057,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a + 08b) |
 | PGW-09 | Laporan & dokumen | 06 | **selesai** | #1123 |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | **kerangka selesai**; butir pasal & form menunggu verifikasi PMK 115/2020 | #1124 (kerangka) |
-| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan, Penggunaan, Pemeliharaan | |
+| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan, Penggunaan, Pemeliharaan, Pengadaan | |
 | PGW-12 | Data uji & dokumentasi | 07–10 | **selesai** | #1125 |
 
 PGW-04, 05, 06 boleh paralel setelah PGW-03. Sampai PGW-07 ter-merge,
@@ -1894,7 +1894,25 @@ tangan, bukan badan. Sekaligus diperbaiki cacat lama: tombol "+" memanggil
 `bukaForm` dengan event klik sebagai aset — pemilih aset hilang dan simpan
 mengirim `asset_id` kosong (uji regresi `PemeliharaanCatat.test.jsx`).
 
-Modul berikutnya menurut K6: Pengadaan → Pemindahtanganan → Persediaan.
+
+**Hasil Pengadaan (2026-11-12):** `pihak_instansi_id` (+ snapshot) pada
+register perolehan, di buat dan ubah. Tanpa pemeriksaan skema (perolehan
+bukan penyerahan penguasaan); hanya peringatan nonaktif. Tautan ikut
+**terkunci bersama identitas dokumen** (`kunci_ubah_perolehan`): setelah BAST
+PPK→KPB terbit atau ada LPB, mengganti tautan ditolak 409 seperti mengganti
+`pihak`. Form ubah memuat dan mengirim tautan (`lib/perolehanUbah.js`) agar
+perbaikan salah ketik tidak melepasnya diam-diam.
+Sekaligus menutup dua celah yang berlaku untuk semua modul PGW-11:
+1. `hapus_instansi_luar` kini menolak (409) instansi yang masih dirujuk
+   transaksi (`tautan_instansi.RUJUKAN`), menyebut nama modulnya saja tanpa
+   merinci satker lain — catatan "PGW-10/11 yang menambah pemeriksaannya di
+   sini" di rute itu kini terpenuhi.
+2. Saat ubah, tautan yang tidak berubah dipertahankan tanpa ditanyakan ulang
+   ke direktori (`tautkan(..., lama=)`), sehingga mengubah keterangan tidak
+   gagal 400 hanya karena instansinya sudah tidak ada (Pemanfaatan &
+   Pengadaan; Penggunaan & Pemeliharaan tak punya rute ubah).
+
+Modul berikutnya menurut K6: Pemindahtanganan → Persediaan.
 
 ---
 

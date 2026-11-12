@@ -72,7 +72,7 @@ describe("payloadUbahPerolehan", () => {
     expect(Object.keys(p).sort()).toEqual([
       "barang", "jenis", "jenis_up", "keterangan", "no_bukti", "no_dokumen",
       "no_sp_spk", "no_spby", "no_spm", "no_spp", "nomor_bast",
-      "nomor_kontrak", "pihak", "sifat", "tanggal_bast",
+      "nomor_kontrak", "pihak", "pihak_instansi_id", "sifat", "tanggal_bast",
     ]);
   });
 
@@ -166,5 +166,20 @@ describe("tautan persediaan pada perjalanan pulang-pergi form ubah", () => {
   test("daftar terkunci tetap mengirim barang: null", () => {
     const f = formDariPerolehan({ ...REC, ubah: { identitas: true, barang: false } });
     expect(payloadUbahPerolehan(f).barang).toBeNull();
+  });
+});
+
+describe("tautan pihak ke direktori instansi luar (PGW-11)", () => {
+  test("tautan dimuat ke form dan ikut terkirim, bukan terlepas diam-diam", () => {
+    const form = formDariPerolehan({ ...PEROLEHAN, pihak_instansi_id: "pt1",
+      pihak_kelompok: "pihak_ketiga", pihak_tataran: "" });
+    expect(form.pihakInstansi).toEqual({ id: "pt1", nama: "PT Sumber Rejeki",
+      kelompok: "pihak_ketiga", tataran: "" });
+    expect(payloadUbahPerolehan(form).pihak_instansi_id).toBe("pt1");
+  });
+  test("register tanpa tautan mengirim string kosong", () => {
+    const form = formDariPerolehan(PEROLEHAN);
+    expect(form.pihakInstansi).toBeNull();
+    expect(payloadUbahPerolehan(form).pihak_instansi_id).toBe("");
   });
 });

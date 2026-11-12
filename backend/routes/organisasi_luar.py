@@ -533,8 +533,14 @@ async def hapus_instansi_luar(instansi_id: str,
         raise HTTPException(status_code=409, detail=(
             "Instansi masih punya orang tercatat — nonaktifkan saja bila sudah "
             "tidak dipakai"))
-    # Rujukan dari transaksi (BAST, pemanfaatan, …) belum ada; PGW-10/11 yang
-    # menambah pemeriksaannya di sini, lintas satker, tanpa merinci satker lain.
+    # Rujukan dari transaksi (PGW-11): dicek lintas satker, tanpa merinci
+    # satker lain — cukup nama modulnya.
+    import tautan_instansi as ti
+    perujuk = await ti.modul_perujuk(db, instansi_id)
+    if perujuk:
+        raise HTTPException(status_code=409, detail=(
+            "Instansi masih dirujuk transaksi (" + ", ".join(perujuk) + ") — "
+            "nonaktifkan saja bila sudah tidak dipakai"))
     satker_ids = [s["id"] async for s in db.satker_luar.find(
         {"instansi_id": instansi_id}, {"_id": 0, "id": 1})]
     if satker_ids:

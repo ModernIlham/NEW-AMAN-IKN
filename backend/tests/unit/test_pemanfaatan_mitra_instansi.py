@@ -95,3 +95,15 @@ def test_usulan_baru_membawa_tautan_sampai_menjadi_perjanjian(dbx):
         p = await dbx.pemanfaatan.find_one({"usulan_id": u["id"]}, {"_id": 0})
         assert (p["mitra_instansi_id"], p["mitra_tataran"]) == ("kab1", "daerah")
     _jalan(skenario())
+
+
+def test_ubah_mempertahankan_tautan_lama_walau_instansi_sudah_tiada(dbx):
+    """Instansi bisa saja sudah hilang dari direktori (data lama sebelum
+    penjaga hapus PGW-11): mengubah keterangan tak boleh ikut gagal 400."""
+    _isi(dbx)
+    r = _jalan(_unwrap(rp.buat_pemanfaatan)(_payload(mitra_instansi_id="kab1"), user=USER))
+    _jalan(dbx.instansi_luar.delete_many({}))
+    ubah = _jalan(_unwrap(rp.ubah_pemanfaatan)(
+        r["id"], _payload(mitra_instansi_id="kab1", keterangan="dirapikan"), user=USER))
+    assert ubah["keterangan"] == "dirapikan"
+    assert (ubah["mitra_instansi_id"], ubah["mitra_kelompok"]) == ("kab1", "eksternal")

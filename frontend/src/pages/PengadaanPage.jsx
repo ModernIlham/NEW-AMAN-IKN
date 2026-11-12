@@ -21,6 +21,9 @@ import MenuKepala from "@/components/ui/MenuKepala";
 import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import PemilihPenandatangan from "@/components/pejabat/PemilihPenandatangan";
 import { getSatkerAktif } from "@/lib/satkerAktif";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import IsianInstansiLuar from "@/components/pegawai/IsianInstansiLuar";
+import { kunciIkon } from "@/lib/kelompokOrang";
 import { idTerpilih, payloadLpbGabungan } from "@/lib/lpbGabungan";
 import { bolehLeburkan, peringatanJumlahLebur } from "@/lib/peleburanBaris";
 import {
@@ -253,12 +256,11 @@ export default function PengadaanPage({ user, onBack }) {
       psd_master_id: b.psd_master_id || "",
     }));
     try {
-      if (ubah) {
-        await axios.put(`${API}/pengadaan/${form.id}`, payloadUbahPerolehan(form));
-      } else {
-        await axios.post(`${API}/pengadaan`, { ...form.data, barang });
-      }
+      const res = ubah
+        ? await axios.put(`${API}/pengadaan/${form.id}`, payloadUbahPerolehan(form))
+        : await axios.post(`${API}/pengadaan`, { ...form.data, barang });
       toast.success(ubah ? "Perolehan diperbarui" : "Perolehan dicatat");
+      (res?.data?.peringatan_kebijakan || []).forEach((w) => toast.warning(w));
       setForm(null);
       muat();
     } catch (e) {
@@ -643,7 +645,7 @@ export default function PengadaanPage({ user, onBack }) {
   // Buka dialog catat perolehan baru — dipakai tombol header & empty-state
   const bukaFormBaru = () => setForm({
     mode: "baru",
-    data: { jenis: "pembelian", pihak: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "", ppk_pejabat_id: "",
+    data: { jenis: "pembelian", pihak: "", pihak_instansi_id: "", nomor_kontrak: "", nomor_bast: "", tanggal_bast: new Date().toISOString().slice(0, 10), keterangan: "", penganggaran_id: "", ppk_pejabat_id: "",
       // Dokumen pengadaan; `sifat` menentukan kolom mana yang berlaku.
       sifat: "", no_sp_spk: "", jenis_up: "", no_spby: "", no_spp: "", no_spm: "",
       no_bukti: "", no_dokumen: "" },
@@ -758,7 +760,10 @@ export default function PengadaanPage({ user, onBack }) {
                         <span className="px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-600 dark:text-orange-400 text-[10px] font-semibold">
                           {labelJenis[p.jenis] || p.jenis} · {kodeJenis[p.jenis]}
                         </span>
-                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{p.pihak}</p>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] flex items-center gap-1" title={p.pihak}>
+                          <span className="truncate min-w-0">{p.pihak}</span>
+                          {p.pihak_instansi_id && <IkonKelompok kunciIkon={kunciIkon(p.pihak_kelompok, p.pihak_tataran)} />}
+                        </p>
                         <span className="text-xs font-bold text-foreground whitespace-nowrap">{fmtRp(p.nilai)}</span>
                         {(() => {
                           const w = dokumenWajib[p.jenis] || [];
@@ -999,9 +1004,11 @@ export default function PengadaanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-pihak">Penyedia/pemberi</label>
-                <Input id="pgd-pihak" placeholder="cth. CV Sumber Rejeki" value={form.data.pihak} disabled={kunciIdentitas}
-                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, pihak: e.target.value } }))}
-                  data-testid="pengadaan-pihak" />
+                <IsianInstansiLuar id="pgd-pihak" placeholder="cth. CV Sumber Rejeki" disabled={kunciIdentitas}
+                  teks={form.data.pihak} instansiId={form.data.pihak_instansi_id} instansi={form.pihakInstansi}
+                  onUbah={({ teks, instansi }) => setForm((f) => ({ ...f, pihakInstansi: instansi,
+                    data: { ...f.data, pihak: teks, pihak_instansi_id: instansi?.id || "" } }))}
+                  testId="pengadaan-pihak" />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-kontrak">No. Kontrak/SPK (opsional)</label>
