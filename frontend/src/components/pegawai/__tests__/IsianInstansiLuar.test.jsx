@@ -43,3 +43,19 @@ test("direktori gagal dihubungi → tetap bisa diketik bebas", async () => {
   expect(catat).toHaveBeenLastCalledWith({ teks: "CV Lokal", instansi: null });
   expect(screen.getByTestId("mitra")).toHaveValue("CV Lokal");
 });
+
+test("saran tambahan (Master Satker) tampil tetapi tidak menautkan", async () => {
+  axios.get.mockResolvedValue({ data: { items: [] } });
+  const catat = jest.fn();
+  function WadahSatker() {
+    const [s, setS] = useState({ teks: "", instansi: null });
+    return <IsianInstansiLuar teks={s.teks} instansiId={s.instansi?.id || ""} instansi={s.instansi}
+      testId="pihak" saranTambahan={[{ nilai: "Otorita IKN", label: "691778" }]}
+      onUbah={(v) => { catat(v); setS(v); }} />;
+  }
+  const { container } = render(<WadahSatker />);
+  expect(container.querySelector("datalist option")).toHaveAttribute("value", "Otorita IKN");
+  fireEvent.change(screen.getByTestId("pihak"), { target: { value: "Otorita IKN" } });
+  expect(catat).toHaveBeenLastCalledWith({ teks: "Otorita IKN", instansi: null });
+  expect(screen.getByTestId("pihak-status")).toHaveTextContent("Teks bebas");
+});

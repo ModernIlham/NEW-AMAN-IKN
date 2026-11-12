@@ -157,7 +157,14 @@ SKEMA_DARI_BENTUK = {"sewa": "sewa", "pinjam_pakai": "pinjam_pakai", "ksp": "ksp
                      "bgs_bsg": "bgs_bsg", "kspi": "kspi"}
 
 
-def periksa_skema(skema, jenis_instansi) -> list:
+#: Jenis proses penggunaan (penggunaan_utils.JENIS_PROSES_PENGGUNAAN) → skema.
+#: Alih status & penggunaan bersama tidak termasuk skema matriks 6.6 → tak
+#: diperiksa (bawaan konservatif, sama dengan sel "perlu verifikasi").
+SKEMA_DARI_PROSES = {"penggunaan_sementara": "penggunaan_sementara",
+                     "dioperasikan_pihak_lain": "dioperasikan_pihak_lain"}
+
+
+def periksa_skema(skema, jenis_instansi, sebutan="mitra") -> list:
     """Hanya kecocokan skema × jenis penerima — untuk PERINGATAN LUNAK di
     modul yang keputusan sahnya ada pada persetujuan Pengelola Barang
     (Pemanfaatan, PSP). Tanpa skema/jenis → [] (tak ada yang diperiksa)."""
@@ -168,11 +175,11 @@ def periksa_skema(skema, jenis_instansi) -> list:
         return ["Kelompok masyarakat/ormas tidak dapat menerima penguasaan "
                 "sementara BMN; penyerahannya hanya lewat hibah"]
     if j == "lainnya" or j not in MATRIKS:
-        return ["Jenis mitra \"lainnya\" tidak punya skema baku — pastikan "
+        return [f"Jenis {sebutan} \"lainnya\" tidak punya skema baku — pastikan "
                 "penetapan Pengelola Barang untuk kasus ini"]
     k = kebijakan(j)
     if s not in k["skema_sah"]:
-        return [f"Skema \"{SKEMA.get(s, s)}\" tidak lazim untuk jenis mitra ini; "
+        return [f"Skema \"{SKEMA.get(s, s)}\" tidak lazim untuk jenis {sebutan} ini; "
                 "yang tersedia: " + ", ".join(SKEMA[x] for x in k["skema_sah"])]
     return list(catatan_penyerahan(s, j))
 

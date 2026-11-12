@@ -115,30 +115,18 @@ _FIELD_TAUTAN_MITRA = ("mitra_instansi_id", "mitra_kelompok", "mitra_tataran",
 
 async def _tautan_mitra(data: dict) -> tuple:
     """(field tautan, peringatan lunak) untuk mitra yang ditautkan ke
-    direktori instansi luar (PGW-11).
-
-    Tanpa tautan → semua field kosong, tanpa peringatan (perilaku lama).
-    Tautan ke id yang tak ada → 400: tautan yang patah lebih buruk daripada
-    teks bebas. Skema yang tak lazim bagi jenis mitranya hanya PERINGATAN —
-    keputusan sahnya tetap pada persetujuan Pengelola Barang."""
-    iid = str(data.get("mitra_instansi_id") or "").strip()
-    kosong = {k: "" for k in _FIELD_TAUTAN_MITRA}
-    if not iid:
-        return kosong, []
-    ins = await db.instansi_luar.find_one(
-        {"id": iid}, {"_id": 0, "id": 1, "nama": 1, "kelompok": 1, "tataran": 1,
-                      "jenis": 1, "aktif": 1})
-    if not ins:
-        raise HTTPException(status_code=400, detail=(
-            "Mitra yang ditautkan tidak ditemukan di direktori instansi luar"))
+    direktori instansi luar (PGW-11; pola di `tautan_instansi`). Skema yang
+    tak lazim bagi jenis mitranya hanya PERINGATAN — keputusan sahnya tetap
+    pada persetujuan Pengelola Barang."""
     import kebijakan_penerima as kp
+    import tautan_instansi as ti
+    fields, ins = await ti.tautkan(db, data, "mitra", "Mitra")
+    if not ins:
+        return fields, []
     skema = kp.SKEMA_DARI_BENTUK.get(str(data.get("bentuk") or ""))
     peringatan = kp.periksa_skema(skema, ins.get("jenis"))
-    if ins.get("aktif") is False:
-        peringatan.append("Instansi mitra ini berstatus nonaktif di direktori")
-    return ({"mitra_instansi_id": ins["id"], "mitra_kelompok": ins.get("kelompok", ""),
-             "mitra_tataran": ins.get("tataran", ""),
-             "mitra_jenis_instansi": ins.get("jenis", "")}, peringatan)
+    peringatan += ti.peringatan_nonaktif(ins, "Mitra")
+    return fields, peringatan
 
 
 @pemanfaatan_router.get("/pemanfaatan/usulan")

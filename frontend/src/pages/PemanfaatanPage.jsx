@@ -486,7 +486,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                         <span className="px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-600 dark:text-teal-400 text-[10px] font-semibold">
                           {labelJenisUsulan[u.jenis] || u.jenis} · {labelBentuk[u.bentuk] || u.bentuk}
                         </span>
-                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate" title={u.mitra}>{u.mitra}{" "}<IkonKelompok kunciIkon={ikonMitra(u)} /></p>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] flex items-center gap-1" title={u.mitra}><span className="truncate min-w-0">{u.mitra}</span><IkonKelompok kunciIkon={ikonMitra(u)} /></p>
                         {Number(u.nilai) > 0 && (
                           <span className="text-xs font-bold text-foreground whitespace-nowrap tabular-nums">{fmtRp(u.nilai)}</span>
                         )}
@@ -555,7 +555,7 @@ export default function PemanfaatanPage({ user, onBack }) {
                             {p.nomor_perjanjian}
                           </span>
                         )}
-                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate" title={p.mitra}>{p.mitra}{" "}<IkonKelompok kunciIkon={ikonMitra(p)} /></p>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] flex items-center gap-1" title={p.mitra}><span className="truncate min-w-0">{p.mitra}</span><IkonKelompok kunciIkon={ikonMitra(p)} /></p>
                         <span className="text-xs font-bold text-foreground whitespace-nowrap tabular-nums" title={fmtRp(p.nilai)}>{fmtRp(p.nilai)}</span>
                       </div>
                       {(p.asset_name || p.keterangan) && (

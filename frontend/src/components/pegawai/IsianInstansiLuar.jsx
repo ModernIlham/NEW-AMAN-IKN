@@ -16,9 +16,12 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  *
  * `onUbah({ teks, instansi })` — `instansi` = dokumen direktori tertaut atau
  * null.
+ *
+ * `saranTambahan` ([{ nilai, label }]) — saran teks lain di datalist yang sama
+ * (mis. Master Satker); memilihnya TIDAK menautkan apa pun.
  */
 export default function IsianInstansiLuar({ id, teks, instansiId, instansi, onUbah,
-  placeholder, testId }) {
+  placeholder, testId, saranTambahan = [] }) {
   const listId = useId();
   const [saran, setSaran] = useState([]);
 
@@ -51,6 +54,7 @@ export default function IsianInstansiLuar({ id, teks, instansiId, instansi, onUb
       </div>
       <datalist id={listId}>
         {saran.map((i) => <option key={i.id} value={i.nama} />)}
+        {saranTambahan.map((o) => <option key={`+${o.nilai}`} value={o.nilai}>{o.label}</option>)}
       </datalist>
       <p className="text-[11px] text-muted-foreground" data-testid={testId ? `${testId}-status` : undefined}>
         {tertaut ? "Tertaut ke direktori instansi luar — ubah teks untuk melepas tautan."
