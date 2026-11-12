@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1141] Persediaan — penyedia dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
+
+- Isian Penyedia pada transaksi masuk persediaan (tunggal dan massal) kini
+  menyarankan nama dari direktori instansi luar. Memilih saran menautkan
+  transaksi; teks bebas tetap boleh.
+- Memilih perolehan Pengadaan yang penyedianya sudah tertaut mengisi dan
+  menautkan penyedia secara otomatis.
+- Penyedia yang tertaut ditandai ikon kelompoknya di riwayat transaksi, dan
+  tautannya ikut tersimpan pada LPB transaksi massal.
+- Bila penyedia berstatus nonaktif di direktori, aplikasi memberi peringatan
+  tanpa menolak simpan.
+- Instansi yang dirujuk transaksi persediaan atau LPB tidak dapat dihapus dari
+  direktori.
+
 ## [#1140] Pemindahtanganan — pihak penerima dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
 
 - Isian Pihak (penerima/pembeli/mitra) pada usulan pemindahtanganan kini

@@ -32,6 +32,8 @@ import PerkiraanNomor from "@/components/persuratan/PerkiraanNomor";
 import { bagikanWa, bagikanEmail, hasilTtd } from "@/lib/pesanTtd";
 import { opsiPenerima, cocokkanPenerima, opsiPenerimaLuar } from "@/lib/penerimaPersediaan";
 import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import IsianInstansiLuar from "@/components/pegawai/IsianInstansiLuar";
+import { kunciIkon } from "@/lib/kelompokOrang";
 import TombolOrangLuar from "@/components/pegawai/TombolOrangLuar";
 import { ringkasTtdDokumen, kelasNada } from "@/lib/statusTtd";
 import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
@@ -41,6 +43,11 @@ import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
 } from "@/lib/kelasKepala";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Instansi penyedia dari perolehan Pengadaan yang tertaut (PGW-11) — dipakai
+// saat penyedia diisi otomatis dari perolehan.
+const instansiDariPerolehan = (p) => (p?.pihak_instansi_id ? { id: p.pihak_instansi_id,
+  nama: p.pihak, kelompok: p.pihak_kelompok, tataran: p.pihak_tataran } : null);
 
 // Kunci idempotensi per sesi transaksi: dibuat saat dialog dibuka, dipakai
 // ulang bila submit diulang (klik ganda / retry jaringan) → server tidak
@@ -333,13 +340,18 @@ export default function PersediaanPage({ user, onBack }) {
     const d = { ...m.data, perolehan_id: id };
     const p = pengadaanList.find((x) => x.id === id);
     if (p) {
-      if (!d.penyedia) d.penyedia = p.pihak || "";
+      if (!d.penyedia) {
+        d.penyedia = p.pihak || "";
+        d.penyedia_instansi_id = p.pihak_instansi_id || "";
+      }
       if (!d.no_kontrak) d.no_kontrak = p.nomor_kontrak || "";
       if (!d.tgl_dokumen) d.tgl_dokumen = p.tanggal_bast || "";
       if (!d.no_bukti) d.no_bukti = p.nomor_bast || "";
       if (!d.jenis_dokumen) d.jenis_dokumen = "BAST";
     }
-    return { ...m, data: d };
+    const penyediaInstansi = d.penyedia_instansi_id && d.penyedia_instansi_id === p?.pihak_instansi_id
+      ? instansiDariPerolehan(p) : m.penyediaInstansi;
+    return { ...m, data: d, penyediaInstansi };
   });
 
   const fmtRp = (n) => `Rp${Number(n || 0).toLocaleString("id-ID")}`;
@@ -368,6 +380,7 @@ export default function PersediaanPage({ user, onBack }) {
         ...d, jumlah, harga_satuan: Number(d.harga_satuan) || 0,
       }, { headers: { "Idempotency-Key": masuk.idem } });
       toast.success(`${r.data?.message} — stok kini ${r.data?.stok}`);
+      (r.data?.peringatan_kebijakan || []).forEach((w) => toast.warning(w));
       setMasuk(null);
       load(page, search, status);
       refreshRingkasan();
@@ -499,7 +512,8 @@ export default function PersediaanPage({ user, onBack }) {
     arah: "masuk", jenis: "pembelian", no_bukti: "", booking_otomatis: false,
     kode_klasifikasi: "", jenis_dokumen: "",
     tgl_dokumen: "", perolehan_id: "",
-    penyedia: "", unit_penerima: "", keterangan: "",
+    penyedia: "", penyedia_instansi_id: "", penyediaInstansi: null,
+    unit_penerima: "", keterangan: "",
     items: [], cari: "", hasil: [], mencari: false, saving: false, laporan: null,
   });
   const setMField = (k, v) => setMassal((m) => ({ ...m, [k]: v }));
@@ -694,6 +708,7 @@ export default function PersediaanPage({ user, onBack }) {
           booking_otomatis: !!massal.booking_otomatis,
           kode_klasifikasi: massal.kode_klasifikasi || "",
           jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
+          penyedia_instansi_id: massal.penyedia_instansi_id || "",
           tgl_dokumen: massal.tgl_dokumen, perolehan_id: massal.perolehan_id,
           unit_penerima: massal.unit_penerima,
           penerima_nip: massal.penerima_nip || "",
@@ -712,6 +727,7 @@ export default function PersediaanPage({ user, onBack }) {
         booking_otomatis: !!massal.booking_otomatis,
         kode_klasifikasi: massal.kode_klasifikasi || "",
         jenis_dokumen: massal.jenis_dokumen, penyedia: massal.penyedia,
+        penyedia_instansi_id: massal.penyedia_instansi_id || "",
         tgl_dokumen: massal.tgl_dokumen, perolehan_id: massal.perolehan_id,
         unit_penerima: massal.unit_penerima,
         penerima_nip: massal.penerima_nip || "",
@@ -735,6 +751,7 @@ export default function PersediaanPage({ user, onBack }) {
       // Peringatan penerima ditampilkan di KEDUA cabang: sebagian gagal tak
       // membuat catatan tentang penerimanya jadi kurang penting.
       if (d.peringatan) toast.warning(d.peringatan);
+      (d.peringatan_kebijakan || []).forEach((w) => toast.warning(w));
       if (d.sppb_id) {
         setSppbVersi((v) => v + 1);
         toast.success("SPPB terbit"
@@ -1200,7 +1217,7 @@ export default function PersediaanPage({ user, onBack }) {
                               jenis: "pembelian", jumlah: "", harga_satuan: "",
                               expired: "", no_bukti: "", jenis_dokumen: "",
                               tgl_dokumen: "", no_kontrak: "", penyedia: "",
-                              perolehan_id: "", keterangan: "",
+                              penyedia_instansi_id: "", perolehan_id: "", keterangan: "",
                             },
                           })}
                           aria-label={`Transaksi masuk ${it.nama_barang}`}
@@ -1506,9 +1523,11 @@ export default function PersediaanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-penyedia">Penyedia</label>
-                <Input id="psd-in-penyedia"
-                  value={masuk.data.penyedia}
-                  onChange={(e) => setMasuk((m) => ({ ...m, data: { ...m.data, penyedia: e.target.value } }))} />
+                <IsianInstansiLuar id="psd-in-penyedia" teks={masuk.data.penyedia}
+                  instansiId={masuk.data.penyedia_instansi_id} instansi={masuk.penyediaInstansi}
+                  onUbah={({ teks, instansi }) => setMasuk((m) => ({ ...m, penyediaInstansi: instansi,
+                    data: { ...m.data, penyedia: teks, penyedia_instansi_id: instansi?.id || "" } }))}
+                  testId="persediaan-masuk-penyedia" />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-in-tgldok">Tgl Dokumen</label>
@@ -1921,6 +1940,8 @@ export default function PersediaanPage({ user, onBack }) {
                     <p className="mt-1 text-muted-foreground">
                       {[t.no_bukti && `Bukti: ${t.no_bukti}`, t.penyedia && `Penyedia: ${t.penyedia}`, t.keterangan]
                         .filter(Boolean).join(" · ")}
+                      {t.penyedia_instansi_id && <>{" "}<IkonKelompok
+                        kunciIkon={kunciIkon(t.penyedia_kelompok, t.penyedia_tataran)} /></>}
                     </p>
                   )}
                   <p className="mt-0.5 text-muted-foreground">Petugas: {t.petugas}</p>
@@ -2073,8 +2094,11 @@ export default function PersediaanPage({ user, onBack }) {
                     </div>
                     <div>
                       <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-penyedia">Penyedia</label>
-                      <Input id="psd-m-penyedia" value={massal.penyedia}
-                        onChange={(e) => setMField("penyedia", e.target.value)} />
+                      <IsianInstansiLuar id="psd-m-penyedia" teks={massal.penyedia}
+                        instansiId={massal.penyedia_instansi_id} instansi={massal.penyediaInstansi}
+                        onUbah={({ teks, instansi }) => setMassal((m) => ({ ...m, penyedia: teks,
+                          penyedia_instansi_id: instansi?.id || "", penyediaInstansi: instansi }))}
+                        testId="persediaan-massal-penyedia" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-foreground block mb-1" htmlFor="psd-m-tgldok">Tgl Dokumen</label>
@@ -2090,6 +2114,8 @@ export default function PersediaanPage({ user, onBack }) {
                             const p = pengadaanList.find((x) => x.id === id);
                             // Auto-isi field dokumen (selaras dialog masuk tunggal)
                             setMassal((m) => ({ ...m, perolehan_id: id,
+                              ...(m.penyedia ? {} : { penyedia_instansi_id: p?.pihak_instansi_id || "",
+                                penyediaInstansi: instansiDariPerolehan(p) }),
                               penyedia: m.penyedia || (p?.pihak ?? ""),
                               tgl_dokumen: m.tgl_dokumen || (p?.tanggal_bast ?? ""),
                               no_bukti: m.no_bukti || (p?.nomor_bast ?? ""),

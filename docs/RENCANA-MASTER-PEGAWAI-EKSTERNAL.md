@@ -1057,7 +1057,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a + 08b) |
 | PGW-09 | Laporan & dokumen | 06 | **selesai** | #1123 |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | **kerangka selesai**; butir pasal & form menunggu verifikasi PMK 115/2020 | #1124 (kerangka) |
-| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan, Penggunaan, Pemeliharaan, Pengadaan, Pemindahtanganan | |
+| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | selesai (6 modul) | |
 | PGW-12 | Data uji & dokumentasi | 07–10 | **selesai** | #1125 |
 
 PGW-04, 05, 06 boleh paralel setelah PGW-03. Sampai PGW-07 ter-merge,
@@ -1922,7 +1922,21 @@ belum diverifikasi dan tidak dikarang di sini. Hanya peringatan nonaktif.
 `pemindahtanganan` ditambahkan ke `tautan_instansi.RUJUKAN`, jadi instansinya
 ikut dijaga dari penghapusan. `PERMUKAAN_IKON_MENYUSUL` kini kosong.
 
-Modul berikutnya menurut K6: Persediaan.
+
+**Hasil Persediaan (2026-11-12):** `penyedia_instansi_id` (+ snapshot) pada
+transaksi MASUK, tunggal maupun massal, dan pada LPB dari transaksi massal.
+Tautan eksplisit divalidasi SEBELUM mutasi stok (massal: sekali di muka).
+Tanpa tautan eksplisit, penerimaan yang merujuk perolehan Pengadaan tertaut
+**mewarisi** tautan pihak perolehan itu — layar juga mengisinya otomatis saat
+perolehan dipilih. Jurnal `transaksi_persediaan` sengaja ramping: field
+tautan hanya ditulis bila tertaut. Sisi KELUAR tidak disentuh: penerima orang
+luar sudah ditangani PGW-08 lewat `penerima_nip`. `transaksi_persediaan` dan
+`lpb` masuk `tautan_instansi.RUJUKAN`. Jalur permohonan (persetujuan wajib)
+meneruskan payload apa adanya, sehingga tautan ikut tereksekusi.
+
+**PGW-11 selesai** untuk keenam modul K6. Yang belum: tabel kelaziman skema
+(Pemanfaatan, Penggunaan) menunggu verifikasi PMK 115/2020 bersama PGW-10;
+SK PSP tidak menyimpan pihak luar (perlu keputusan pemilik bila diinginkan).
 
 ---
 
