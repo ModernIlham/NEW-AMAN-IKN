@@ -59,9 +59,14 @@ export function formDariPerolehan(p) {
     // Server lama yang belum mengirim `ubah` dianggap terbuka — server tetap
     // yang memutuskan di akhir, klien hanya menghemat ketikan sia-sia.
     kunci: p.ubah || { identitas: true, barang: true, alasan: "" },
+    pihakInstansi: p.pihak_instansi_id ? { id: p.pihak_instansi_id, nama: p.pihak,
+      kelompok: p.pihak_kelompok, tataran: p.pihak_tataran } : null,
     data: {
       jenis: p.jenis || "pembelian",
       pihak: p.pihak || "",
+      // Tautan direktori instansi luar (PGW-11) — ikut dimuat, kalau tidak
+      // setiap perbaikan salah ketik diam-diam MELEPAS tautannya.
+      pihak_instansi_id: p.pihak_instansi_id || "",
       nomor_kontrak: p.nomor_kontrak || "",
       nomor_bast: p.nomor_bast || "",
       tanggal_bast: String(p.tanggal_bast || "").slice(0, 10),
@@ -101,6 +106,7 @@ export function payloadUbahPerolehan(form) {
   return {
     jenis: d.jenis,
     pihak: d.pihak,
+    pihak_instansi_id: d.pihak_instansi_id || "",
     nomor_kontrak: d.nomor_kontrak,
     nomor_bast: d.nomor_bast,
     tanggal_bast: d.tanggal_bast,

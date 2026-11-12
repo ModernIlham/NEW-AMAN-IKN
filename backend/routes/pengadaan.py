@@ -75,6 +75,9 @@ class BarangIn(BaseModel):
 class PerolehanIn(BaseModel):
     jenis: str
     pihak: str = Field(min_length=1)   # penyedia / pemberi hibah / pengirim
+    # Tautan opsional ke direktori instansi luar (PGW-11); teks `pihak`
+    # tetap disimpan apa adanya.
+    pihak_instansi_id: str = ""
     nomor_kontrak: str = ""
     nomor_bast: str = Field(min_length=1)
     tanggal_bast: str = Field(min_length=10, max_length=10)
@@ -138,6 +141,8 @@ class PerolehanUbahIn(BaseModel):
     """
     jenis: str
     pihak: str = Field(min_length=1)
+    # Ikut terkunci bersama identitas dokumen (lihat ubah_perolehan).
+    pihak_instansi_id: str = ""
     nomor_kontrak: str = ""
     nomor_bast: str = Field(min_length=1)
     tanggal_bast: str = Field(min_length=10, max_length=10)
@@ -506,6 +511,15 @@ async def _taut_master_persediaan(b: dict, user: dict) -> dict:
             "kode": kode_setelah_taut(master)}
 
 
+async def _tautan_pihak(data: dict, lama: dict | None = None) -> tuple:
+    """(field tautan `pihak`, peringatan lunak) — PGW-11. Perolehan bukan
+    penyerahan penguasaan BMN → tanpa pemeriksaan skema; hanya peringatan
+    bila instansinya nonaktif di direktori."""
+    import tautan_instansi as ti
+    fields, ins = await ti.tautkan(db, data, "pihak", "Pihak", lama)
+    return fields, ti.peringatan_nonaktif(ins, "Pihak")
+
+
 @pengadaan_router.post("/pengadaan")
 async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writer_satker)):
     """Catat perolehan baru (barang boleh ditautkan ke aset master)."""
@@ -571,12 +585,14 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
     snap = await _ambil_snapshot_penganggaran(data.get("penganggaran_id"), user)
     snap_ppk = await _ambil_snapshot_ppk(
         data.get("ppk_pejabat_id"), data["tanggal_bast"], user)
+    tautan, peringatan_kebijakan = await _tautan_pihak(data)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
         "kode_satker": kode_satker_user(user),
         "jenis": data["jenis"],
         "pihak": data["pihak"].strip(),
+        **tautan,
         "nomor_kontrak": str(data.get("nomor_kontrak") or "").strip(),
         "nomor_bast": data["nomor_bast"].strip(),
         "tanggal_bast": data["tanggal_bast"].strip()[:10],
@@ -598,7 +614,7 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
     await db.pengadaan.insert_one({**record})
     # Back-link dokumen sumber (§5A gap #6): stamp perolehan_id ke aset tertaut.
     await _proyeksi_perolehan_ke_aset(record)
-    return _enrich(record)
+    return {**_enrich(record), "peringatan_kebijakan": peringatan_kebijakan}
 
 
 async def _ada_lpb_menunjuk(perolehan_id: str) -> bool:
@@ -655,8 +671,8 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
     # 2. Identitas dokumen — dibandingkan, bukan dipercaya. Klien lama yang
     #    tidak tahu kunci ini tetap tak bisa menembusnya.
     if not kunci["identitas"]:
-        berubah = [f for f in ("jenis", "pihak", "nomor_kontrak", "nomor_bast",
-                               "tanggal_bast")
+        berubah = [f for f in ("jenis", "pihak", "pihak_instansi_id", "nomor_kontrak",
+                               "nomor_bast", "tanggal_bast")
                    if str(data.get(f) or "").strip() != str(p.get(f) or "").strip()]
         if berubah:
             raise HTTPException(status_code=409, detail=(
@@ -667,10 +683,12 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
 
+    tautan, peringatan_kebijakan = await _tautan_pihak(data, lama=p)
     now = datetime.now(timezone.utc).isoformat()
     ubah = {
         "jenis": data["jenis"],
         "pihak": data["pihak"].strip(),
+        **tautan,
         "nomor_kontrak": str(data.get("nomor_kontrak") or "").strip(),
         "sifat": str(data.get("sifat") or "").strip(),
         **bersihkan_dokumen(data),
@@ -684,8 +702,8 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
     # Checklist dokumen sengaja TIDAK ikut disentuh: ia menyatakan "berkasnya
     # ada di tangan", dan itu tidak berubah hanya karena nomornya diperbaiki.
     perubahan = [{"field": f, "from": str(p.get(f) or ""), "to": str(ubah[f] or "")}
-                 for f in ("jenis", "pihak", "nomor_kontrak", "nomor_bast",
-                           "tanggal_bast", "keterangan")
+                 for f in ("jenis", "pihak", "pihak_instansi_id", "nomor_kontrak",
+                           "nomor_bast", "tanggal_bast", "keterangan")
                  if str(p.get(f) or "") != str(ubah[f] or "")]
     nilai_lama, nilai_baru = nilai_perolehan(p), nilai_perolehan(ubah)
     if nilai_lama != nilai_baru or len(p.get("barang") or []) != len(barang_rows):
@@ -706,7 +724,7 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
                     detail=(f"Register perolehan {p.get('nomor_bast') or perolehan_id[:8]} "
                             f"diubah ({len(perubahan)} field)"))
     p["ubah"] = kunci_ubah_perolehan(p, await _ada_lpb_menunjuk(perolehan_id))
-    return _enrich(p)
+    return {**_enrich(p), "peringatan_kebijakan": peringatan_kebijakan}
 
 
 @pengadaan_router.put("/pengadaan/{perolehan_id}/dokumen")

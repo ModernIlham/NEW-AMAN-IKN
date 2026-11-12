@@ -113,14 +113,14 @@ _FIELD_TAUTAN_MITRA = ("mitra_instansi_id", "mitra_kelompok", "mitra_tataran",
                        "mitra_jenis_instansi")
 
 
-async def _tautan_mitra(data: dict) -> tuple:
+async def _tautan_mitra(data: dict, lama: dict | None = None) -> tuple:
     """(field tautan, peringatan lunak) untuk mitra yang ditautkan ke
     direktori instansi luar (PGW-11; pola di `tautan_instansi`). Skema yang
     tak lazim bagi jenis mitranya hanya PERINGATAN — keputusan sahnya tetap
     pada persetujuan Pengelola Barang."""
     import kebijakan_penerima as kp
     import tautan_instansi as ti
-    fields, ins = await ti.tautkan(db, data, "mitra", "Mitra")
+    fields, ins = await ti.tautkan(db, data, "mitra", "Mitra", lama)
     if not ins:
         return fields, []
     skema = kp.SKEMA_DARI_BENTUK.get(str(data.get("bentuk") or ""))
@@ -594,7 +594,9 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
 async def ubah_pemanfaatan(register_id: str, payload: PemanfaatanIn,
                            user: dict = Depends(require_writer)):
     """Perbarui perjanjian (melengkapi dokumen/nilai)."""
-    existing = await db.pemanfaatan.find_one({"id": register_id}, {"_id": 0, "kode_satker": 1})
+    existing = await db.pemanfaatan.find_one(
+        {"id": register_id}, {"_id": 0, "kode_satker": 1,
+                              **{k: 1 for k in _FIELD_TAUTAN_MITRA}})
     if not existing:
         raise HTTPException(status_code=404, detail="Register tidak ditemukan")
     await pastikan_akses_dok_satker(user, existing)  # 403 bila milik satker lain
@@ -602,7 +604,7 @@ async def ubah_pemanfaatan(register_id: str, payload: PemanfaatanIn,
     errors = validate_pemanfaatan(data) + validate_fasilitas(data)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
-    tautan_mitra, peringatan_kebijakan = await _tautan_mitra(data)
+    tautan_mitra, peringatan_kebijakan = await _tautan_mitra(data, lama=existing)
     update = {k: (str(v).strip() if isinstance(v, str) else v)
               for k, v in data.items() if k != "asset_id"}
     update.update(tautan_mitra)

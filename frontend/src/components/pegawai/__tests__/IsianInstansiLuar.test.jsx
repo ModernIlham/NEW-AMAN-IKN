@@ -59,3 +59,12 @@ test("saran tambahan (Master Satker) tampil tetapi tidak menautkan", async () =>
   expect(catat).toHaveBeenLastCalledWith({ teks: "Otorita IKN", instansi: null });
   expect(screen.getByTestId("pihak-status")).toHaveTextContent("Teks bebas");
 });
+
+test("disabled: isian terkunci dan direktori tidak ditanya", async () => {
+  axios.get.mockResolvedValue({ data: { items: [] } });
+  render(<IsianInstansiLuar teks="PT Lama" instansiId="" instansi={null} onUbah={jest.fn()}
+    testId="kunci" disabled />);
+  expect(screen.getByTestId("kunci")).toBeDisabled();
+  await new Promise((r) => setTimeout(r, 350));
+  expect(axios.get).not.toHaveBeenCalled();
+});

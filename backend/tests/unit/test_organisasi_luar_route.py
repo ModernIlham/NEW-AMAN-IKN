@@ -379,3 +379,16 @@ def test_modul_luar_tidak_menulis_koleksi_internal():
     pola = re.compile(r"db\.(pegawai|unit_kerja|satker|assets)\."
                       r"(insert|update|delete|replace|find_one_and|bulk)")
     assert not pola.search(sumber)
+
+
+@pytest.mark.parametrize("koleksi,kolom,label", __import__("tautan_instansi").RUJUKAN)
+def test_hapus_409_bila_dirujuk_transaksi(dbx, koleksi, kolom, label):
+    """PGW-11: tautan transaksi tak boleh patah karena instansinya dihapus.
+    Pesan menyebut modulnya saja, tanpa merinci satker lain."""
+    i = _buat()["instansi"]
+    _jalan(dbx[koleksi].insert_one({"id": "t1", "kode_satker": "999999",
+                                    f"{kolom}_instansi_id": i["id"]}))
+    e = _galat(rol.hapus_instansi_luar(i["id"], user=SUPER))
+    assert e.status_code == 409 and label in e.detail and "999999" not in e.detail
+    _jalan(dbx[koleksi].delete_many({}))
+    assert _jalan(rol.hapus_instansi_luar(i["id"], user=SUPER))["satker_dihapus"] == 1

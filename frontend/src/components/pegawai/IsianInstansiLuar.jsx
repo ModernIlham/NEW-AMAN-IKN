@@ -21,14 +21,14 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
  * (mis. Master Satker); memilihnya TIDAK menautkan apa pun.
  */
 export default function IsianInstansiLuar({ id, teks, instansiId, instansi, onUbah,
-  placeholder, testId, saranTambahan = [] }) {
+  placeholder, testId, saranTambahan = [], disabled = false }) {
   const listId = useId();
   const [saran, setSaran] = useState([]);
 
   // Cari di server (eksternal + pihak ketiga), ditunda selama mengetik.
   useEffect(() => {
     const q = String(teks || "").trim();
-    if (q.length < 2 || instansiId) { setSaran([]); return undefined; }
+    if (q.length < 2 || instansiId || disabled) { setSaran([]); return undefined; }
     let batal = false;
     const t = setTimeout(async () => {
       const hasil = await Promise.allSettled(["eksternal", "pihak_ketiga"].map((kelompok) =>
@@ -38,7 +38,7 @@ export default function IsianInstansiLuar({ id, teks, instansiId, instansi, onUb
         .filter((i) => !i.wadah));
     }, 300);
     return () => { batal = true; clearTimeout(t); };
-  }, [teks, instansiId]);
+  }, [teks, instansiId, disabled]);
 
   const ketik = (v) => {
     const cocok = saran.find((i) => i.nama === v);
@@ -48,7 +48,7 @@ export default function IsianInstansiLuar({ id, teks, instansiId, instansi, onUb
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
-        <Input id={id} list={listId} placeholder={placeholder} value={teks}
+        <Input id={id} list={listId} placeholder={placeholder} value={teks} disabled={disabled}
           onChange={(e) => ketik(e.target.value)} className="flex-1 min-w-0" data-testid={testId} />
         {tertaut && <IkonKelompok kunciIkon={kunciIkon(instansi.kelompok, instansi.tataran)} />}
       </div>
