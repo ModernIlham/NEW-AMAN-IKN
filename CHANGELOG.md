@@ -18,6 +18,15 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1142] Uji form aset — batas tunggu ikon pengguna pihak ketiga disamakan dengan uji saudaranya — 2026-11-12
+
+- Tidak ada perubahan perilaku aplikasi. Uji `AssetFormKelompokPengguna`
+  menunggu ikon kelompok pengguna dengan batas bawaan 1000 ms, padahal ikon
+  itu baru muncul setelah tunda NIP 500 ms di form aset, antrean penjawab,
+  dan satu permintaan ke server. Di runner CI yang lambat batas itu habis
+  (CI main untuk #1132 sempat merah karenanya). Batasnya kini 3000 ms,
+  sejalan dengan uji peringatan NIP di berkas yang sama (2000 ms).
+
 ## [#1141] Persediaan — penyedia dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
 
 - Isian Penyedia pada transaksi masuk persediaan (tunggal dan massal) kini

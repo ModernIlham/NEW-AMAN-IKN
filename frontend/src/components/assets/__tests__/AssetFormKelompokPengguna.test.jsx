@@ -50,7 +50,10 @@ test("pihak ketiga dicari di direktori dan terisi ke pengguna beserta ikonnya", 
   await userEvent.click(await screen.findByTestId("pengguna-pegawai-luar-opt-o1"));
   expect(screen.getByTestId("input-pengguna-nama")).toHaveValue("Sari");
   expect(screen.getByTestId("input-pengguna-nip")).toHaveValue(ORANG_P3.nip);
-  expect(await screen.findByRole("img", { name: "Pihak ketiga" })).toBeInTheDocument();
+  // Ikon menunggu rantai nyata: tunda NIP 500 ms di AssetForm → antre penjawab
+  // → POST → render. Batas bawaan findBy (1000 ms) terlalu sempit untuk runner
+  // CI yang lambat (pernah gagal di main f94706a); samakan dengan uji di bawah.
+  expect(await screen.findByRole("img", { name: "Pihak ketiga" }, { timeout: 3000 })).toBeInTheDocument();
   expect(screen.queryByTestId("pengguna-nip-warning")).toBeNull();
   const cari = axios.get.mock.calls.find(([u]) => String(u).endsWith("/direktori-pegawai"));
   expect(cari[1].params).toMatchObject({ kelompok: "pihak_ketiga" });
