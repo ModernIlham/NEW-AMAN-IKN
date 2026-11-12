@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Loader2, Pencil, Plus, Power, Trash2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import InputTanggalRoda from "@/components/ui/input-tanggal-roda";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -174,7 +175,8 @@ const FormInstansi = ({ awal, kelompok, tataran, lingkup, refLuar, sebutan, onSi
               <Input value={f.dasar_pendirian_nomor} onChange={set("dasar_pendirian_nomor")} />
             </Kolom>
             <Kolom label="Tanggal akta/SK pendirian">
-              <Input type="date" value={f.dasar_pendirian_tanggal} onChange={set("dasar_pendirian_tanggal")} />
+              <InputTanggalRoda name="dasar_pendirian_tanggal" value={f.dasar_pendirian_tanggal}
+                onChange={set("dasar_pendirian_tanggal")} minYear={1900} maxYear={new Date().getFullYear()} />
             </Kolom>
             {f.jenis === "satuan_pendidikan_swasta" && (
               <Kolom label="Badan penyelenggara (yayasan)" span2>

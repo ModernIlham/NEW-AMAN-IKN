@@ -18,6 +18,16 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1135] Master Pegawai tiga kelompok — rapikan tampilan hasil pemeriksaan visual — 2026-11-12
+
+- Bilah pilihan kelompok kini sejajar dengan judul halaman; di tataran
+  Daerah kelima kontrol lingkup muat sebaris di layar lebar.
+- Ikon pilihan "Eksternal" tidak lagi ikut berganti menurut tataran yang
+  terakhir diingat.
+- Tanggal akta pendirian badan memakai tanggalan roda berbahasa Indonesia
+  (sebelumnya isian bawaan peramban berformat bulan/hari/tahun).
+- Petunjuk kolom cari di tab luar hanya menyebut yang memang dicari server.
+
 ## [#1134] Master Pegawai tiga kelompok — PGW-12: data uji & dokumentasi — 2026-11-11
 
 - Data uji sintetis untuk direktori luar: instansi eksternal (pusat dan
