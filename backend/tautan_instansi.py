@@ -30,6 +30,7 @@ RUJUKAN = (
     ("penggunaan_proses", "pihak_tujuan", "Proses penggunaan"),
     ("pemeliharaan", "pelaksana", "Pemeliharaan"),
     ("pengadaan", "pihak", "Pengadaan"),
+    ("pemindahtanganan", "pihak", "Pemindahtanganan"),
 )
 
 

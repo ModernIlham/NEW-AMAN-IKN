@@ -18,6 +18,17 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1140] Pemindahtanganan — pihak penerima dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
+
+- Isian Pihak (penerima/pembeli/mitra) pada usulan pemindahtanganan kini
+  menyarankan nama dari direktori instansi luar. Memilih saran menautkan
+  usulan; teks bebas tetap boleh. Pihak yang tertaut ditandai ikon
+  kelompoknya di daftar usulan.
+- Bila instansinya berstatus nonaktif di direktori, aplikasi memberi
+  peringatan tanpa menolak simpan.
+- Instansi yang dirujuk usulan pemindahtanganan tidak dapat dihapus dari
+  direktori.
+
 ## [#1139] Pengadaan — penyedia/pemberi dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
 
 - Isian Penyedia/pemberi pada register perolehan kini menyarankan nama dari

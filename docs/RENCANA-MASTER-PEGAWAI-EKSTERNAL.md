@@ -1057,7 +1057,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a + 08b) |
 | PGW-09 | Laporan & dokumen | 06 | **selesai** | #1123 |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | **kerangka selesai**; butir pasal & form menunggu verifikasi PMK 115/2020 | #1124 (kerangka) |
-| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan, Penggunaan, Pemeliharaan, Pengadaan | |
+| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan, Penggunaan, Pemeliharaan, Pengadaan, Pemindahtanganan | |
 | PGW-12 | Data uji & dokumentasi | 07–10 | **selesai** | #1125 |
 
 PGW-04, 05, 06 boleh paralel setelah PGW-03. Sampai PGW-07 ter-merge,
@@ -1912,7 +1912,17 @@ Sekaligus menutup dua celah yang berlaku untuk semua modul PGW-11:
    gagal 400 hanya karena instansinya sudah tidak ada (Pemanfaatan &
    Pengadaan; Penggunaan & Pemeliharaan tak punya rute ubah).
 
-Modul berikutnya menurut K6: Pemindahtanganan → Persediaan.
+
+**Hasil Pemindahtanganan (2026-11-12):** `pihak_instansi_id` (+ snapshot)
+pada usulan pemindahtanganan (hanya rute buat; tak ada rute ubah).
+Pemindahtanganan sengaja di luar matriks 6.6 (`kebijakan_penerima` hanya
+memuat penyerahan penguasaan sementara) → **tidak ada pemeriksaan skema**,
+termasuk tidak ada aturan "PMPP hanya ke BUMN" atau sejenisnya: aturan itu
+belum diverifikasi dan tidak dikarang di sini. Hanya peringatan nonaktif.
+`pemindahtanganan` ditambahkan ke `tautan_instansi.RUJUKAN`, jadi instansinya
+ikut dijaga dari penghapusan. `PERMUKAAN_IKON_MENYUSUL` kini kosong.
+
+Modul berikutnya menurut K6: Persediaan.
 
 ---
 

@@ -14,6 +14,9 @@ import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
 import MenuKepala from "@/components/ui/MenuKepala";
+import IkonKelompok from "@/components/pegawai/IkonKelompok";
+import IsianInstansiLuar from "@/components/pegawai/IsianInstansiLuar";
+import { kunciIkon } from "@/lib/kelompokOrang";
 
 import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
   SUBJUDUL_KEPALA, TOMBOL_KEPALA, IKON_KEPALA,
@@ -75,6 +78,7 @@ export default function PemindahtangananPage({ user, onBack }) {
       });
       toast.success("Usulan pemindahtanganan dibuat");
       (rP.data?.peringatan_proses || []).forEach((w) => toast.warning(w, { duration: 9000 }));
+      (rP.data?.peringatan_kebijakan || []).forEach((w) => toast.warning(w));
       setForm(null);
       muat();
     } catch (e) {
@@ -150,7 +154,7 @@ export default function PemindahtangananPage({ user, onBack }) {
   // Buka dialog usulan baru — dipakai tombol header dan CTA empty-state
   const bukaFormUsulan = () => {
     setCari("");
-    setForm({ data: { bentuk: "hibah", pihak: "", keterangan: "", jenis_bmn: "selain_tanah_bangunan", nilai_wajar: "", tb_terkecuali: false }, aset: [], saving: false });
+    setForm({ data: { bentuk: "hibah", pihak: "", pihak_instansi_id: "", keterangan: "", jenis_bmn: "selain_tanah_bangunan", nilai_wajar: "", tb_terkecuali: false }, aset: [], saving: false });
   };
   const r = data?.ringkasan;
 
@@ -253,7 +257,10 @@ export default function PemindahtangananPage({ user, onBack }) {
                         <span className="px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-semibold">
                           {labelBentuk[u.bentuk] || u.bentuk}
                         </span>
-                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">{u.pihak}</p>
+                        <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] flex items-center gap-1" title={u.pihak}>
+                          <span className="truncate min-w-0">{u.pihak}</span>
+                          {u.pihak_instansi_id && <IkonKelompok kunciIkon={kunciIkon(u.pihak_kelompok, u.pihak_tataran)} />}
+                        </p>
                         <span className="text-[11px] text-muted-foreground">{(u.aset || []).length} aset</span>
                         <button type="button" aria-label="Lampiran usulan"
                           onClick={() => setLamp({ usulan: u, uploading: false })}
@@ -440,10 +447,11 @@ export default function PemindahtangananPage({ user, onBack }) {
               </div>
               <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-pihak">Pihak (penerima/pembeli/mitra)</label>
-                <Input id="ptg-pihak" placeholder="cth. Pemerintah Desa Sukamaju"
-                  value={form.data.pihak}
-                  onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, pihak: e.target.value } }))}
-                  data-testid="pemindahtanganan-pihak" />
+                <IsianInstansiLuar id="ptg-pihak" placeholder="cth. Pemerintah Desa Sukamaju"
+                  teks={form.data.pihak} instansiId={form.data.pihak_instansi_id} instansi={form.pihakInstansi}
+                  onUbah={({ teks, instansi }) => setForm((f) => ({ ...f, pihakInstansi: instansi,
+                    data: { ...f.data, pihak: teks, pihak_instansi_id: instansi?.id || "" } }))}
+                  testId="pemindahtanganan-pihak" />
               </div>
               <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="ptg-ket">Keterangan</label>
