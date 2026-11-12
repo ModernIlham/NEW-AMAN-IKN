@@ -1057,7 +1057,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a + 08b) |
 | PGW-09 | Laporan & dokumen | 06 | **selesai** | #1123 |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | **kerangka selesai**; butir pasal & form menunggu verifikasi PMK 115/2020 | #1124 (kerangka) |
-| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan, Penggunaan | |
+| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan, Penggunaan, Pemeliharaan | |
 | PGW-12 | Data uji & dokumentasi | 07–10 | **selesai** | #1125 |
 
 PGW-04, 05, 06 boleh paralel setelah PGW-03. Sampai PGW-07 ter-merge,
@@ -1881,8 +1881,20 @@ dengan saran Master Satker tetap tersedia (`saranTambahan`, tidak menautkan).
 Sekaligus: ikon kelompok di baris Pemanfaatan & Penggunaan dipisah dari teks
 yang terpotong — sebelumnya ikon ikut hilang pada nama panjang di layar HP.
 
-Modul berikutnya menurut K6: Pemeliharaan → Pengadaan → Pemindahtanganan →
-Persediaan.
+
+**Hasil Pemeliharaan (2026-11-12):** `pelaksana_instansi_id` (+ snapshot)
+pada catatan pemeliharaan. Pemeliharaan bukan penyerahan penguasaan BMN →
+**tidak ada pemeriksaan skema**; hanya peringatan bila penyedia nonaktif.
+Isian Pelaksana memakai `IsianInstansiLuar` dengan saran pegawai internal
+(`saranTambahan`, tak menautkan); orang luar yang dipilih lewat
+`TombolOrangLuar` (PGW-08b) kini menautkan instansinya sehingga ikonnya
+tersimpan, bukan hanya tampil selama form terbuka. BA serah terima
+kapitalisasi (`pihak_pelaksana`) tidak diubah: isinya nama orang penanda
+tangan, bukan badan. Sekaligus diperbaiki cacat lama: tombol "+" memanggil
+`bukaForm` dengan event klik sebagai aset — pemilih aset hilang dan simpan
+mengirim `asset_id` kosong (uji regresi `PemeliharaanCatat.test.jsx`).
+
+Modul berikutnya menurut K6: Pengadaan → Pemindahtanganan → Persediaan.
 
 ---
 

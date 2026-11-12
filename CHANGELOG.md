@@ -18,6 +18,22 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1138] Pemeliharaan — pelaksana dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
+
+- Perbaikan: tombol "+" Catat Pemeliharaan kini membuka pemilih aset.
+  Sebelumnya pemilih aset tidak muncul (isian Aset hanya menampilkan "·")
+  dan catatan gagal disimpan; mencatat dari tombol jadwal berkala tidak
+  terdampak.
+- Isian Pelaksana menyarankan penyedia jasa dari direktori instansi luar di
+  samping pegawai internal. Memilih penyedia dari direktori, atau memilih
+  orang luar lewat tombol di sebelahnya, menautkan catatan ke instansinya;
+  teks bebas tetap boleh.
+- Pelaksana yang tertaut ditandai ikon kelompoknya di Riwayat Pemeliharaan;
+  pelaksana kini tampil di baris tersendiri agar tidak terpotong oleh nama
+  aset yang panjang.
+- Bila penyedia berstatus nonaktif di direktori, aplikasi memberi peringatan
+  tanpa menolak simpan.
+
 ## [#1137] Penggunaan — pihak asal/tujuan tiket proses dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
 
 - Isian Pihak asal dan Pihak tujuan pada tiket proses (alih status,

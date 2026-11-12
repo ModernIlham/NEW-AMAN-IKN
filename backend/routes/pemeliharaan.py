@@ -91,6 +91,9 @@ class PemeliharaanIn(BaseModel):
     uraian: str
     biaya: float | str | None = None
     pelaksana: str = ""          # petugas internal / penyedia jasa
+    # Tautan opsional penyedia jasa ke direktori instansi luar (PGW-11);
+    # teks `pelaksana` tetap disimpan apa adanya.
+    pelaksana_instansi_id: str = ""
     no_bukti: str = ""           # nomor SPM / kuitansi / BAST pekerjaan
     kondisi_setelah: str = ""    # opsional: perbarui kondisi aset
     keterangan: str = ""
@@ -456,6 +459,11 @@ async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(requ
     if not asset:
         raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
     await pastikan_akses_aset(user, asset)
+    import tautan_instansi as ti
+    tautan, ins = await ti.tautkan(db, data, "pelaksana", "Pelaksana")
+    # Pemeliharaan bukan penyerahan penguasaan BMN → tak ada pemeriksaan
+    # skema; hanya peringatan bila penyedia nonaktif di direktori.
+    peringatan_kebijakan = ti.peringatan_nonaktif(ins, "Pelaksana")
     now = datetime.now(timezone.utc).isoformat()
     biaya = parse_biaya(data.get("biaya")) or 0.0
     record = {
@@ -476,6 +484,7 @@ async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(requ
         "indikasi_kapitalisasi": indikasi_kapitalisasi(
             biaya, asset.get("asset_code")),
         "pelaksana": str(data.get("pelaksana") or "").strip(),
+        **tautan,
         "no_bukti": str(data.get("no_bukti") or "").strip(),
         "kondisi_setelah": str(data.get("kondisi_setelah") or "").strip(),
         "keterangan": str(data.get("keterangan") or "").strip(),
@@ -497,7 +506,7 @@ async def create_pemeliharaan(payload: PemeliharaanIn, user: dict = Depends(requ
         {"asset_id": asset["id"]},
         {"$max": {"terakhir": record["tanggal"]}, "$set": {"updated_at": now}},
     )
-    return record
+    return {**record, "peringatan_kebijakan": peringatan_kebijakan}
 
 
 async def _konteks_kapitalisasi(catatan_id: str, user=None):
