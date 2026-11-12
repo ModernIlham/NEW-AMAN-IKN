@@ -18,6 +18,21 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1137] Penggunaan — pihak asal/tujuan tiket proses dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
+
+- Isian Pihak asal dan Pihak tujuan pada tiket proses (alih status,
+  penggunaan sementara, dioperasikan pihak lain, penggunaan bersama) kini
+  menyarankan nama dari direktori instansi luar di samping Master Satker.
+  Memilih instansi luar menautkan tiket; memilih satker atau mengetik bebas
+  tetap tersimpan sebagai teks seperti sebelumnya.
+- Pihak yang tertaut ditandai ikon kelompoknya di daftar tiket.
+- Untuk tiket arah keluar, aplikasi memberi peringatan (tanpa menolak) bila
+  jenis proses tidak lazim untuk jenis pihak tujuan, atau pihaknya nonaktif
+  di direktori. Tabel kelaziman masih menunggu verifikasi PMK 115/2020.
+- Perbaikan: ikon kelompok mitra di Pemanfaatan tidak lagi hilang ketika
+  nama mitra panjang terpotong di layar sempit.
+- SK PSP sendiri tidak berubah — SK tidak menyimpan pihak luar.
+
 ## [#1136] Pemanfaatan — mitra dapat ditautkan ke direktori instansi luar (PGW-11) — 2026-11-12
 
 - Isian Mitra pada perjanjian dan usulan pemanfaatan kini menyarankan nama

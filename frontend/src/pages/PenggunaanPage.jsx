@@ -1,5 +1,5 @@
 import PencarianAset from "@/components/assets/PencarianAset";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import useReferensiSatker from "@/hooks/useReferensiSatker";
 import axios from "axios";
 import { getSatkerAktif } from "@/lib/satkerAktif";
@@ -39,7 +39,8 @@ import TautanTtdDialog from "@/components/ttd/TautanTtdDialog";
 import PortalPemegangPanel from "@/components/penggunaan/PortalPemegangPanel";
 import PilihPegawaiBast, { pihakDariPegawai } from "@/components/penggunaan/PilihPegawaiBast";
 import IkonKelompok from "@/components/pegawai/IkonKelompok";
-import { kelompokDari } from "@/lib/kelompokOrang";
+import { kelompokDari, kunciIkon } from "@/lib/kelompokOrang";
+import IsianInstansiLuar from "@/components/pegawai/IsianInstansiLuar";
 import PilihanRingkas from "@/components/ui/PilihanRingkas";
 import StatusOtomasiBast from "@/components/penggunaan/StatusOtomasiBast";
 import DokumenAkhirBast from "@/components/penggunaan/DokumenAkhirBast";
@@ -49,6 +50,10 @@ import { KEPALA_HALAMAN, BARIS_KEPALA, BLOK_JUDUL, JUDUL_KEPALA,
 } from "@/lib/kelasKepala";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Ikon kelompok pihak proses yang tertaut ke direktori instansi luar (PGW-11).
+const ikonPihak = (t, kolom) => (t?.[`${kolom}_instansi_id`]
+  ? kunciIkon(t[`${kolom}_kelompok`], t[`${kolom}_tataran`]) : null);
 
 /**
  * Penggunaan — Fase 3 tahap awal: rekap aset per PEMEGANG lintas kegiatan,
@@ -267,6 +272,8 @@ export default function PenggunaanPage({ user, onBack }) {
 
   // Referensi Master Satker — saran pihak asal/tujuan proses penggunaan (W7)
   const { daftar: satkerList } = useReferensiSatker();
+  const saranSatkerProses = useMemo(() => satkerList.map((x) => ({
+    nilai: x.nama_satker || x.kode_satker, label: x.kode_satker })), [satkerList]);
 
   // PSP resmi menurut data impor SIMAN V2 (W5) — kandidat pencatatan 1-klik
   const [pspSiman, setPspSiman] = useState(null);
@@ -710,7 +717,7 @@ export default function PenggunaanPage({ user, onBack }) {
     } else if (formProses.aset.length === 0) { toast.error("Tambahkan minimal satu aset"); return; }
     setFormProses((f) => ({ ...f, saving: true }));
     try {
-      await axios.post(`${API}/penggunaan/proses`, alihMasuk(formProses) ? {
+      const res = await axios.post(`${API}/penggunaan/proses`, alihMasuk(formProses) ? {
         ...formProses.data, asset_ids: [],
         barang_masuk: (formProses.barang || []).map((b) => ({
           asset_code: b.asset_code, nup: b.nup, asset_name: b.asset_name,
@@ -720,6 +727,7 @@ export default function PenggunaanPage({ user, onBack }) {
         ...formProses.data, asset_ids: formProses.aset.map((a) => a.id),
       });
       toast.success("Tiket proses dibuka (draf)");
+      (res.data?.peringatan_kebijakan || []).forEach((w) => toast.warning(w));
       setFormProses(null);
       loadProses();
     } catch (e) {
@@ -1283,7 +1291,7 @@ export default function PenggunaanPage({ user, onBack }) {
               </Button>
             )}
             <Button size="sm" variant="outline" className="h-7 text-[11px] min-h-0 flex-shrink-0"
-              onClick={() => { setCariPsp("");  setFormProses({ data: { jenis_proses: "alih_status", arah: "keluar", pihak_asal: "", pihak_tujuan: "", nomor_permohonan: "", tanggal_permohonan: "", tanggal_mulai: "", tanggal_berakhir: "", keterangan: "" }, aset: [], barang: [], barangBaru: { asset_code: "", nup: "", asset_name: "", nilai: "" }, saving: false }); }}
+              onClick={() => { setCariPsp("");  setFormProses({ data: { jenis_proses: "alih_status", arah: "keluar", pihak_asal: "", pihak_tujuan: "", pihak_asal_instansi_id: "", pihak_tujuan_instansi_id: "", nomor_permohonan: "", tanggal_permohonan: "", tanggal_mulai: "", tanggal_berakhir: "", keterangan: "" }, aset: [], barang: [], barangBaru: { asset_code: "", nup: "", asset_name: "", nilai: "" }, saving: false }); }}
               data-testid="penggunaan-proses-tambah">
               <Plus className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Buka Tiket</span>
             </Button>
@@ -1311,8 +1319,15 @@ export default function PenggunaanPage({ user, onBack }) {
                         {t.info.sisa_hari} hari — ajukan perpanjangan
                       </span>
                     )}
-                    <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] truncate">
-                      {t.pihak_asal} → {t.pihak_tujuan}
+                    {/* Ikon di luar rentang terpotong — nama panjang tak menelan ikonnya. */}
+                    <p className="text-sm font-semibold text-foreground flex-1 min-w-[140px] flex items-center gap-1"
+                      title={`${t.pihak_asal} → ${t.pihak_tujuan}`}>
+                      <span className="truncate min-w-0">{t.pihak_asal}</span>
+                      <IkonKelompok kunciIkon={ikonPihak(t, "pihak_asal")} />
+                      <span className="flex-shrink-0" aria-hidden="true">→</span>
+                      <span className="sr-only">ke</span>
+                      <span className="truncate min-w-0">{t.pihak_tujuan}</span>
+                      <IkonKelompok kunciIkon={ikonPihak(t, "pihak_tujuan")} />
                     </p>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -1609,22 +1624,21 @@ export default function PenggunaanPage({ user, onBack }) {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-asal">Pihak asal</label>
-                  <Input id="prs-asal" value={formProses.data.pihak_asal} list="proses-satker-list"
-                    placeholder="ketik bebas atau pilih dari Master Satker"
-                    onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, pihak_asal: e.target.value } }))}
-                    data-testid="proses-asal" />
+                  <IsianInstansiLuar id="prs-asal" placeholder="ketik bebas atau pilih dari saran"
+                    teks={formProses.data.pihak_asal} instansiId={formProses.data.pihak_asal_instansi_id}
+                    instansi={formProses.instansiAsal} saranTambahan={saranSatkerProses}
+                    onUbah={({ teks, instansi }) => setFormProses((f) => ({ ...f, instansiAsal: instansi,
+                      data: { ...f.data, pihak_asal: teks, pihak_asal_instansi_id: instansi?.id || "" } }))}
+                    testId="proses-asal" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-tujuan">Pihak tujuan</label>
-                  <Input id="prs-tujuan" value={formProses.data.pihak_tujuan} list="proses-satker-list"
-                    placeholder="ketik bebas atau pilih dari Master Satker"
-                    onChange={(e) => setFormProses((f) => ({ ...f, data: { ...f.data, pihak_tujuan: e.target.value } }))}
-                    data-testid="proses-tujuan" />
-                  <datalist id="proses-satker-list">
-                    {satkerList.map((s) => (
-                      <option key={s.kode_satker} value={s.nama_satker || s.kode_satker}>{s.kode_satker}</option>
-                    ))}
-                  </datalist>
+                  <IsianInstansiLuar id="prs-tujuan" placeholder="ketik bebas atau pilih dari saran"
+                    teks={formProses.data.pihak_tujuan} instansiId={formProses.data.pihak_tujuan_instansi_id}
+                    instansi={formProses.instansiTujuan} saranTambahan={saranSatkerProses}
+                    onUbah={({ teks, instansi }) => setFormProses((f) => ({ ...f, instansiTujuan: instansi,
+                      data: { ...f.data, pihak_tujuan: teks, pihak_tujuan_instansi_id: instansi?.id || "" } }))}
+                    testId="proses-tujuan" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="prs-nomor">No. permohonan (ops.)</label>

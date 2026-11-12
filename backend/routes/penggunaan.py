@@ -1486,6 +1486,10 @@ class ProsesIn(BaseModel):
     arah: str
     pihak_asal: str = Field(min_length=1)
     pihak_tujuan: str = Field(min_length=1)
+    # Tautan opsional ke direktori instansi luar (PGW-11); teks pihak tetap
+    # disimpan apa adanya.
+    pihak_asal_instansi_id: str = ""
+    pihak_tujuan_instansi_id: str = ""
     # Opsional untuk alih status arah masuk (barang belum tercatat —
     # pakai barang_masuk); kasus lain divalidasi wajib di utils.
     asset_ids: list[str] = Field(default_factory=list, max_length=100)
@@ -1558,6 +1562,27 @@ async def export_proses(_user: dict = Depends(require_user)):
                  'attachment; filename="register_proses_penggunaan.csv"'})
 
 
+async def _tautan_pihak_proses(data: dict) -> tuple:
+    """(field tautan pihak asal & tujuan, peringatan lunak) — PGW-11.
+
+    Skema hanya diperiksa untuk pihak PENERIMA penguasaan BMN satker ini,
+    yaitu pihak tujuan pada arah keluar; pada arah masuk satker sendiri yang
+    menerima. Hasilnya peringatan — keputusan sahnya tetap pada persetujuan
+    Pengelola Barang."""
+    import kebijakan_penerima as kp
+    import tautan_instansi as ti
+    asal, ins_asal = await ti.tautkan(db, data, "pihak_asal", "Pihak asal")
+    tujuan, ins_tujuan = await ti.tautkan(db, data, "pihak_tujuan", "Pihak tujuan")
+    peringatan = []
+    if ins_tujuan and data.get("arah") == "keluar":
+        peringatan += kp.periksa_skema(
+            kp.SKEMA_DARI_PROSES.get(str(data.get("jenis_proses") or "")),
+            ins_tujuan.get("jenis"), sebutan="pihak")
+    peringatan += ti.peringatan_nonaktif(ins_asal, "Pihak asal")
+    peringatan += ti.peringatan_nonaktif(ins_tujuan, "Pihak tujuan")
+    return {**asal, **tujuan}, peringatan
+
+
 @penggunaan_router.post("/penggunaan/proses")
 async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
     """Buka tiket proses baru (status awal draf; aset multi ber-snapshot)."""
@@ -1596,6 +1621,7 @@ async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
             await pastikan_akses_aset(user, a)
             aset_rows.append({"asset_id": a["id"], "asset_code": a.get("asset_code"),
                               "NUP": a.get("NUP"), "asset_name": a.get("asset_name")})
+    tautan, peringatan_kebijakan = await _tautan_pihak_proses(data)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
@@ -1606,6 +1632,7 @@ async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
         "arah": data["arah"],
         "pihak_asal": data["pihak_asal"].strip(),
         "pihak_tujuan": data["pihak_tujuan"].strip(),
+        **tautan,
         "aset": aset_rows,
         "status": "draf",
         "nomor_permohonan": str(data.get("nomor_permohonan") or "").strip(),
@@ -1620,7 +1647,7 @@ async def buat_proses(payload: ProsesIn, user: dict = Depends(require_writer)):
         "updated_at": now,
     }
     await db.penggunaan_proses.insert_one({**record})
-    return record
+    return {**record, "peringatan_kebijakan": peringatan_kebijakan}
 
 
 @penggunaan_router.post("/penggunaan/proses/{tiket_id}/status")

@@ -1057,7 +1057,7 @@ yang tidak ada dicoret, yang terlewat ditambahkan.
 | PGW-08 | Ikon kelompok & pemilih lintas modul | 06 | **selesai** | #1122 (08a + 08b) |
 | PGW-09 | Laporan & dokumen | 06 | **selesai** | #1123 |
 | PGW-10 | Kebijakan & pasal per jenis penerima | 00, 06, 09 | **kerangka selesai**; butir pasal & form menunggu verifikasi PMK 115/2020 | #1124 (kerangka) |
-| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan | |
+| PGW-11 | Tautan instansi di modul berpihak-luar | 02, 07 | sebagian — Pemanfaatan, Penggunaan | |
 | PGW-12 | Data uji & dokumentasi | 07–10 | **selesai** | #1125 |
 
 PGW-04, 05, 06 boleh paralel setelah PGW-03. Sampai PGW-07 ter-merge,
@@ -1863,8 +1863,26 @@ peringatan; **tidak pernah menolak simpan**. Mitra nonaktif di direktori juga
 diberi peringatan. Isi tabel skema per jenis mitra masih menunggu verifikasi
 PMK 115/2020 yang sama dengan PGW-10 — sampai itu, anggap peringatannya
 petunjuk, bukan rujukan hukum.
-Modul berikutnya menurut K6: Penggunaan (PSP) → Pemeliharaan → Pengadaan →
-Pemindahtanganan → Persediaan.
+
+**Hasil Penggunaan (2026-11-12):** temuan saat pemetaan — SK PSP
+(`db.psp`) **tidak punya kolom pihak** sama sekali; pihak di luar satker
+hanya ada di **tiket proses** (`db.penggunaan_proses`: alih status,
+penggunaan sementara, dioperasikan pihak lain, penggunaan bersama) sebagai
+teks `pihak_asal`/`pihak_tujuan`. Jadi yang ditautkan adalah keduanya:
+`pihak_asal_instansi_id` & `pihak_tujuan_instansi_id` (+ snapshot
+kelompok/tataran/jenis). Menambah kolom pihak baru ke SK PSP bukan pola
+aditif PGW-11 dan butuh keputusan pemilik tersendiri — tidak dilakukan.
+Skema diperiksa hanya untuk **pihak tujuan pada arah keluar** (penerima
+penguasaan BMN satker), lewat `SKEMA_DARI_PROSES` (penggunaan sementara,
+dioperasikan pihak lain); alih status & penggunaan bersama tak punya baris
+di matriks 6.6 → tak diperiksa. Pola tautan dipindah ke `tautan_instansi.py`
+(dipakai Pemanfaatan juga). Layar: isian pihak memakai `IsianInstansiLuar`
+dengan saran Master Satker tetap tersedia (`saranTambahan`, tidak menautkan).
+Sekaligus: ikon kelompok di baris Pemanfaatan & Penggunaan dipisah dari teks
+yang terpotong — sebelumnya ikon ikut hilang pada nama panjang di layar HP.
+
+Modul berikutnya menurut K6: Pemeliharaan → Pengadaan → Pemindahtanganan →
+Persediaan.
 
 ---
 
