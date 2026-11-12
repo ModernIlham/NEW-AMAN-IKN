@@ -40,6 +40,9 @@ class PemanfaatanIn(BaseModel):
     bentuk: str
     mitra: str = Field(min_length=1)
     jenis_mitra: str = ""         # BUMN/BUMD/PT/koperasi/perorangan/Pemda...
+    # Tautan opsional ke direktori instansi luar (PGW-11). Teks `mitra` tetap
+    # disimpan apa adanya sebagai snapshot.
+    mitra_instansi_id: str = ""
     mulai: str
     berakhir: str
     nilai: float = Field(default=0, ge=0)   # nilai sewa total / kontribusi
@@ -84,6 +87,7 @@ class UsulanPemanfaatanIn(BaseModel):
     bentuk: str = ""              # wajib untuk baru; perpanjangan ikut induk
     mitra: str = ""
     jenis_mitra: str = ""
+    mitra_instansi_id: str = ""   # PGW-11, opsional
     mulai: str = ""
     berakhir: str = ""            # perpanjangan: tanggal berakhir BARU
     nilai: float = Field(default=0, ge=0)
@@ -103,6 +107,38 @@ class TransisiUsulanPemanfaatanIn(BaseModel):
     nomor_dokumen: str = ""
     tanggal_dokumen: str = ""
     catatan: str = ""
+
+
+_FIELD_TAUTAN_MITRA = ("mitra_instansi_id", "mitra_kelompok", "mitra_tataran",
+                       "mitra_jenis_instansi")
+
+
+async def _tautan_mitra(data: dict) -> tuple:
+    """(field tautan, peringatan lunak) untuk mitra yang ditautkan ke
+    direktori instansi luar (PGW-11).
+
+    Tanpa tautan → semua field kosong, tanpa peringatan (perilaku lama).
+    Tautan ke id yang tak ada → 400: tautan yang patah lebih buruk daripada
+    teks bebas. Skema yang tak lazim bagi jenis mitranya hanya PERINGATAN —
+    keputusan sahnya tetap pada persetujuan Pengelola Barang."""
+    iid = str(data.get("mitra_instansi_id") or "").strip()
+    kosong = {k: "" for k in _FIELD_TAUTAN_MITRA}
+    if not iid:
+        return kosong, []
+    ins = await db.instansi_luar.find_one(
+        {"id": iid}, {"_id": 0, "id": 1, "nama": 1, "kelompok": 1, "tataran": 1,
+                      "jenis": 1, "aktif": 1})
+    if not ins:
+        raise HTTPException(status_code=400, detail=(
+            "Mitra yang ditautkan tidak ditemukan di direktori instansi luar"))
+    import kebijakan_penerima as kp
+    skema = kp.SKEMA_DARI_BENTUK.get(str(data.get("bentuk") or ""))
+    peringatan = kp.periksa_skema(skema, ins.get("jenis"))
+    if ins.get("aktif") is False:
+        peringatan.append("Instansi mitra ini berstatus nonaktif di direktori")
+    return ({"mitra_instansi_id": ins["id"], "mitra_kelompok": ins.get("kelompok", ""),
+             "mitra_tataran": ins.get("tataran", ""),
+             "mitra_jenis_instansi": ins.get("jenis", "")}, peringatan)
 
 
 @pemanfaatan_router.get("/pemanfaatan/usulan")
@@ -172,6 +208,11 @@ async def buat_usulan_pemanfaatan(payload: UsulanPemanfaatanIn,
                                     detail="Aset tidak ditemukan")
             from shared_utils import pastikan_akses_aset
             await pastikan_akses_aset(user, objek)
+    if induk:   # perpanjangan mewarisi tautan perjanjian induknya
+        tautan_mitra = {k: str(induk.get(k) or "") for k in _FIELD_TAUTAN_MITRA}
+        peringatan_kebijakan = []
+    else:
+        tautan_mitra, peringatan_kebijakan = await _tautan_mitra(data)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
@@ -192,6 +233,7 @@ async def buat_usulan_pemanfaatan(payload: UsulanPemanfaatanIn,
                   else str(data.get("mitra") or "")).strip(),
         "jenis_mitra": (str(induk.get("jenis_mitra") or "") if induk
                         else str(data.get("jenis_mitra") or "")).strip(),
+        **tautan_mitra,
         "mulai": (str(induk.get("mulai") or "") if induk
                   else str(data.get("mulai") or "")).strip()[:10],
         # perpanjangan: `berakhir` = tanggal berakhir BARU yang diusulkan;
@@ -220,7 +262,7 @@ async def buat_usulan_pemanfaatan(payload: UsulanPemanfaatanIn,
                     detail=(f"Usulan {JENIS_USULAN_PEMANFAATAN[jenis]} "
                             f"{record['bentuk']} — mitra {record['mitra']}"),
                     kode_satker=record["kode_satker"])
-    return record
+    return {**record, "peringatan_kebijakan": peringatan_kebijakan}
 
 
 @pemanfaatan_router.post("/pemanfaatan/usulan/{usulan_id}/status")
@@ -295,6 +337,8 @@ async def transisi_usulan_pemanfaatan(usulan_id: str,
                 "bentuk": res.get("bentuk"),
                 "mitra": res.get("mitra"),
                 "jenis_mitra": res.get("jenis_mitra") or "",
+                # Tautan direktori (PGW-11) ikut dari usulannya.
+                **{k: str(res.get(k) or "") for k in _FIELD_TAUTAN_MITRA},
                 "mulai": res.get("mulai"),
                 "berakhir": res.get("berakhir"),
                 "nilai": float(res.get("nilai") or 0),
@@ -519,6 +563,7 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
             raise HTTPException(status_code=404, detail="Aset tidak ditemukan")
         from shared_utils import pastikan_akses_aset
         await pastikan_akses_aset(user, objek)  # isolasi satker (REVIEW-9 R10)
+    tautan_mitra, peringatan_kebijakan = await _tautan_mitra(data)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
@@ -530,6 +575,7 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
         "bentuk": data["bentuk"],
         "mitra": data["mitra"].strip(),
         "jenis_mitra": str(data.get("jenis_mitra") or "").strip(),
+        **tautan_mitra,
         "mulai": str(data["mulai"]).strip()[:10],
         "berakhir": str(data["berakhir"]).strip()[:10],
         "nilai": float(data.get("nilai") or 0),
@@ -553,7 +599,7 @@ async def buat_pemanfaatan(payload: PemanfaatanIn, user: dict = Depends(require_
                     detail=(f"Catat pemanfaatan {record['bentuk']} — mitra "
                             f"{record['mitra']}"),
                     kode_satker=record["kode_satker"])
-    return record
+    return {**record, "peringatan_kebijakan": peringatan_kebijakan}
 
 
 @pemanfaatan_router.put("/pemanfaatan/{register_id}")
@@ -568,8 +614,10 @@ async def ubah_pemanfaatan(register_id: str, payload: PemanfaatanIn,
     errors = validate_pemanfaatan(data) + validate_fasilitas(data)
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
+    tautan_mitra, peringatan_kebijakan = await _tautan_mitra(data)
     update = {k: (str(v).strip() if isinstance(v, str) else v)
               for k, v in data.items() if k != "asset_id"}
+    update.update(tautan_mitra)
     update["mulai"] = update["mulai"][:10]
     update["berakhir"] = update["berakhir"][:10]
     update["nilai"] = float(data.get("nilai") or 0)
@@ -583,7 +631,7 @@ async def ubah_pemanfaatan(register_id: str, payload: PemanfaatanIn,
     await log_audit("pemanfaatan_ubah", "", username=user.get("username", "system"),
                     detail=f"Ubah pemanfaatan — mitra {res.get('mitra')}",
                     kode_satker=str(res.get("kode_satker") or ""))
-    return res
+    return {**res, "peringatan_kebijakan": peringatan_kebijakan}
 
 
 @pemanfaatan_router.post("/pemanfaatan/{register_id}/kontribusi")

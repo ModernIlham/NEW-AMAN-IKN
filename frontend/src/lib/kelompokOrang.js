@@ -101,10 +101,11 @@ export const PERMUKAAN_IKON = [
   "components/ttd/BarisPenandaTangan.jsx",
   "pages/ActivitySelectionPage.jsx",
   "pages/WasdalPage.jsx",
+  "pages/PemanfaatanPage.jsx",
+  "components/pegawai/IsianInstansiLuar.jsx",
 ];
 /** Menyusul PGW-11: ikon di samping mitra/pihak yang tertaut `instansi_luar`. */
 export const PERMUKAAN_IKON_MENYUSUL = [
-  "pages/PemanfaatanPage.jsx",
   "pages/PemindahtangananPage.jsx",
   "pages/PengadaanPage.jsx",
 ];
