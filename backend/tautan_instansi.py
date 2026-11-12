@@ -31,6 +31,8 @@ RUJUKAN = (
     ("pemeliharaan", "pelaksana", "Pemeliharaan"),
     ("pengadaan", "pihak", "Pengadaan"),
     ("pemindahtanganan", "pihak", "Pemindahtanganan"),
+    ("transaksi_persediaan", "penyedia", "Persediaan"),
+    ("lpb", "penyedia", "LPB persediaan"),
 )
 
 

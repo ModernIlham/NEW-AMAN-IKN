@@ -1615,6 +1615,7 @@ class TransaksiMassalIn(BaseModel):
     jenis_dokumen: str = ""                 # masuk
     tgl_dokumen: str = ""                   # masuk
     penyedia: str = ""                      # masuk
+    penyedia_instansi_id: str = ""          # masuk — tautan direktori luar (PGW-11)
     perolehan_id: str = ""                  # masuk — tautan BAST Pengadaan (#17)
     unit_penerima: str = ""                 # keluar
     penerima_nip: str = ""                  # keluar — tautan Master Pegawai
@@ -1659,6 +1660,10 @@ async def transaksi_massal(payload: TransaksiMassalIn,
     snap_asal = {}
     if payload.arah == "masuk" and str(payload.perolehan_id or "").strip():
         snap_asal = await _ambil_snapshot_perolehan(payload.perolehan_id, user)
+    # Tautan penyedia juga divalidasi SEKALI di muka (400 sebelum mutasi).
+    tautan_massal, peringatan_massal = {}, []
+    if payload.arah == "masuk":
+        tautan_massal, peringatan_massal = await _tautan_penyedia(payload, user)
     # Penerima massal divalidasi SEKALI di muka: penolakan (almarhum) harus
     # terjadi sebelum satu pun barang keluar, bukan setelah separuh daftarnya
     # terlanjur berkurang — jalur massal memang tak berkompensasi antarbaris.
@@ -1692,6 +1697,7 @@ async def transaksi_massal(payload: TransaksiMassalIn,
                     no_bukti=(nomor_lpb or payload.no_bukti),
                     jenis_dokumen=payload.jenis_dokumen,
                     tgl_dokumen=payload.tgl_dokumen, penyedia=payload.penyedia,
+                    penyedia_instansi_id=payload.penyedia_instansi_id,
                     perolehan_id=payload.perolehan_id,
                     keterangan=payload.keterangan,
                 ), user=user)
@@ -1789,6 +1795,7 @@ async def transaksi_massal(payload: TransaksiMassalIn,
             "ppk_status_kepegawaian": ppk_status,
             "jenis": payload.jenis, "jenis_dokumen": payload.jenis_dokumen,
             "penyedia": str(payload.penyedia or "").strip(),
+            **(tautan_massal if tautan_massal.get("penyedia_instansi_id") else {}),
             "perolehan_id": str(payload.perolehan_id or "").strip(),
             "keterangan": str(payload.keterangan or "").strip(),
             "items": baris, "total_nilai": total_nilai,
@@ -1816,6 +1823,8 @@ async def transaksi_massal(payload: TransaksiMassalIn,
               "sppb_id": sppb_id, "nomor_sppb": nomor_sppb}
     if peringatan_penerima:
         keluar["peringatan"] = peringatan_penerima
+    if peringatan_massal:
+        keluar["peringatan_kebijakan"] = peringatan_massal
     return keluar
 
 
@@ -2864,8 +2873,38 @@ class TransaksiMasukIn(BaseModel):
     tgl_dokumen: str = ""
     no_kontrak: str = ""
     penyedia: str = ""
+    # Tautan opsional penyedia ke direktori instansi luar (PGW-11). Kosong +
+    # `perolehan_id` tertaut → diwarisi dari pihak perolehan Pengadaan.
+    penyedia_instansi_id: str = ""
     perolehan_id: str = ""       # FK perolehan Pengadaan (dokumen sumber, #259)
     keterangan: str = ""
+
+
+async def _tautan_penyedia(data, user) -> tuple:
+    """(field tautan `penyedia`, peringatan lunak) — PGW-11.
+
+    Tautan eksplisit didahulukan (id tak dikenal → 400, SEBELUM mutasi stok).
+    Tanpa itu, penerimaan yang merujuk perolehan Pengadaan mewarisi tautan
+    pihak perolehan tersebut — penyedianya memang pihak yang sama. Penerimaan
+    bukan penyerahan penguasaan → tanpa pemeriksaan skema."""
+    import tautan_instansi as ti
+    iid = str(getattr(data, "penyedia_instansi_id", "") or "").strip()
+    if iid:
+        fields, ins = await ti.tautkan(db, {"penyedia_instansi_id": iid},
+                                       "penyedia", "Penyedia")
+        return fields, ti.peringatan_nonaktif(ins, "Penyedia")
+    kosong = {k: "" for k in ti.field_tautan("penyedia")}
+    pid = str(getattr(data, "perolehan_id", "") or "").strip()
+    if not pid:
+        return kosong, []
+    from shared_utils import scope_query_field_satker
+    p = await db.pengadaan.find_one(
+        scope_query_field_satker(user, {"id": pid}),
+        {"_id": 0, **{k: 1 for k in ti.field_tautan("pihak")}})
+    if not p or not str(p.get("pihak_instansi_id") or "").strip():
+        return kosong, []
+    warisan = ti.salin_tautan(p, "pihak")
+    return {k.replace("pihak_", "penyedia_", 1): v for k, v in warisan.items()}, []
 
 
 async def _ambil_snapshot_perolehan(perolehan_id: str, user=None) -> dict:
@@ -2961,6 +3000,7 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
     # FK dokumen sumber (§5A gap #2): 404 dulu SEBELUM mutasi stok agar tak ada
     # layer masuk tanpa perolehan valid.
     snap_perolehan = await _ambil_snapshot_perolehan(data.perolehan_id, user)
+    tautan_penyedia, peringatan_kebijakan = await _tautan_penyedia(data, user)
 
     now = datetime.now(timezone.utc)
     batch_id = str(uuid.uuid4())
@@ -3027,6 +3067,8 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
         "tgl_dokumen": data.tgl_dokumen.strip(),
         "no_kontrak": data.no_kontrak.strip(),
         "penyedia": data.penyedia.strip(),
+        # Jurnal sengaja ramping: field tautan hanya ditulis bila tertaut.
+        **(tautan_penyedia if tautan_penyedia.get("penyedia_instansi_id") else {}),
         **snap_perolehan,
         "keterangan": data.keterangan.strip(),
         "petugas": user.get("username") or user.get("user_id") or "-",
@@ -3045,7 +3087,8 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
         raise HTTPException(status_code=500, detail="Gagal mencatat jurnal — transaksi dibatalkan")
 
     resp = {"message": f"{JENIS_MASUK[data.jenis][0]} tercatat", "stok": stok_sesudah,
-            "transaksi": jurnal, "version": updated.get("version")}
+            "transaksi": jurnal, "version": updated.get("version"),
+            "peringatan_kebijakan": peringatan_kebijakan}
     if idem_key:
         from shared_utils import store_idempotent_response
         await store_idempotent_response(idem_key, resp, 200)
