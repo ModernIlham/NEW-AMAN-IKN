@@ -353,8 +353,13 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         // `useWebSocket`. Tak satu pun bisa berada di atas yang lain; memutusnya
         // menuntut indireksi ref dan uji render (backlog #320), bukan penataan
         // urutan. Ditandai satu per satu agar jumlahnya terlihat & terhitung.
+        // refreshWindow: segarkan halaman yang TERLIHAT (±1) dan jangkar
+        // gulirnya. Refresh biasa meruntuhkan jendela HP/galeri ke SATU
+        // halaman (`currentPage`, di HP hampir selalu 1) — pengguna yang
+        // sedang menggulir jauh di bawah terlempar ke posisi lain tiap kali
+        // rekan menambah aset.
         // eslint-disable-next-line no-use-before-define
-        refreshData();
+        refreshData(undefined, { refreshWindow: true, latar: true });
       }
     }, 2000);
   }, [activity?.id, muatBaris, penjaga, mobilePageCache]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -799,7 +804,8 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // already auto-flushes (useOptimisticQueue) and the effect above runs the
   // delta sync — here we swap the visible list back to live server data.
   useEffect(() => {
-    if (isOnline && offlineServedRef.current) refreshDataRef.current?.();
+    // Jendela gulir HP dipertahankan (lihat penyegaran WS di atas).
+    if (isOnline && offlineServedRef.current) refreshDataRef.current?.(undefined, { refreshWindow: true, latar: true });
   }, [isOnline]);
 
   // Initial data fetch
@@ -899,7 +905,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     if (editAssetForForm?.id) unlockAsset(editAssetForForm.id);
     setEditAssetForForm(null);
     wsNeedsRefreshRef.current = false;
-    refreshData();
+    refreshData(undefined, { refreshWindow: true });
   }, [editAssetForForm, unlockAsset, refreshData]);
 
   // tempId aset yang ditambah via PETA → {adaFoto}, dipantau efek kegagalan sync.
@@ -1300,7 +1306,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
       await axios.delete(`${API}/assets/${id}`);
       if (activity?.id) removeSnapshotAsset(activity.id, id);
       toast.success("Dihapus");
-      refreshDataRef.current(); // rekonsiliasi (doFetch meng-clamp halaman kosong)
+      // Rekonsiliasi jendela yang terlihat (halaman kosong ikut dijepit) —
+      // refresh biasa meruntuhkan daftar HP ke satu halaman dan melempar gulir.
+      refreshDataRef.current(undefined, { refreshWindow: true });
       return true; // pemanggil (mis. popup peta) perlu tahu hapus benar terjadi
     } catch (err) {
       toast.error(getApiError(err, "Gagal hapus"));

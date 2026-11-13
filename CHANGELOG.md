@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1143] Inventarisasi — daftar tidak lagi melompat saat digulir ketika rekan menambah aset — 2026-11-13
+
+- Perbaikan: di daftar kartu HP dan galeri, posisi gulir kini tetap di aset
+  yang sedang dilihat ketika rekan satu kegiatan menambah aset, koneksi
+  tersambung ulang, aset dihapus, atau aset disimpan lewat form. Sebelumnya
+  setiap kejadian itu mengganti seluruh daftar yang sudah dimuat dengan satu
+  halaman saja (di HP biasanya halaman pertama), sehingga pengguna yang
+  sedang menggulir jauh di bawah terlempar ke posisi lain tanpa menyentuh
+  layar.
+- Kini hanya halaman yang sedang terlihat (beserta satu halaman di kiri dan
+  kanannya) yang disegarkan, dan posisi gulir dijangkar ke aset yang sama.
+- Bila penyegaran karena event rekan gagal, tampilan dibiarkan apa adanya
+  tanpa pesan galat yang tidak relevan.
+
 ## [#1142] Uji form aset — batas tunggu ikon pengguna pihak ketiga disamakan dengan uji saudaranya — 2026-11-12
 
 - Tidak ada perubahan perilaku aplikasi. Uji `AssetFormKelompokPengguna`
