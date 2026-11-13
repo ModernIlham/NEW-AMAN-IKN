@@ -65,7 +65,7 @@ test("refresh massal menyegarkan seluruh jendela tanpa reset halaman atau skelet
   const p = konteks({ doFetchJendela: jest.fn().mockResolvedValue(["jendela"]) });
   const { result } = renderHook(usePenyegaranAset, { initialProps: p });
   expect(await result.current(undefined, { refreshWindow: true })).toEqual([["jendela"], "statistik"]);
-  expect(p.doFetchJendela).toHaveBeenCalledWith(3, 50, "meja", ["Mebel"], "newest");
+  expect(p.doFetchJendela).toHaveBeenCalledWith(3, 50, "meja", ["Mebel"], "newest", { latar: false });
   expect(p.doFetch).not.toHaveBeenCalled();
   expect(p.setPageLoading).not.toHaveBeenCalled();
 });
@@ -177,4 +177,14 @@ test("paginasi hanya daftar tetap memakai pemilik skeleton yang sama", async () 
   expect(p.setPageLoading).not.toHaveBeenCalledWith(false);
   b.resolve(["halaman-2"]); expect(await baru).toEqual([["halaman-2"], undefined]);
   expect(p.setPageLoading).toHaveBeenLastCalledWith(false);
+});
+
+test("penyegaran jendela meneruskan opsi latar ke doFetchJendela, bukan doFetch", async () => {
+  const p = konteks({ doFetchJendela: jest.fn().mockResolvedValue(["jendela"]) });
+  const { result } = renderHook(usePenyegaranAset, { initialProps: p });
+  await expect(result.current(undefined, { refreshWindow: true, latar: true })).resolves.toEqual([["jendela"], "statistik"]);
+  expect(p.doFetchJendela).toHaveBeenCalledWith(3, 50, "meja", ["Mebel"], "newest", { latar: true });
+  expect(p.doFetch).not.toHaveBeenCalled();
+  await result.current(undefined, { refreshWindow: true });
+  expect(p.doFetchJendela).toHaveBeenLastCalledWith(3, 50, "meja", ["Mebel"], "newest", { latar: false });
 });

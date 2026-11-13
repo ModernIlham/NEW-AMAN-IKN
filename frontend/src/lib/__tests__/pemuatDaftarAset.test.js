@@ -406,3 +406,16 @@ test("cache mobile absolut membatasi refresh pada jendela terlihat dengan margin
   expect(p.state.MobileAssets.map(row => row.id)).toEqual(["p3","p4","p5"]);
   expect(p.state.MobileFirstPage).toBe(3); expect(p.state.MobileCurrentPage).toBe(5);
 });
+
+test.each(["gagal", "berubah"])("penyegaran LATAR yang gagal (%s) senyap: tampilan utuh, tanpa toast 'Perubahan tersimpan'", async sebab => {
+  // Penyegaran karena event rekan/tersambung ulang tidak didahului simpanan
+  // pengguna — pesan "Perubahan tersimpan" di sana menyesatkan.
+  const p = layar({ mobileFirstPage: 1, mobileCurrentPage: 3, sebelumGantiJendela: jest.fn() });
+  axios.get.mockResolvedValueOnce(isiHalaman(1));
+  if (sebab === "gagal") axios.get.mockRejectedValue(new Error("putus"));
+  else axios.get.mockResolvedValue(isiHalaman(2, 5));
+  expect(await p.doFetchJendela(1, 2, "", [], "newest", { latar: true })).toBeNull();
+  expect(p.state.MobileAssets).toEqual([{ id: "awal" }]);
+  expect(p.k.sebelumGantiJendela).not.toHaveBeenCalled();
+  expect(toast.error).not.toHaveBeenCalled();
+});

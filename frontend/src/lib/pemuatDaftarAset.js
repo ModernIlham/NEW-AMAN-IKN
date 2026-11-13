@@ -211,7 +211,7 @@ export function buatPemuatDaftarAset(konteks) {
   // memakai refresh biasa menyusutkan 200 kartu menjadi satu halaman 50 kartu.
   // Jangan commit satu per satu atau fallback ke snapshot lama setelah tulis:
   // filter/sort berubah oleh massal harus tetap mengikuti hasil server terbaru.
-  const doFetchJendela = async (page, size, search, category, sort) => {
+  const doFetchJendela = async (page, size, search, category, sort, { latar = false } = {}) => {
     const tiket = penjaga.mulaiBaca("daftar", lingkupPermintaan);
     if (!tiket) return HASIL_USANG;
     const jendela = penjaga.mulai("jendela", lingkupPermintaan);
@@ -290,7 +290,10 @@ export function buatPemuatDaftarAset(konteks) {
       return desktop;
     } catch {
       if (!penjaga.berlaku(tiket)) return HASIL_USANG;
-      toast.error("Perubahan tersimpan, tetapi daftar terbaru belum berhasil dimuat. Posisi dan data tampilan dipertahankan; tekan Muat ulang untuk mencoba lagi.");
+      // Penyegaran LATAR (event rekan / tersambung ulang) tidak didahului
+      // simpanan pengguna: pesan "Perubahan tersimpan" menyesatkan. Tampilan
+      // dibiarkan apa adanya; event atau penyegaran berikutnya menyusul.
+      if (!latar) toast.error("Perubahan tersimpan, tetapi daftar terbaru belum berhasil dimuat. Posisi dan data tampilan dipertahankan; tekan Muat ulang untuk mencoba lagi.");
       return null;
     } finally { penjaga.selesai(tiket); penjaga.selesai(jendela); }
   };

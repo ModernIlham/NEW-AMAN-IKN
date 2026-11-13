@@ -24,7 +24,7 @@ export function usePenyegaranAset(konteks) {
     return () => { terpasang.current = false; urutan.current++; };
   }, [konteks.lingkupPermintaan]);
 
-  return useCallback((page, { showLoading = false, preserveMobile = false, hanyaDaftar = false, refreshWindow = false } = {}) => {
+  return useCallback((page, { showLoading = false, preserveMobile = false, hanyaDaftar = false, refreshWindow = false, latar = false } = {}) => {
     if (!terpasang.current) return Promise.resolve([HASIL_USANG, HASIL_USANG]);
     const p = terbaru.current;
     const tiket = ++pemilik.current;
@@ -35,7 +35,7 @@ export function usePenyegaranAset(konteks) {
     const work = Promise.all([
       // Refresh latar boleh mempertahankan jendela infinite-scroll HP.
       refreshWindow
-        ? p.doFetchJendela(pg, p.pageSize, p.debouncedSearch, p.filterCategory, p.sortBy)
+        ? p.doFetchJendela(pg, p.pageSize, p.debouncedSearch, p.filterCategory, p.sortBy, { latar })
         : p.doFetch(pg, p.pageSize, p.debouncedSearch, p.filterCategory, p.sortBy, false, preserveMobile),
       hanyaDaftar ? undefined : p.doFetchStats(p.debouncedSearch),
     ]);
