@@ -36,6 +36,9 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
   tidak ada di daftar yang termuat, pengiriman ulang batal tanpa pesan.
 - Item milik kegiatan lain diberi tanda dan nama kegiatannya; jumlah di
   panel selalu sama dengan angka di lencana.
+- Keamanan dependency: `dnspython` 2.9.0 → 2.9.2 (GHSA-vvf4-9x63-8xvv) dan
+  `opentelemetry-api` 1.45.1 → 1.45.2 (GHSA-mf5v-w3w3-f6cg) di kedua lock
+  backend, karena advisory baru membuat gerbang audit CI gagal untuk semua PR.
 
 ## [#1143] Inventarisasi — daftar tidak lagi melompat saat digulir ketika rekan menambah aset — 2026-11-13
 
