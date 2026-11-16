@@ -13,7 +13,7 @@ import { useTripleClick } from "@/hooks/useTripleClick";
 const DashboardHeader = memo(({
   activity, user, perms, onBack, onLogout,
   auditOpen, onAuditToggle, onOpenUserManagement,
-  isOnline, wsConnected, onlineUsers, pendingCount, syncing, actionCount = 0, onSync,
+  isOnline, wsConnected, onlineUsers, pendingCount, syncing, actionCount = 0, onSync, onOpenActionPanel,
   dark, toggleDark, onShowInfo,
 }) => {
   // Halaman Info tersembunyi: butuh 3 klik beruntun pada logo
@@ -75,13 +75,16 @@ const DashboardHeader = memo(({
               baris yang harus ditinjau manual (simpan ulang / abaikan), bukan
               antrian yang sedang/akan disinkronkan. */}
           {actionCount > 0 && (
-            <span
-              className="flex items-center gap-1 text-[10px] bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 px-1.5 py-0.5 rounded-full font-medium"
+            <button
+              type="button"
+              onClick={onOpenActionPanel}
+              className="flex items-center gap-1 text-[10px] bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 px-1.5 py-0.5 rounded-full font-medium hover:bg-orange-200 dark:hover:bg-orange-900/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 transition-colors"
               data-testid="sync-action-badge"
-              title="Perlu tindakan manual: ada perubahan yang bentrok versi atau kegiatannya terkunci. Tinjau baris bertanda oranye/merah lalu simpan ulang atau abaikan — tombol Sinkronkan tidak dapat menyelesaikannya."
+              aria-label={`${actionCount} simpanan perlu tindakan — ketuk untuk melihat daftarnya`}
+              title="Perlu tindakan manual: ada perubahan yang bentrok versi, kegiatannya terkunci, atau ditolak server. Ketuk untuk melihat daftar dan menyelesaikannya."
             >
               <AlertTriangle className="w-3 h-3" /> {actionCount}
-            </span>
+            </button>
           )}
           {onlineUsers.length > 1 && (
             <span className="flex items-center gap-0.5 text-[9px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded-full font-medium" data-testid="online-users-count" title={onlineUsers.map(u => u.user_name).join(', ')}>

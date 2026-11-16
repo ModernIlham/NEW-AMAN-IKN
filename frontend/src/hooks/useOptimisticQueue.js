@@ -272,7 +272,10 @@ export function useOptimisticQueue(options) {
     return completion;
   }, [owner, refresh, pump, storageError]);
 
-  const retry = useCallback(statusKey => {
+  // `version` opsional: panel Perlu Tindakan memuat baris terbaru dari server
+  // lalu menyerahkan versinya langsung — baris aset itu belum tentu ada di
+  // daftar termuat (getLatestVersion → null → retry konflik diam-diam batal).
+  const retry = useCallback((statusKey, version) => {
     const blocked = pendingRef.current.find(item => item.statusKey === statusKey && item.state?.status === "conflict"
       && hasMediaMutation(item.payload));
     if (blocked) {
@@ -281,7 +284,7 @@ export function useOptimisticQueue(options) {
           pendingRef.current.filter(item => item.statusKey === statusKey)) } });
       return;
     }
-    retryOperations(owner, { statusKey, version: callbacks.current.getLatestVersion?.(statusKey) })
+    retryOperations(owner, { statusKey, version: version ?? callbacks.current.getLatestVersion?.(statusKey) })
       .then(refresh).then(pump).catch(storageError);
   }, [owner, refresh, pump, storageError]);
   const dismiss = useCallback(statusKey => {

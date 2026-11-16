@@ -47,6 +47,9 @@ const AssetMapFullView = lazy(() => import("@/components/assets/AssetMapFullView
 const BagikanPetaDialog = lazy(() => import("@/components/assets/BagikanPetaDialog"));
 import PhotoLightbox from "@/components/assets/PhotoLightboxLoader";
 import DashboardHeader from "@/components/assets/DashboardHeader";
+import PanelPerluTindakan from "@/components/assets/PanelPerluTindakan";
+import { daftarPerluTindakan } from "@/lib/perluTindakan";
+import { hasMediaMutation } from "@/lib/saveOutbox";
 import StatsBar from "@/components/assets/StatsBar";
 import InventoryProgressBar from "@/components/assets/InventoryProgressBar";
 import DashboardToolbar from "@/components/assets/DashboardToolbar";
@@ -862,6 +865,63 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     return true;
   }, [rowLocks, sessionId, lockAsset, formPanelVisible, editAssetForForm, unlockAsset, syncStatuses]);
 
+  // === PANEL "PERLU TINDAKAN" (lencana oranye header) ===
+  // Dulu lencana hanya angka tanpa aksi — pengguna harus menggulir mencari
+  // baris oranye/merah sendiri (bisa di halaman yang belum termuat, atau di
+  // kegiatan lain). Panel ini mendaftar tiap simpanan macet beserta sebabnya
+  // dan aksi langsung: Lihat aset · Kirim ulang · Abaikan.
+  const [panelTindakanOpen, setPanelTindakanOpen] = useState(false);
+  const daftarTindakan = useMemo(() => {
+    if (!panelTindakanOpen) return [];
+    const cariAset = id => assets.find(a => a.id === id) || mobileAssets.find(a => a.id === id);
+    return daftarPerluTindakan({ syncStatuses, items: getPendingItems(), activityId: activity?.id,
+      cariAset, adaMedia: hasMediaMutation });
+  }, [panelTindakanOpen, syncStatuses, getPendingItems, activity?.id, assets, mobileAssets]);
+
+  // Versi server terbaru satu aset (tanpa media). null bila luring/gagal atau
+  // aset milik kegiatan lain.
+  const ambilBarisTerbaru = useCallback(async (assetId) => {
+    if (!navigator.onLine) return null;
+    try {
+      const { data: fresh } = await axios.get(`${API}/assets/${assetId}?exclude_media=true`);
+      if (!fresh?.id || (fresh.activity_id && activity?.id && fresh.activity_id !== activity.id)) return null;
+      terapkanBaris(fresh);
+      return fresh;
+    } catch { return null; }
+  }, [activity?.id, terapkanBaris]);
+
+  const lihatTindakan = useCallback(async (entri) => {
+    const termuat = assets.find(a => a.id === entri.assetId) || mobileAssets.find(a => a.id === entri.assetId);
+    // Konflik: tampilkan versi SERVER agar perubahan pengguna lain terlihat.
+    const fresh = await ambilBarisTerbaru(entri.assetId);
+    const target = fresh ? { ...termuat, ...fresh } : termuat;
+    if (!target) {
+      toast.error("Aset ini belum termuat dan tidak dapat diambil dari server. Periksa koneksi lalu coba lagi.");
+      return;
+    }
+    setPanelTindakanOpen(false);
+    const ok = await handleEdit(target);
+    if (ok) {
+      toast.info("Simpanan aset ini masih tertahan. Selesaikan dulu lewat lencana oranye (Kirim ulang / Abaikan) — simpanan baru untuk aset ini akan menunggu di belakangnya.",
+        { id: `tindakan-lihat-${entri.assetId}`, duration: 7000 });
+    }
+  }, [assets, mobileAssets, ambilBarisTerbaru, handleEdit]);
+
+  const ulangTindakan = useCallback(async (entri) => {
+    if (entri.jenis !== "konflik") { retrySync(entri.statusKey); return; }
+    // Kirim ulang konflik butuh versi terbaru. Baris bisa belum termuat di
+    // daftar (getLatestVersion → null = retry batal diam-diam), jadi ambil dulu.
+    const fresh = await ambilBarisTerbaru(entri.assetId);
+    const version = fresh?.version ?? getLatestVersion(entri.assetId);
+    if (version == null) {
+      toast.error("Versi terbaru aset belum bisa diambil. Sambungkan internet lalu coba lagi.");
+      return;
+    }
+    retrySync(entri.statusKey, version);
+  }, [ambilBarisTerbaru, getLatestVersion, retrySync]);
+
+  const abaikanTindakan = useCallback((entri) => { dismissSync(entri.statusKey); }, [dismissSync]);
+
   const handleFormClose = useCallback(() => {
     if (editAssetForForm?.id) {
       const prevStatus = syncStatuses[editAssetForForm.id]?.status;
@@ -1571,10 +1631,15 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         onOpenUserManagement={() => openDialog('userManagement')}
         isOnline={isOnline} wsConnected={wsConnected} onlineUsers={onlineUsers}
         pendingCount={pendingCount} syncing={isSyncing} actionCount={actionCount} onSync={() => flushPending(false)}
+        onOpenActionPanel={() => setPanelTindakanOpen(true)}
         dark={dark} toggleDark={toggleDark}
         onShowInfo={onShowInfo}
       />
 
+      <PanelPerluTindakan
+        open={panelTindakanOpen} onOpenChange={setPanelTindakanOpen} daftar={daftarTindakan}
+        onLihat={lihatTindakan} onUlang={ulangTindakan} onAbaikan={abaikanTindakan}
+      />
       <div className="flex h-[calc(100vh-53px)] overflow-x-hidden">
         {/* Toggle Button for Form Panel (Desktop only) */}
         {perms.canEdit && (
