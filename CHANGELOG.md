@@ -18,6 +18,28 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1144] Inventarisasi — lencana peringatan oranye kini membuka daftar "Perlu Tindakan" — 2026-11-16
+
+- Fitur: lencana oranye ⚠ di header kegiatan sekarang bisa diketuk dan
+  membuka panel **Perlu Tindakan** berisi setiap simpanan yang tertahan.
+  Sebelumnya lencana hanya menampilkan angka; pengguna harus menggulir
+  sendiri mencari baris oranye/merah, padahal barisnya bisa berada di
+  halaman yang belum termuat atau di kegiatan lain.
+- Tiap item menampilkan nama barang, kode/NUP, waktu simpan, pesan dari
+  server, sebabnya (bentrok versi, kegiatan terkunci, atau ditolak server),
+  serta saran langkah. Aksi langsung per item: **Lihat aset** (membuka form
+  dengan versi server terbaru; di HP kartunya ikut digulir ke tengah bila
+  sudah termuat), **Kirim perubahan
+  saya / Coba lagi**, dan **Abaikan**.
+- Perbaikan: "Kirim perubahan saya" untuk bentrok versi kini mengambil
+  versi terbaru aset dari server lebih dulu. Sebelumnya bila baris aset
+  tidak ada di daftar yang termuat, pengiriman ulang batal tanpa pesan.
+- Item milik kegiatan lain diberi tanda dan nama kegiatannya; jumlah di
+  panel selalu sama dengan angka di lencana.
+- Keamanan dependency: `dnspython` 2.9.0 → 2.9.2 (GHSA-vvf4-9x63-8xvv) dan
+  `opentelemetry-api` 1.45.1 → 1.45.2 (GHSA-mf5v-w3w3-f6cg) di kedua lock
+  backend, karena advisory baru membuat gerbang audit CI gagal untuk semua PR.
+
 ## [#1143] Inventarisasi — daftar tidak lagi melompat saat digulir ketika rekan menambah aset — 2026-11-13
 
 - Perbaikan: di daftar kartu HP dan galeri, posisi gulir kini tetap di aset
