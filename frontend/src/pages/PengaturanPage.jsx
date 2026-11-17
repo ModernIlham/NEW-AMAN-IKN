@@ -13,6 +13,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { getApiError } from "../lib/utils";
 import { downloadFileWithProgress } from "@/lib/downloadFile";
+import { isSuperAdminPusat } from "@/lib/satkerAktif";
 import ReportSettingsEditor from "@/components/assets/ReportSettingsEditor";
 import { ResetAllDialog, RestoreDialog } from "@/components/sistem/DataSistemDialogs";
 import { SatkerPanel } from "./SatkerPage";
@@ -84,7 +85,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
   // satkernya sendiri dan TIDAK boleh menyentuh data satker lain, jadi seluruh
   // tab Sistem (siklus data) digerbang isSuperAdmin — selaras backend
   // require_super_admin.
-  const isSuperAdmin = isAdmin && !String(user?.kode_satker || "").trim();
+  const isSuperAdmin = isSuperAdminPusat(user);
   // Tema: pakai prop dari App bila diteruskan; fallback hook lokal (state awal
   // sinkron via localStorage) supaya toggle tetap berfungsi seperti di ModuleHomePage.
   const temaLokal = useDarkMode();

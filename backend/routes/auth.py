@@ -578,9 +578,23 @@ async def login(request: Request, credentials: UserLogin):
             name=user["name"],
             role=user_role,
             is_active=user.get("is_active", True),
-            created_at=user["created_at"]
+            created_at=user["created_at"],
+            kode_satker=_kode_satker_akun(user),
         )
     )
+
+def _kode_satker_akun(user: dict) -> str:
+    """Ikatan satker ASLI akun ("" = super-admin pusat).
+
+    Bila suatu saat dokumen user yang sampai di sini sudah disuntik "Satker
+    Aktif" (act-as super-admin), kirim kode ASLI-nya — kalau tidak, frontend
+    mengira super-admin itu admin satker dan menyembunyikan pemilih Satker
+    Aktif, sehingga ia tak bisa kembali ke "Semua Satker".
+    """
+    if "_kode_satker_asli" in user:
+        return str(user.get("_kode_satker_asli") or "").strip()
+    return str(user.get("kode_satker") or "").strip()
+
 
 @auth_router.get("/auth/me", response_model=UserResponse)
 async def get_me(authorization: str = Header(None)):
@@ -598,7 +612,8 @@ async def get_me(authorization: str = Header(None)):
         name=user["name"],
         role=user_role,
         is_active=user.get("is_active", True),
-        created_at=user["created_at"]
+        created_at=user["created_at"],
+        kode_satker=_kode_satker_akun(user),
     )
 
 # ── PREFERENSI KAMERA (melekat pada AKUN, bukan perangkat) ─────────────────

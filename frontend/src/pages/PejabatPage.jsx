@@ -14,6 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Lipatan from "@/components/ui/Lipatan";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { authMediaUrl } from "@/lib/mediaUrl";
+import { isSuperAdminPusat } from "@/lib/satkerAktif";
 // Lazy: kanvas TTD (react-signature-canvas + signature_pad) hanya dimuat saat
 // panel bubuh TTD dibuka (ttdUntuk), bukan di chunk awal halaman Pejabat.
 const SignatureCapture = lazy(() => import("@/components/ttd/SignatureCapture"));
@@ -49,7 +50,7 @@ export default function PejabatPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   // Super-admin = admin tanpa kode_satker (selaras backend kode_satker_user):
   // ia melihat pejabat lintas-satker → butuh pembeda & pemilih satker.
-  const isSuperAdmin = isAdmin && !String(user?.kode_satker || "").trim();
+  const isSuperAdmin = isSuperAdminPusat(user);
   const [items, setItems] = useState([]);
   const [peranRef, setPeranRef] = useState([]);
   const [statusRef, setStatusRef] = useState([]);
