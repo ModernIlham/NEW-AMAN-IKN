@@ -792,7 +792,10 @@ async def export_persediaan(_user: dict = Depends(require_user)):
 
     buf = io.StringIO()
     w = csv_module.writer(buf)
-    w.writerow(_TEMPLATE_HEADERS + ["stok", "nilai"])
+    # `_TEMPLATE_HEADERS` = TUPLE registry. Dulu `tuple + list` di sini
+    # melempar TypeError sehingga endpoint ini 500 di SETIAP panggilan
+    # (regresi PR #1082) tanpa satu test pun menagih.
+    w.writerow([*_TEMPLATE_HEADERS, "stok", "nilai"])
     # Scope satker (REVIEW-9 R3): tanpa filter, user satker B mengunduh
     # seluruh master (stok + nilai) satker lain — data yang per item justru
     # ditolak 403 — dan roundtrip ekspor→impor menduplikasinya ke satker B.
@@ -800,11 +803,11 @@ async def export_persediaan(_user: dict = Depends(require_user)):
     async for it in db.persediaan.find(
             scope_query_field_satker(_user), {"_id": 0}
             ).sort([("nama_barang", 1), ("kode_barang", 1)]):
+        # Kolom diturunkan dari registry yang SAMA dengan header — field
+        # baru tak bisa lagi membuat kolom data bergeser dari judulnya.
         w.writerow([
-            it.get("kode_barang"), it.get("nup"), it.get("nama_barang"),
-            it.get("merk"), it.get("tipe"), it.get("satuan"), it.get("lokasi"),
-            it.get("batas_kritis", 0), it.get("expired_default"),
-            it.get("tahun_anggaran"), it.get("keterangan"),
+            *(it.get(f, 0) if f == "batas_kritis" else it.get(f)
+              for f in _TEMPLATE_HEADERS),
             int(it.get("stok", 0) or 0),
             int(nilai_persediaan_dari_batches(it.get("batches"))),
         ])
