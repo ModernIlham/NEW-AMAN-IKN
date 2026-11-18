@@ -199,3 +199,28 @@ def test_bulk_delete_merekonsiliasi_receipt_sebelum_bukti_hilang(lingkungan):
         assert receipt["results"] == [result]
         assert await dbx.assets.count_documents({"id": "a1"}) == 0
     _jalan(scenario())
+
+
+# Tinjauan mutu Nov 2026 (F8): dialog "Hapus Semua" menampilkan jumlah aset
+# TERFILTER (mis. 248) sementara endpoint menghapus SELURUH kegiatan (600).
+# `jumlah_konfirmasi` membuat server menolak konfirmasi yang tak sesuai.
+
+def test_bulk_delete_jumlah_konfirmasi_salah_409_tanpa_menghapus(lingkungan):
+    dbx, blob, jejak = lingkungan
+    _jalan(_seed(dbx))
+    with pytest.raises(HTTPException) as e:
+        _jalan(rex.bulk_delete_assets.__wrapped__(_Req(), "keg-1", jumlah_konfirmasi=1, _admin=ADMIN))
+    assert e.value.status_code == 409
+    assert "sekarang 2" in e.value.detail and "bukan 1" in e.value.detail
+    assert _jalan(dbx.assets.count_documents({"activity_id": "keg-1"})) == 2
+    assert {"foto-1", "foto-2", "foto-3", "dok-bast", "dok-lampiran"} <= blob
+    assert not any(j["action"] == "bulk_delete" for j in jejak), "jejak niat hapus tak boleh ditulis"
+
+
+def test_bulk_delete_jumlah_konfirmasi_cocok_menghapus(lingkungan):
+    dbx, blob, _ = lingkungan
+    _jalan(_seed(dbx))
+    r = _jalan(rex.bulk_delete_assets.__wrapped__(_Req(), "keg-1", jumlah_konfirmasi=2, _admin=ADMIN))
+    assert r["deleted"] == 2
+    assert _jalan(dbx.assets.count_documents({"activity_id": "keg-1"})) == 0
+    assert _jalan(dbx.assets.count_documents({"activity_id": "keg-2"})) == 1

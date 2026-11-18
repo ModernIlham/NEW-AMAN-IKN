@@ -1938,7 +1938,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         <ScrollToTop scrollRef={mainContentRef} />
       </div>
 
-      <BulkDeleteDialog open={dialogs.bulkDelete} onClose={v => setDialog('bulkDelete', v)} activityId={activity?.id} activityName={activity?.nama_kegiatan} totalItems={totalItems} onSuccess={() => refreshData(1)} />
+      <BulkDeleteDialog open={dialogs.bulkDelete} onClose={v => setDialog('bulkDelete', v)} activityId={activity?.id} activityName={activity?.nama_kegiatan} totalItems={totalItems} filterAktif={activeFilterCount > 0 || !!searchInput.trim()} onSuccess={() => refreshData(1)} />
       <CategoryManagerDialog open={dialogs.categoryManager} onClose={v => setDialog('categoryManager', v)} categories={categories} onCategoriesChanged={doFetchCategories} />
       <CetakStikerDialog open={stikerOpen} onOpenChange={setStikerOpen}
         buildParams={buildStikerParams} totalItems={totalItems} pageAssets={assets}

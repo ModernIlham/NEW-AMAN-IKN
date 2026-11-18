@@ -306,7 +306,8 @@ const DashboardToolbar = memo(function DashboardToolbar({
                 className={`h-8 text-xs flex-shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 ${tampil("hapus") ? "" : "px-2"}`}
                 onClick={() => openDialog('bulkDelete')}
                 disabled={assetsCount === 0}
-                title="Hapus Semua aset yang terfilter"
+                title="Hapus seluruh aset kegiatan ini (tidak mengikuti filter)"
+                aria-label="Hapus seluruh aset kegiatan ini"
               >
                 <Trash2 className={`w-3 h-3 ${tampil("hapus") ? "mr-1" : ""}`} />{tampil("hapus") && <span>Hapus Semua</span>}
               </Button>
