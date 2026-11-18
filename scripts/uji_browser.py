@@ -103,8 +103,25 @@ class Browser:
                 raise ChromiumBelumSiap("Chromium tidak siap")
             time.sleep(.1)
         port = active.read_text().splitlines()[0]
-        pages = HTTP.get(f"http://127.0.0.1:{port}/json/list", timeout=5, allow_redirects=False).json()
-        page = next(page for page in pages if page["type"] == "page")
+        # DevToolsActivePort ada BUKAN berarti DevTools sudah menjawab: di
+        # runner sibuk `GET /json/list` pernah melewati 5 detik (CI PR #1136,
+        # stage browser_startup, nol pemeriksaan). ReadTimeout itu dulu lolos
+        # dari coba-ulang. Kini sama dengan "belum siap": ditanya ulang sampai
+        # tenggat yang sama, lalu ChromiumBelumSiap → penyalaan diulang dengan
+        # profil baru. Galat lain (biner hilang dsb.) tetap tidak dicoba ulang.
+        page = None
+        while page is None:
+            try:
+                pages = HTTP.get(f"http://127.0.0.1:{port}/json/list", timeout=5,
+                                 allow_redirects=False).json()
+                page = next((p for p in pages if p.get("type") == "page"), None)
+            except (requests.RequestException, ValueError):
+                page = None
+            if page is None:
+                if self.process.poll() is not None or time.monotonic() > deadline:
+                    self.close()
+                    raise ChromiumBelumSiap("DevTools Chromium belum menjawab")
+                time.sleep(.2)
         self.ws = connect(page["webSocketDebuggerUrl"], origin="http://localhost",
                           open_timeout=10, max_size=30 * 1024 * 1024)
         self.sequence = 0

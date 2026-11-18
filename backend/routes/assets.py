@@ -1236,6 +1236,18 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
             # keadaan yang paling tak sanggup menanggung respons multi-MB.
             return await _respons_aset_terverifikasi(_strip_media(
                 {k: v for k, v in _sudah.items() if k in AssetResponse.model_fields}), _user, replay=True)
+    # Aset WAJIB menempel pada kegiatan. Tanpa `activity_id` dulu tetap
+    # tersimpan (200) sebagai data YATIM tanpa satker: tak terjangkau laporan
+    # mana pun, ditolak 403 oleh setiap pembaca ("kegiatan induk tidak
+    # ditemukan"), dan memblokir kombinasi kode+NUP aset yatim berikutnya.
+    # Urutan disengaja: SETELAH jalur replay (antrean luring lama tetap
+    # menerima aset yang sudah ada) dan SEBELUM reservasi kunci idempotensi
+    # (agar penolakan ini tidak meninggalkan kunci "pending" menggantung).
+    if not str(getattr(asset, "activity_id", "") or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Aset wajib dicatat pada sebuah kegiatan inventarisasi — pilih kegiatan terlebih dahulu.")
+    if idem_key:
         # Atomically claim the key so concurrent duplicates can't both run.
         _idem = await reserve_idempotency_key(idem_key)
         if _idem == "done":

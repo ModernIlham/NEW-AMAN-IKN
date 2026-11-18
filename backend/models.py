@@ -22,6 +22,11 @@ class UserResponse(BaseModel):
     role: str = "user"
     is_active: bool = True
     created_at: str
+    # Ikatan satker AKUN ("" = admin PUSAT/super-admin). WAJIB ikut dikirim:
+    # frontend menentukan super-admin dari `role == admin && !kode_satker`,
+    # sehingga tanpa field ini SETIAP admin satker dianggap super-admin —
+    # tab Sistem, Satker Aktif, dan setelan universal tampil lalu ditolak 403.
+    kode_satker: str = ""
 
 class TokenResponse(BaseModel):
     access_token: str

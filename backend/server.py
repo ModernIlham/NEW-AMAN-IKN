@@ -43,6 +43,14 @@ logger = logging.getLogger(__name__)
 import reportlab.rl_config as _rl_config
 _rl_config.trustedSchemes = ["data", "file"]
 
+# ReportLab: satu sel tabel yang lebih tinggi dari satu halaman (mis. nama
+# barang ±2.500 karakter) dulu menggagalkan SELURUH laporan dengan 500. Bila
+# itu terjadi, dokumen kini dibangun ulang dengan baris terbelah antarhalaman;
+# laporan normal tidak berubah (lihat pdf_tata_letak_tahan.py).
+import pdf_tata_letak_tahan  # noqa: E402
+from reportlab.platypus.doctemplate import LayoutError as _LayoutError  # noqa: E402
+pdf_tata_letak_tahan.pasang()
+
 # Initialize FastAPI
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -50,6 +58,16 @@ api_router = APIRouter(prefix="/api")
 # Rate Limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+async def _tata_letak_pdf_gagal(_request, exc):
+    """Sisa LayoutError (penyebab di luar tabel) → 422 berpesan jelas, bukan
+    "Internal Server Error" tanpa petunjuk apa pun bagi operator."""
+    logging.getLogger("server").warning("PDF gagal ditata: %s", str(exc)[:300])
+    return JSONResponse(status_code=422, content={"detail": pdf_tata_letak_tahan.PESAN_422})
+
+
+app.add_exception_handler(_LayoutError, _tata_letak_pdf_gagal)
 
 # GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)

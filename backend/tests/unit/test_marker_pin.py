@@ -177,7 +177,9 @@ def test_create_put_menyimpan_desain_dan_klien_lama_tidak_menghapus(dbx, monkeyp
     user = {"username": "uji", "role": "admin", "kode_satker": ""}
     async def run():
         val = desain(mode="custom", image=png(metadata=True))
-        fields = {"asset_code": "3", "asset_name": "Meja", "category": "Dummy", "NUP": "1"}
+        # activity_id wajib sejak aset tanpa kegiatan ditolak (data yatim).
+        fields = {"asset_code": "3", "asset_name": "Meja", "category": "Dummy", "NUP": "1",
+                  "activity_id": "keg-uji"}
         r = await ra.create_asset(AssetCreate(**fields, marker_pin=val), Req(), user)
         assert json.loads(r.marker_pin)["mode"] == "custom"
         assert "metadata pribadi" not in base64.b64decode(json.loads(r.marker_pin)["image"].split(",")[1]).decode('latin1')

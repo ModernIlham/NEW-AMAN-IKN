@@ -297,3 +297,55 @@ def test_langkah_ringkasan_browser_tetap_jalan_saat_uji_gagal():
     alur = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     langkah = alur.split("- name: Ringkasan browser tanpa fixture", 1)[1].split("- name:", 1)[0]
     assert "if: ${{ !cancelled() }}" in langkah
+
+
+# CI PR #1136 (18 Nov 2026): berkas DevToolsActivePort sudah ada, tetapi
+# `GET /json/list` Chromium belum menjawab dalam 5 detik di runner yang sibuk.
+# `requests.ReadTimeout` itu lolos dari logika coba-ulang (yang hanya
+# menangkap ChromiumBelumSiap) sehingga uji berhenti di `browser_startup`
+# dengan nol pemeriksaan — padahal itu jenis "belum siap" yang sama.
+
+def _chromium_palsu(tmp_path):
+    """Biner 'Chromium' yang langsung menulis DevToolsActivePort lalu diam."""
+    palsu = tmp_path / "chromium-palsu"
+    palsu.write_text(
+        "#!/bin/sh\n"
+        "for a in \"$@\"; do case \"$a\" in --user-data-dir=*) d=\"${a#--user-data-dir=}\";; esac; done\n"
+        "printf '9\\n/devtools/browser/palsu\\n' > \"$d/DevToolsActivePort\"\n"
+        "exec sleep 60\n")
+    palsu.chmod(0o755)
+    return str(palsu)
+
+
+def test_devtools_lambat_menjawab_dianggap_belum_siap_lalu_dicoba_ulang(tmp_path, monkeypatch):
+    browser = script("uji_browser")
+    import requests
+    monkeypatch.setattr(browser, "TENGGAT_CHROMIUM_SIAP", 1)
+    panggilan = []
+    def lambat(*_a, **_k):
+        panggilan.append(1)
+        raise requests.ReadTimeout("DevTools belum menjawab")
+    monkeypatch.setattr(browser.HTTP, "get", lambat)
+    with pytest.raises(browser.ChromiumBelumSiap):
+        browser.Browser(_chromium_palsu(tmp_path))
+    # Dicoba berulang sampai tenggat, pada KEDUA percobaan penyalaan.
+    assert len(panggilan) >= 2 * browser.PERCOBAAN_CHROMIUM
+
+
+def test_devtools_menjawab_setelah_sempat_lambat(tmp_path, monkeypatch):
+    browser = script("uji_browser")
+    import requests
+    jawaban = iter([requests.ReadTimeout("lambat"), [], [{"type": "page", "webSocketDebuggerUrl": "ws://palsu"}]])
+    def get(*_a, **_k):
+        hasil = next(jawaban)
+        if isinstance(hasil, Exception):
+            raise hasil
+        return SimpleNamespace(json=lambda: hasil)
+    monkeypatch.setattr(browser.HTTP, "get", get)
+    monkeypatch.setattr(browser, "connect", lambda url, **_k: SimpleNamespace(url=url, close=lambda: None))
+    monkeypatch.setattr(browser.Browser, "call", lambda self, *_a, **_k: {})
+    b = browser.Browser(_chromium_palsu(tmp_path))
+    try:
+        assert b.ws.url == "ws://palsu"
+    finally:
+        b.close()

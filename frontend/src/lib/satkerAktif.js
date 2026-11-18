@@ -39,11 +39,18 @@ export function setSatkerAktif(kode) {
 export const SATKER_AKTIF_EVENT = EVT;
 
 /** Super-admin PUSAT = role admin DAN kode_satker kosong. Hanya mereka yang
- *  boleh memakai Satker Aktif (backend mengabaikan header untuk user lain). */
+ *  boleh memakai Satker Aktif (backend mengabaikan header untuk user lain).
+ *
+ *  `kode_satker` TIDAK ADA (undefined) = identitas belum diketahui → BUKAN
+ *  super-admin. Respons login lama tak membawa field ini, sehingga dulu
+ *  setiap admin satker dianggap super-admin (tab Sistem, Satker Aktif, dan
+ *  setelan universal tampil lalu ditolak 403). Sesi lama disegarkan dari
+ *  /auth/me saat aplikasi dibuka (App.js). */
 export function isSuperAdminPusat(user) {
+  if (!user || user.kode_satker === undefined) return false;
   return (
-    (user?.role === "admin" || user?.role === "super_admin") &&
-    !String(user?.kode_satker || "").trim()
+    (user.role === "admin" || user.role === "super_admin") &&
+    !String(user.kode_satker || "").trim()
   );
 }
 

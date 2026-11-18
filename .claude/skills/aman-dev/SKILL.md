@@ -363,8 +363,9 @@ status modul berubah.
   pemakaian nama yang sama SEBELUM baris import di fungsi yang sama =
   `UnboundLocalError` di runtime (lolos compileall!). Contoh nyata: `_esc`
   di PDF BA Pemusnahan membuat endpoint 500 permanen.
-- Nomor entri CHANGELOG `[#N]` = **nomor PR + 2** (bergeser sejak `[#276]`)
-  — catatan resminya ada di kepala CHANGELOG.md.
+- Nomor entri CHANGELOG `[#N]` = **nomor PR + 9** (dulu +2; terus bergeser
+  karena nomor PR hangus) — SELALU baca catatan resmi di kepala CHANGELOG.md
+  sebelum menulis entri, jangan mengandalkan angka di sini.
 - `rekap`/`agregasi` yang membaca `jumlah` jurnal: field ABSEN = 1 unit,
   tapi `jumlah: 0` eksplisit harus dihormati (jangan pakai `or 1`).
 

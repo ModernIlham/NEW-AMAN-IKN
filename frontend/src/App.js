@@ -22,7 +22,7 @@ import PusatUnduhan from "@/components/PusatUnduhan";
 import { clearAllSnapshots, ensureSnapshotOwner } from "@/lib/offlineSnapshot";
 import axios from "axios";
 import { TENGGAT_BAKA } from "@/lib/muatAndal";
-import { terapkanHeaderSatker } from "./lib/satkerAktif";
+import { isSuperAdminPusat, terapkanHeaderSatker } from "./lib/satkerAktif";
 import SatkerAktifBar from "@/components/SatkerAktifBar";
 import { HalamanLazy } from "@/components/BatasGalat";
 
@@ -87,6 +87,38 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 // Auto-logout after this long without any user interaction. 30 minutes is the
 // common industry default for business apps (well under the 24h token TTL).
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
+// Segarkan identitas sesi tersimpan dari /auth/me (latar, best-effort).
+// Objek user di localStorage bisa berasal dari rilis lama yang belum membawa
+// `kode_satker`; tanpa field itu antarmuka tak bisa membedakan admin satker
+// dari super-admin pusat (lihat isSuperAdminPusat). Penyegaran ini juga
+// menangkap perubahan peran/ikatan satker oleh admin sejak login terakhir.
+// Gagal jaringan (offline lapangan) diabaikan: sesi tersimpan tetap dipakai.
+async function segarkanIdentitas(token, setUser) {
+  try {
+    const r = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 10000,
+    });
+    const segar = r?.data;
+    if (!segar?.id) return;
+    // Token sudah berganti (logout/login lain) selama permintaan berjalan.
+    if (localStorage.getItem('token') !== token) return;
+    let lama = {};
+    try { lama = JSON.parse(localStorage.getItem('user') || '{}') || {}; } catch { lama = {}; }
+    if (lama.id && lama.id !== segar.id) return;
+    // `kode_satker` hanya ikut bila server memang mengirimnya — memaksa ""
+    // saat field absen justru menandai akun sebagai super-admin pusat.
+    const gabung = { ...lama, ...segar };
+    localStorage.setItem('user', JSON.stringify(gabung));
+    // "Satker Aktif" hanya sah untuk super-admin; sisa pilihan dari masa
+    // ketika admin satker keliru diberi pemilih itu jangan ikut terkirim.
+    if (!isSuperAdminPusat(gabung)) localStorage.removeItem('satker_aktif');
+    setUser(gabung);
+  } catch {
+    /* offline / server tak terjangkau — pakai sesi tersimpan */
+  }
+}
 
 function InternalApp() {
   const [user, setUser] = useState(null);
@@ -229,6 +261,7 @@ function InternalApp() {
     if (token && userData) {
       try {
         setUser(JSON.parse(userData));
+        segarkanIdentitas(token, setUser);
       } catch (error) {
         console.error("Error parsing user data:", error);
         localStorage.removeItem('token');
@@ -887,7 +920,9 @@ function InternalApp() {
           tumpukan ini: ia kini gelembung mengambang ber-posisi sendiri yang
           menempel di dinding kiri/kanan sesuai pilihan pengguna. */}
       <div className="fixed bottom-4 right-4 z-[90] flex flex-col items-end gap-2">
-        <BackgroundTaskBar isAdmin={user?.role === "admin"} />
+        {/* Job backup/restore = operasi seluruh-DB → backend require_super_admin;
+            admin satker dulu ikut mem-poll lalu menerima 403 di tiap halaman. */}
+        <BackgroundTaskBar isAdmin={isSuperAdminPusat(user)} />
       </div>
       <PusatUnduhan aktif={!!user} />
     </div>
