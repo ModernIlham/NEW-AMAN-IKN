@@ -366,6 +366,7 @@ export default function ModuleHomePage({ user, onLogout, dark, toggleDark, onSho
             type="button"
             onClick={onLogout}
             className="h-9 px-3 rounded-lg border border-border text-foreground/80 text-xs font-medium flex items-center gap-1.5 hover:bg-muted flex-shrink-0"
+            aria-label="Keluar"
             data-testid="module-home-logout"
           >
             <LogOut className="w-4 h-4" />

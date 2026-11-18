@@ -212,6 +212,7 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                 type="checkbox"
                 checked={selected || false}
                 readOnly
+                aria-label={`Pilih aset ${asset.asset_code || asset.asset_name || ""}`.trim()}
                 className="w-4 h-4 rounded cursor-pointer accent-blue-600"
               />
             </div>

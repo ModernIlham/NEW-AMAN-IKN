@@ -22,7 +22,7 @@ const DashboardHeader = memo(({
   <header className="bg-card/95 backdrop-blur-sm border-b border-border px-3 sm:px-4 py-2.5 sticky top-0 z-40 print:hidden" data-testid="dashboard-header">
     <div className="flex items-center justify-between gap-2 min-w-0">
       <div className="flex items-center gap-2 min-w-0 overflow-hidden flex-shrink">
-        <Button variant="ghost" size="sm" onClick={onBack} className="h-8 w-8 p-0 flex-shrink-0 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-180">
+        <Button variant="ghost" size="sm" onClick={onBack} aria-label="Kembali ke daftar kegiatan" title="Kembali ke daftar kegiatan" className="h-8 w-8 p-0 flex-shrink-0 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-180">
           <ArrowLeft className="w-4 h-4 text-blue-600 dark:text-blue-400" />
         </Button>
         <div className="flex items-center gap-2 min-w-0 overflow-hidden">

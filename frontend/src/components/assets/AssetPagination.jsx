@@ -18,7 +18,7 @@ const AssetPagination = memo(function AssetPagination({
             <b>{((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, totalItems)}</b> / <b>{totalItems.toLocaleString('id-ID')}</b>
           </span>
           <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
-            <SelectTrigger className="w-16 h-6 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-16 h-6 text-xs" aria-label="Jumlah baris per halaman"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="10">10</SelectItem>
               <SelectItem value="25">25</SelectItem>
@@ -30,10 +30,10 @@ const AssetPagination = memo(function AssetPagination({
           </Select>
         </div>
         <div className="flex items-center gap-0.5">
-          <Button variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => goToPage(1)} disabled={currentPage <= 1} data-testid="pagination-first">
+          <Button variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => goToPage(1)} disabled={currentPage <= 1} aria-label="Halaman pertama" data-testid="pagination-first">
             <ChevronsLeft className="w-3 h-3" />
           </Button>
-          <Button variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} data-testid="pagination-prev">
+          <Button variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} aria-label="Halaman sebelumnya" data-testid="pagination-prev">
             <ChevronLeft className="w-3 h-3" />
           </Button>
           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
@@ -55,10 +55,10 @@ const AssetPagination = memo(function AssetPagination({
               </Button>
             );
           })}
-          <Button variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages} data-testid="pagination-next">
+          <Button variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages} aria-label="Halaman berikutnya" data-testid="pagination-next">
             <ChevronRight className="w-3 h-3" />
           </Button>
-          <Button variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => goToPage(totalPages)} disabled={currentPage >= totalPages} data-testid="pagination-last">
+          <Button variant="outline" size="sm" className="h-6 w-6 p-0" onClick={() => goToPage(totalPages)} disabled={currentPage >= totalPages} aria-label="Halaman terakhir" data-testid="pagination-last">
             <ChevronsRight className="w-3 h-3" />
           </Button>
         </div>

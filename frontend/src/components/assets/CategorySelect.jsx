@@ -153,6 +153,7 @@ const CategorySelect = ({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-label="Filter kategori"
           className={`justify-between ${isCompact ? "h-7 text-[11px] px-2" : "h-8 text-xs"} ${className}`}
           data-testid="category-select-trigger"
         >
