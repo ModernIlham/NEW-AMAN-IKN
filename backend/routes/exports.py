@@ -10,7 +10,7 @@ import os
 import base64
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Annotated, List, Optional
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Request, Depends
 from auth_utils import (create_docfile_token, require_admin, require_user,
@@ -262,9 +262,21 @@ async def get_asset_doc_file(asset_id: str, item_idx: int, file_type: str, file_
 
 @exports_router.delete("/assets/bulk-delete/{activity_id}")
 @limiter.limit("3/minute")
-async def bulk_delete_assets(request: Request, activity_id: str, _admin: dict = Depends(require_admin)):
+async def bulk_delete_assets(request: Request, activity_id: str,
+                             jumlah_konfirmasi: Annotated[Optional[int], Query(ge=0)] = None,
+                             _admin: dict = Depends(require_admin)):
     """Delete all assets for a specific activity (admin only — hapus permanen
-    massal setara/di atas hapus satu aset yang juga admin-only)."""
+    massal setara/di atas hapus satu aset yang juga admin-only).
+
+    `jumlah_konfirmasi` (opsional): jumlah aset yang DILIHAT & dikonfirmasi
+    operator. Bila diisi dan tidak sama dengan jumlah di server → 409 tanpa
+    menghapus apa pun. Tinjauan mutu Nov 2026 membuktikan dialog lama
+    menampilkan jumlah aset TERFILTER (mis. 248) sementara endpoint ini
+    menghapus SELURUH kegiatan (600) — operator mengonfirmasi angka yang
+    salah. Penjaga ini menolak konfirmasi yang tidak sesuai kenyataan,
+    termasuk bila rekan menambah aset di antara dialog dibuka dan dikonfirmasi.
+    Endpoint ini TIDAK mengikuti filter daftar; tanpa parameter perilakunya
+    tetap seperti dulu (kompatibel mundur)."""
     activity = await db.inventory_activities.find_one({"id": activity_id})
     if not activity:
         raise HTTPException(status_code=404, detail="Kegiatan inventarisasi tidak ditemukan")
@@ -274,6 +286,10 @@ async def bulk_delete_assets(request: Request, activity_id: str, _admin: dict = 
         raise HTTPException(status_code=423, detail="Kegiatan sudah disahkan dan terkunci")
 
     count = await db.assets.count_documents({"activity_id": activity_id})
+    if jumlah_konfirmasi is not None and jumlah_konfirmasi != count:
+        raise HTTPException(status_code=409, detail=(
+            f"Jumlah aset kegiatan ini sekarang {count}, bukan {jumlah_konfirmasi} seperti yang "
+            "dikonfirmasi. Tidak ada yang dihapus — buka ulang dialog untuk melihat jumlah terbaru."))
     if count == 0:
         return {"message": "Tidak ada aset untuk dihapus", "deleted": 0}
     

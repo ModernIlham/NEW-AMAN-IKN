@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1147] Inventarisasi — "Hapus Semua" kini menampilkan jumlah yang benar dan meminta nama kegiatan diketik — 2026-11-18
+
+- Perbaikan (kehilangan data): saat filter atau pencarian aktif, dialog
+  "Hapus Semua" dulu menampilkan jumlah aset yang **sedang tampil**
+  (mis. 248) padahal yang dihapus adalah **seluruh** aset kegiatan (mis.
+  600) beserta foto dan dokumennya. Tooltip tombolnya pun keliru menyebut
+  "aset yang terfilter". Kini dialog selalu menampilkan jumlah seluruh aset
+  kegiatan dari server, dan bila filter aktif ada peringatan bahwa filter
+  tidak membatasi penghapusan.
+- Keamanan data: penghapusan baru bisa dijalankan setelah **nama kegiatan
+  diketik** di dialog. Server menolak penghapusan bila jumlah aset berubah
+  sejak dialog dibuka (mis. rekan menambah aset) — tidak ada yang terhapus
+  dan dialog menampilkan jumlah terbaru.
+
 ## [#1146] Inventarisasi — data kegiatan disiapkan offline otomatis di HP; Mode Inventarisasi diingat — 2026-11-18
 
 - Fitur: di HP/tablet (layar sentuh atau ≤1023px), data kegiatan kini
