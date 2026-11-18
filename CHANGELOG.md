@@ -18,6 +18,31 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1145] Perbaikan P1 tinjauan mutu — ekspor persediaan, identitas satker, PDF tahan isian panjang — 2026-11-18
+
+- Perbaikan: **Ekspor Master Persediaan** kembali berfungsi. Sejak PR #1082
+  tombolnya selalu gagal 500 (`tuple + list` pada header CSV); kolom data
+  kini diturunkan dari registry yang sama dengan header.
+- Perbaikan: admin satker tidak lagi diperlakukan antarmuka sebagai
+  super-admin pusat. Respons `/auth/login` & `/auth/me` kini membawa
+  `kode_satker`; sebelumnya setiap admin satker melihat tab Sistem, tirai
+  Satker Aktif, dan setelan universal yang lalu ditolak 403, serta kunci
+  cache offline memakai satker yang salah. Sesi lama disegarkan otomatis
+  dari `/auth/me` saat aplikasi dibuka (gagal jaringan diabaikan).
+- Perbaikan: satu isian sangat panjang (mis. nama barang ±2.500 karakter)
+  tidak lagi menggagalkan Ekspor PDF aset, Daftar Pemegang PDF, dan bagian
+  DBHI di LHI. Laporan normal tidak berubah; hanya bila sel tabel melebihi
+  satu halaman, dokumen dibangun ulang dengan baris terbelah antarhalaman
+  (`backend/pdf_tata_letak_tahan.py`). Sisa kegagalan tata letak dijawab
+  422 berpesan jelas, bukan "Internal Server Error".
+- Perbaikan: aset tanpa kegiatan ditolak (400) — dulu tersimpan sebagai
+  data yatim tanpa satker yang tak terjangkau laporan mana pun.
+- UI: tab peramban kini berjudul "AMAN · Manajemen Aset Negara", bahasa
+  halaman `id` (dulu `en`), dan sisa skrip pihak ketiga Emergent dihapus.
+  Setelan universal tampil baca-saja (dengan penjelasan) bagi admin satker.
+- Uji baru backend (ekspor persediaan, `kode_satker` login, penataan PDF,
+  aset wajib berkegiatan) dan frontend (`isSuperAdminPusat`).
+
 ## [#1144] Inventarisasi — lencana peringatan oranye kini membuka daftar "Perlu Tindakan" — 2026-11-16
 
 - Fitur: lencana oranye ⚠ di header kegiatan sekarang bisa diketuk dan
