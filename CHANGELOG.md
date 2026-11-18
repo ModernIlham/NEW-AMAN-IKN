@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1148] Aksesibilitas — tombol ikon bernama, label form tertaut, kegiatan bisa dibuka dengan keyboard — 2026-11-18
+
+- Perbaikan: kegiatan inventarisasi kini bisa dibuka dengan **keyboard**
+  (Tab ke judul kegiatan, lalu Enter). Sebelumnya kartu kegiatan hanya bisa
+  diklik dengan mouse.
+- Perbaikan: tombol yang hanya berupa ikon kini punya nama untuk pembaca
+  layar — tampil/sembunyi password, Kembali, Keluar (di HP), paginasi, tab
+  form aset di HP, kelola kategori, dan kotak pilih kartu aset.
+- Perbaikan: judul kolom pada form aset (nama, serial, brand, model, harga,
+  catatan, pengguna, unit, kondisi, status, stiker, dll.) kini tertaut ke
+  isiannya, sehingga mengetuk judul memfokuskan isian dan pembaca layar
+  membacakan namanya.
+- Tidak ada perubahan tampilan bagi pengguna mouse/sentuh.
+
 ## [#1147] Inventarisasi — "Hapus Semua" kini menampilkan jumlah yang benar dan meminta nama kegiatan diketik — 2026-11-18
 
 - Perbaikan (kehilangan data): saat filter atau pencarian aktif, dialog
