@@ -19,6 +19,9 @@ export function buatPemuatDaftarAset(konteks) {
     setAssets, setTotalItems, setTotalPages, setCurrentPage, setStats,
     setMobileAssets, setMobileCurrentPage, setMobileFirstPage, setMobileLoading,
     setOfflineLastSync, setOfflineServed, setLoadingMessage, sebelumGantiJendela,
+    // Opsional: tanda "offline & kegiatan ini belum punya data tersimpan"
+    // agar layar tidak menampilkan "Belum ada aset" yang menyesatkan.
+    setOfflineTanpaData = () => {},
   } = konteks;
   const commitMobilePage = (page, rows, replace = false) => {
     if (!mobilePageCache) return false;
@@ -99,6 +102,7 @@ export function buatPemuatDaftarAset(konteks) {
       }
       setOfflineLastSync(meta?.lastSync || null);
       setOfflineServed(true);
+      setOfflineTanpaData(false);
       setLoadingMessage(`Mode offline — menampilkan ${merged.length} dari ${totalFiltered} aset tersimpan`);
       // Kembalikan baris halaman ini (append: hanya slice baru) agar pemanggil
       // seperti loadMoreMobile bisa membuka aset pertama halaman berikutnya
@@ -178,6 +182,7 @@ export function buatPemuatDaftarAset(konteks) {
         // jendela infinite-scroll + posisi scroll HP tetap; baris yang baru
         // disimpan sudah diperbarui optimis + via onRowSynced.
         setOfflineServed(false); // live data on screen again
+        setOfflineTanpaData(false);
         setLoadingMessage(`Berhasil memuat ${newItems.length} dari ${r.data.total || 0} aset`);
         // Kembalikan baris halaman ini agar pemanggil (goToPage → alur simpan-
         // lanjut lintas halaman mode list/tabel) bisa membuka aset pertamanya.
@@ -196,8 +201,9 @@ export function buatPemuatDaftarAset(konteks) {
             setLoadingMessage("Data offline kedaluwarsa — hubungkan internet untuk sinkron ulang");
           } else if (!isOnlineRef.current || !navigator.onLine) {
             // Offline with no snapshot yet — actionable message, not a generic error
-            toast.error("Anda sedang offline dan belum ada data tersimpan untuk kegiatan ini. Aktifkan Mode Inventarisasi saat online untuk menyiapkan data offline.", { id: "offline-no-snapshot", duration: 7000 });
+            toast.error("Anda sedang offline dan data kegiatan ini belum tersimpan di perangkat. Buka kegiatan ini sekali saat online (di HP data disiapkan otomatis; di komputer aktifkan Mode Inventarisasi).", { id: "offline-no-snapshot", duration: 7000 });
             setLoadingMessage("Mode offline — data tersimpan belum tersedia");
+            setOfflineTanpaData(true);
           } else {
             toast.error("Gagal memuat data");
           }
@@ -287,6 +293,7 @@ export function buatPemuatDaftarAset(konteks) {
       setTotalItems(awal.total || 0);
       setTotalPages(totalPg);
       setOfflineServed(false);
+      setOfflineTanpaData(false);
       return desktop;
     } catch {
       if (!penjaga.berlaku(tiket)) return HASIL_USANG;

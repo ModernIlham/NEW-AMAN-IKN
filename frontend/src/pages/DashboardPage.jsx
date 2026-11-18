@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback, memo, useRedu
 import {
   Package, Plus, X, ChevronDown, ChevronUp, Loader2, Star,
   Users, PanelLeftClose, PanelLeftOpen, Lock, Pen, CheckSquare,
-  BarChart3, ClipboardList, Layers,
+  BarChart3, ClipboardList, Layers, WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -70,6 +70,7 @@ import { useRowLocking } from "@/hooks/useRowLocking";
 import { useAssetFilters } from "@/hooks/useAssetFilters";
 import { buatCacheHalamanAset } from "@/lib/cacheHalamanAset";
 import { buatPemuatDaftarAset } from "@/lib/pemuatDaftarAset";
+import { bacaModeInventarisasi, perluSiapOfflineOtomatis, simpanModeInventarisasi } from "@/lib/siapOffline";
 import { HASIL_USANG, usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
 import { useOperasiBatch } from "@/hooks/useOperasiBatch";
 import { ringkasBatch, pesanGalatBatch, terapkanHasilBatchKeTampilan } from "@/lib/operasiBatch";
@@ -256,6 +257,38 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
   const [inventoryMode, setInventoryMode] = useState(false);
+  // Pilihan Mode Inventarisasi DIINGAT per pengguna + kegiatan (temuan F7).
+  // Dulu useState(false) murni: muat ulang di lapangan mematikan mode dan
+  // petugas harus menemukan ikon kecil itu lagi. Simpan hanya SETELAH nilai
+  // kegiatan ini dimuat — kalau tidak, nilai awal `false` menimpa pilihan
+  // tersimpan sebelum sempat terbaca.
+  //
+  // DIPULIHKAN HANYA DI LAYAR <1024px. Di layar lebar panel form "Tambah Aset
+  // Baru" selalu terbuka, dan AssetForm menawarkan dialog kamera setiap kali
+  // form aset baru terbuka dalam mode inventarisasi — memulihkan mode di sana
+  // memunculkan dialog itu di SETIAP muat ulang. Desktop tetap seperti dulu
+  // (mode mati saat dibuka); lebar layar dibaca sekali saat pemulihan, bukan
+  // dari state, agar mengubah ukuran jendela tidak menyalakan mode diam-diam.
+  const idPengguna = user?.id;
+  const idKegiatan = activity?.id;
+  const kunciMode = idPengguna && idKegiatan ? `${idPengguna}|${idKegiatan}` : null;
+  const [modeDimuatUntuk, setModeDimuatUntuk] = useState(null);
+  useEffect(() => {
+    if (!kunciMode) return;
+    let layarLebar = false;
+    try { layarLebar = !!window.matchMedia?.('(min-width: 1024px)').matches; } catch { /* abaikan */ }
+    setInventoryMode(!layarLebar && bacaModeInventarisasi(idPengguna, idKegiatan));
+    setModeDimuatUntuk(kunciMode);
+  }, [kunciMode, idPengguna, idKegiatan]);
+  useEffect(() => {
+    if (kunciMode && modeDimuatUntuk === kunciMode) {
+      simpanModeInventarisasi(idPengguna, idKegiatan, inventoryMode);
+    }
+  }, [inventoryMode, kunciMode, modeDimuatUntuk, idPengguna, idKegiatan]);
+  // Perangkat lapangan (HP/tablet, tanpa Save-Data) menyiapkan data offline
+  // OTOMATIS saat kegiatan dibuka — tak lagi bergantung pada petugas yang
+  // ingat menekan ikon. Dievaluasi sekali per mount.
+  const siapOfflineOtomatis = useMemo(() => perluSiapOfflineOtomatis(), []);
   const [groupsOpen, setGroupsOpen] = useState(false);
   // Hitungan dilaporkan panel (saat pertama dibuka) → tampil sebagai badge di
   // kontrol segmented gabungan meski panel tertutup.
@@ -382,6 +415,9 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   // offlineServed → banner "Mode offline — menampilkan data tersimpan"
   const [snapshotState, setSnapshotState] = useState(null);
   const [offlineServed, setOfflineServed] = useState(false);
+  // Offline & kegiatan ini belum punya data tersimpan di perangkat → layar
+  // kosong khusus, bukan "Belum ada aset — Tambah aset pertama" (F7).
+  const [offlineTanpaData, setOfflineTanpaData] = useState(false);
   const [offlineLastSync, setOfflineLastSync] = useState(null);
   // Ref mirrors so plain fetch functions / stale closures read fresh values
   const isOnlineRef = useRef(isOnline);
@@ -733,7 +769,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
     debouncedSearch, filterCategory, sortBy, penjaga, lingkupPermintaan,
     setAssets, setTotalItems, setTotalPages, setCurrentPage, setStats,
     setMobileAssets, setMobileCurrentPage, setMobileFirstPage, setMobileLoading,
-    setOfflineLastSync, setOfflineServed, setLoadingMessage,
+    setOfflineLastSync, setOfflineServed, setLoadingMessage, setOfflineTanpaData,
     sebelumGantiJendela: () => rekamPosisi(true),
   });
   const loadMoreMobileRef = useRef(loadMoreMobile);
@@ -770,11 +806,14 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
   refreshDataRef.current = refreshData;
 
   // === OFFLINE SNAPSHOT SYNC ===
-  // Runs when inventory mode turns ON, and again on every 'online' recovery
-  // while inventory mode is active (isOnline false→true re-runs the effect).
-  // Background + non-blocking; progress shows in InventoryProgressBar.
+  // Runs when inventory mode turns ON — or AUTOMATICALLY on field devices
+  // (siapOfflineOtomatis, F7) — and again on every 'online' recovery
+  // (isOnline false→true re-runs the effect). Background + non-blocking;
+  // progress shows in InventoryProgressBar. syncSnapshot is single-flight per
+  // activity and delta after the first run, so re-running is cheap.
+  const siapkanOffline = inventoryMode || siapOfflineOtomatis;
   useEffect(() => {
-    if (!inventoryMode || !isOnline || !activity?.id || !user?.id) return;
+    if (!siapkanOffline || !isOnline || !activity?.id || !user?.id) return;
     let cancelled = false;
     setSnapshotState({ phase: "syncing", pct: 0 });
     syncSnapshot(activity.id, user.id, (p) => {
@@ -801,7 +840,7 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
         }
       });
     return () => { cancelled = true; };
-  }, [inventoryMode, isOnline, activity?.id, user?.id]);
+  }, [siapkanOffline, isOnline, activity?.id, user?.id]);
 
   // On reconnect while the list is showing snapshot data: the save queue
   // already auto-flushes (useOptimisticQueue) and the effect above runs the
@@ -1792,7 +1831,21 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
             {mapOpen ? null : loading ? (
               <LoadingIndicator message={loadingMessage} totalItems={totalItems} pageSize={pageSize} currentPage={currentPage} />
             ) : assets.length === 0 ? (
-              (activeFilterCount > 0 || searchInput.trim()) ? (
+              (offlineTanpaData && !isOnline) ? (
+                /* Offline dan data kegiatan ini belum tersimpan di perangkat —
+                   BUKAN berarti kegiatan kosong (F7). Jangan tawarkan
+                   "Tambah aset pertama" yang menyesatkan. */
+                <div className="text-center py-16 px-4" data-testid="empty-offline-no-data">
+                  <WifiOff className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                  <p className="text-foreground/80 font-medium mb-1">Data kegiatan ini belum tersedia offline</p>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                    Daftar aset tidak bisa ditampilkan karena perangkat sedang offline dan data
+                    kegiatan ini belum pernah disimpan di sini. Hubungkan internet, lalu buka
+                    kegiatan ini sekali: di HP data disiapkan otomatis, di komputer aktifkan
+                    Mode Inventarisasi.
+                  </p>
+                </div>
+              ) : (activeFilterCount > 0 || searchInput.trim()) ? (
                 /* Filter/pencarian aktif → hasil kosong, bukan berarti belum ada aset */
                 <div className="text-center py-16" data-testid="empty-filtered">
                   <Package className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
