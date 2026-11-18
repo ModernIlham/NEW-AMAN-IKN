@@ -7,7 +7,10 @@ import {
 
 const API = (process.env.REACT_APP_BACKEND_URL || "http://localhost:8001") + "/api";
 
-export default function ReportSettingsEditor({ onClose }) {
+// `bolehUbah`: setelan ini dokumen GLOBAL yang ditulis backend lewat
+// require_super_admin. Admin satker tetap boleh MELIHATNYA (kop dasar yang
+// ditimpa kop satkernya), tetapi tanpa kontrol yang pasti ditolak 403.
+export default function ReportSettingsEditor({ onClose, bolehUbah = true }) {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -99,6 +102,12 @@ export default function ReportSettingsEditor({ onClose }) {
       <p className="text-[10px] text-muted-foreground -mt-1.5">
         Berlaku <b>global</b> untuk semua laporan & semua kegiatan (kop, logo, penanda tangan, tembusan) — bukan hanya kegiatan ini.
       </p>
+      {!bolehUbah && (
+        <p className="text-[11px] leading-snug rounded-md border border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200 px-2.5 py-1.5" data-testid="report-settings-readonly">
+          Hanya super-admin pusat yang dapat mengubah setelan universal. Kop laporan satker Anda diatur di tab <b>Per-Satker</b>.
+        </p>
+      )}
+      <fieldset disabled={!bolehUbah} className="space-y-3 min-w-0 border-0 p-0 m-0">
 
       {/* Logo Section */}
       <div className="bg-card rounded-lg border border-border p-2.5 space-y-2">
@@ -107,16 +116,16 @@ export default function ReportSettingsEditor({ onClose }) {
           {settings?.logo_url ? (
             <div className="relative">
               <img src={settings.logo_url} alt="Logo" className="w-14 h-14 object-contain rounded border border-border bg-card p-1" />
-              <button onClick={handleDeleteLogo} className="absolute -top-1 -right-1 w-4 h-4 min-w-0 min-h-0 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600" data-testid="delete-logo-btn">
+              {bolehUbah && <button onClick={handleDeleteLogo} aria-label="Hapus logo instansi" className="absolute -top-1 -right-1 w-4 h-4 min-w-0 min-h-0 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600" data-testid="delete-logo-btn">
                 <Trash2 className="w-2.5 h-2.5" />
-              </button>
+              </button>}
             </div>
           ) : (
             <div className="w-14 h-14 rounded border-2 border-dashed border-border flex items-center justify-center bg-muted">
               <ImageIcon className="w-5 h-5 text-muted-foreground" />
             </div>
           )}
-          <div>
+          {bolehUbah && <div>
             <input type="file" ref={fileInputRef} onChange={handleLogoUpload} accept="image/*" className="hidden" />
             <button
               data-testid="upload-logo-btn"
@@ -128,7 +137,7 @@ export default function ReportSettingsEditor({ onClose }) {
               {settings?.logo_url ? "Ganti Logo" : "Upload Logo"}
             </button>
             <p className="text-[9px] text-muted-foreground mt-0.5">PNG/JPG, maks 5MB</p>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -172,7 +181,9 @@ export default function ReportSettingsEditor({ onClose }) {
         ))}
       </div>
 
-      <button
+      </fieldset>
+
+      {bolehUbah && <button
         data-testid="save-settings-btn"
         onClick={handleSave}
         disabled={saving}
@@ -180,7 +191,7 @@ export default function ReportSettingsEditor({ onClose }) {
       >
         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
         Simpan Pengaturan
-      </button>
+      </button>}
     </div>
   );
 }

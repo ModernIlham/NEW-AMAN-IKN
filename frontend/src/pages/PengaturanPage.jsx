@@ -283,7 +283,7 @@ export default function PengaturanPage({ user, onBack, onOpenSatker,
             </div>
             {/* onClose sengaja TIDAK diteruskan: tombol "Tutup" editor dulunya
                 melempar keluar seluruh halaman Pengaturan (bug navigasi). */}
-            <ReportSettingsEditor />
+            <ReportSettingsEditor bolehUbah={isSuperAdmin} />
             {pintasan.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide px-1">Setelan universal lainnya</p>
