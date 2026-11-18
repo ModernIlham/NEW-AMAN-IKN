@@ -419,3 +419,39 @@ test.each(["gagal", "berubah"])("penyegaran LATAR yang gagal (%s) senyap: tampil
   expect(p.k.sebelumGantiJendela).not.toHaveBeenCalled();
   expect(toast.error).not.toHaveBeenCalled();
 });
+
+// F7 (tinjauan mutu Nov 2026): offline TANPA snapshot dulu berakhir di layar
+// "Belum ada aset — Tambah aset pertama" walau kegiatan berisi ratusan aset.
+// Pemuat kini memberi tanda tersendiri agar layar menjelaskan keadaannya.
+test("offline tanpa data tersimpan memberi tanda khusus dan pesan yang benar", async () => {
+  const setOfflineTanpaData = jest.fn();
+  const p = layar({ isOnlineRef: { current: false }, setOfflineTanpaData });
+  axios.get.mockRejectedValue(new Error("jaringan"));
+  await muat(p);
+  expect(setOfflineTanpaData).toHaveBeenLastCalledWith(true);
+  const [pesan] = toast.error.mock.calls[0];
+  expect(pesan).toContain("belum tersimpan di perangkat");
+  expect(pesan).not.toMatch(/^Anda sedang offline dan belum ada data tersimpan/);
+});
+
+test.each([
+  ["data daring tampil", () => axios.get.mockResolvedValue(respons("server")), true],
+  ["snapshot luring tampil", () => {
+    axios.get.mockRejectedValue(new Error("jaringan"));
+    getSnapshotAssets.mockResolvedValue([{ id: "cache" }]);
+  }, false],
+])("tanda offline-tanpa-data dihapus saat %s", async (_nama, siapkan, daring) => {
+  const setOfflineTanpaData = jest.fn();
+  const p = layar({ isOnlineRef: { current: daring }, setOfflineTanpaData });
+  siapkan();
+  await muat(p);
+  expect(setOfflineTanpaData).toHaveBeenLastCalledWith(false);
+  expect(setOfflineTanpaData).not.toHaveBeenCalledWith(true);
+});
+
+test("pemanggil lama tanpa setOfflineTanpaData tetap berjalan", async () => {
+  const p = layar({ isOnlineRef: { current: false } });
+  axios.get.mockRejectedValue(new Error("jaringan"));
+  await expect(muat(p)).resolves.not.toThrow();
+  expect(p.state.LoadingMessage).toContain("data tersimpan belum tersedia");
+});
