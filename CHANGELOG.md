@@ -18,6 +18,22 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1146] Inventarisasi — data kegiatan disiapkan offline otomatis di HP; Mode Inventarisasi diingat — 2026-11-18
+
+- Fitur: di HP/tablet (layar sentuh atau ≤1023px), data kegiatan kini
+  **disiapkan untuk offline secara otomatis** saat kegiatan dibuka. Dulu
+  petugas harus ingat menekan ikon kecil "Mode Inventarisasi"; yang lupa
+  mendapati daftar kosong begitu sinyal hilang. Data offline tidak memuat
+  foto (±135 KB per 600 aset) dan sinkron berikutnya hanya perubahan. Bila
+  mode hemat data perangkat menyala, persiapan otomatis dilewati. Desktop
+  tetap manual lewat Mode Inventarisasi.
+- Fitur: pilihan **Mode Inventarisasi diingat** per pengguna dan kegiatan
+  di HP/tablet, sehingga tidak hilang saat halaman dimuat ulang.
+- Perbaikan: saat offline dan data kegiatan belum tersimpan di perangkat,
+  layar kini menampilkan "Data kegiatan ini belum tersedia offline" beserta
+  langkahnya — bukan lagi "Belum ada aset — Tambah aset pertama" yang
+  menyesatkan.
+
 ## [#1145] Perbaikan P1 tinjauan mutu — ekspor persediaan, identitas satker, PDF tahan isian panjang — 2026-11-18
 
 - Perbaikan: **Ekspor Master Persediaan** kembali berfungsi. Sejak PR #1082
