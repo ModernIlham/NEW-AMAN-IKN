@@ -620,6 +620,67 @@ def test_pdf_lampiran_foto_urut_dan_berlanjut_dengan_judul(dbx, monkeypatch):
     assert kedua.index("3070101001 · NUP 1") < kedua.index("Foto perwakilan")
 
 
+def test_pdf_banyak_aset_mempertahankan_bingkai_di_setiap_halaman(dbx, monkeypatch):
+    from ctypes import byref, c_float, c_int
+    from io import BytesIO
+    from unittest.mock import AsyncMock
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfraw
+    from PIL import Image
+    import shared_utils
+
+    gambar = BytesIO()
+    Image.effect_noise((1280, 1920), 45).save(gambar, "JPEG", quality=94)
+    raw = gambar.getvalue()
+    monkeypatch.setattr(shared_utils, "get_photo_from_gridfs", AsyncMock(return_value=raw))
+    monkeypatch.setattr(shared_utils, "get_document_from_gridfs", AsyncMock(
+        side_effect=lambda fid: b"foto-rusak" if fid == "serah-25" else raw))
+
+    async def render():
+        aset = [{"id": f"a-{n}", "asset_code": "3050101001", "NUP": str(n),
+                 "asset_name": "Perangkat elektronik untuk operasional dan inventarisasi " * 3}
+                for n in range(25, 0, -1)]
+        await dbx.assets.insert_many([{**a, "photo_gridfs_ids": ["foto-" + a["id"]]} for a in aset])
+        await dbx.bast_serah_terima.insert_one({
+            "id": "bast-banyak", "kode_satker": SATKER, "jenis": "penggunaan_melekat",
+            "nomor": "BAST-banyak", "tanggal": "2026-08-04",
+            "pihak_pertama": {"nama": "Penyerah"}, "pihak_kedua": {"nama": "Penerima"},
+            "asset_ids": [a["id"] for a in aset], "aset": aset, "sertakan_foto": True,
+            "foto_serah_terima": {a["id"]: "serah-" + a["NUP"] for a in aset},
+        })
+        resp = await _unwrap(rb.bast_pdf)("bast-banyak", _user=USER)
+        return b"".join([chunk async for chunk in resp.body_iterator])
+
+    with pdfium.PdfDocument(_jalan(render())) as pdf:
+        lampiran = []
+        for page in pdf:
+            teks = page.get_textpage().get_text_range()
+            if "FOTO BUKTI SERAH TERIMA BARANG" not in teks:
+                continue
+            # BOX ReportLab menghasilkan empat garis per foto. Ukur stroke
+            # dari PDF akhir agar layout test juga menangkap garis yang hilang.
+            jumlah_garis = 0
+            for path in page.get_objects(filter=[pdfraw.FPDF_PAGEOBJ_PATH]):
+                lebar = c_float()
+                fill, stroke = c_int(), c_int()
+                pdfraw.FPDFPath_GetDrawMode(path, byref(fill), byref(stroke))
+                if stroke.value and pdfraw.FPDFPageObj_GetStrokeWidth(path, byref(lebar)) and lebar.value == 1:
+                    jumlah_garis += 1
+            foto = list(page.get_objects(filter=[pdfraw.FPDF_PAGEOBJ_IMAGE]))
+            assert all(max(gambar.get_px_size()) == 960 for gambar in foto)
+            lampiran.append((teks, jumlah_garis, len(foto)))
+
+        assert len(lampiran) == 9
+        for nomor, (teks, garis, jumlah_foto) in enumerate(lampiran, 1):
+            assert f"Halaman lampiran {nomor} dari 9" in teks
+            assert garis == (24 if nomor < 9 else 8)
+            assert jumlah_foto == (6 if nomor < 9 else 1)
+            awal = (nomor - 1) * 3 + 1
+            for nup in range(awal, min(awal + 3, 26)):
+                assert teks.splitlines().count(f"3050101001 · NUP {nup}") == 2
+        assert "Foto tidak terbaca." in lampiran[-1][0]
+
+
 # ── Sekat pembagi per BIDANG pada tabel objek serah terima (mandat pemilik) ──
 
 def test_pdf_sekat_bidang_dengan_jumlah_unit_dan_urutan_nup(dbx):

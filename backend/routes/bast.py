@@ -1217,7 +1217,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     from kodefikasi_utils import kelompokkan_per_bidang as _kelompokkan_per_bidang
     from routes.reports import (
         _baris_sekat_bidang, _blok_tembusan, _fit_col_widths, _fmt_tanggal_id,
-        _get_report_styles, _gaya_sekat_bidang, _gridfs_photo_data_uri,
+        _get_report_styles, _gaya_sekat_bidang,
         _identity_table, _kop_surat_flowables, _page_footer_factory,
         _peta_subsub_kelompok, _peta_uraian_bidang, _sel_identitas_barang,
         _sel_uraian_barang, _signature_block, _std_doc, _std_table_style,
@@ -1917,42 +1917,47 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # disematkan sehingga bukti serah terima tak pernah ikut tercetak.
     if b.get("sertakan_foto"):
         import base64
+        from PIL.Image import DecompressionBombError
         from reportlab.platypus import KeepInFrame, TableStyle
         from lampiran_foto_utils import (
             KOLOM, SEL_PER_HALAMAN, bagi_baris, ringkas_lampiran, susun_sel_lampiran,
+            siapkan_foto_lampiran,
         )
-        from shared_utils import get_document_from_gridfs
+        from shared_utils import get_document_from_gridfs, get_photo_from_gridfs
 
         # Identitas mengikuti tabel barang pada BAST. Master menyediakan foto
         # terkini dan identitas cadangan untuk dokumen lama tanpa snapshot.
         snapshot = {a["id"]: a for a in b.get("aset") or [] if a.get("id")}
         asset_ids = b.get("asset_ids") or list(snapshot)
-        aset_master = await db.assets.find(
-            {"id": {"$in": asset_ids}},
-            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-             "photos": 1, "photo_gridfs_ids": 1, "thumbnail_index": 1},
-        ).to_list(500)
-        master_per_id = {a["id"]: a for a in aset_master}
-        aset_lampiran = [{**master_per_id.get(aid, {}), **snapshot.get(aid, {}), "id": aid}
-                         for aid in asset_ids]
-
         async def _bytes_sampul(a):
             """Foto sampul aset → bytes (inline base64 atau GridFS)."""
             photos = a.get("photos") or []
-            idx = a.get("thumbnail_index", 0) or 0
+            try:
+                idx = max(0, int(a.get("thumbnail_index") or 0))
+            except (TypeError, ValueError, OverflowError):
+                idx = 0
             url = photos[idx] if photos and idx < len(photos) else (
                 photos[0] if photos else None)
             if not url:
                 gids = a.get("photo_gridfs_ids") or []
                 if gids:
-                    gidx = max(0, min(int(idx), len(gids) - 1))
-                    url = await _gridfs_photo_data_uri(gids[gidx]) or None
+                    gidx = min(idx, len(gids) - 1)
+                    return await get_photo_from_gridfs(gids[gidx]) if gids[gidx] else None
             if not url or "base64," not in str(url):
                 return None
             try:
                 return base64.b64decode(str(url).split("base64,", 1)[1])
             except Exception:
                 return None
+
+        async def _siapkan_foto(raw):
+            # None = sumber tak tersedia, b"" = gambar gagal dibaca.
+            if raw:
+                try:
+                    return await asyncio.to_thread(siapkan_foto_lampiran, raw)
+                except (OSError, ValueError, SyntaxError, DecompressionBombError):
+                    return b""
+            return None
 
         # Foto serah terima: (a) PER BARANG lewat `foto_serah_terima`
         # {asset_id: file_id}, dan/atau (b) SATU perwakilan untuk semua barang.
@@ -1967,15 +1972,23 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         if not st_bersama_id and _bukti_gambar:
             st_bersama_id = str(_bukti["file_id"])
 
-        # SELURUH aset dioper; yang tak punya foto sampul cukup tak
-        # menghasilkan sel "sampul" — foto serah terimanya TETAP tercetak.
-        # (Dulu aset tanpa sampul disaring lebih dulu sehingga foto serah
-        # terima yang sudah diunggah untuknya lenyap tanpa pesan apa pun.)
+        # Lepaskan dokumen master berisi foto inline setelah dibaca. Yang
+        # ditahan sampai ReportLab selesai hanya identitas dan JPEG siap cetak.
+        master_per_id = {}
         sampul_bytes = {}
-        for a in aset_master:
-            raw = await _bytes_sampul(a)
-            if raw:
-                sampul_bytes[str(a.get("id"))] = raw
+        async for a in db.assets.find(
+            {"id": {"$in": asset_ids}},
+            {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
+             "photos": 1, "photo_gridfs_ids": 1, "thumbnail_index": 1},
+        ).batch_size(12):
+            aid = a["id"]
+            master_per_id[aid] = {field: a.get(field) for field in ("asset_code", "NUP", "asset_name")}
+            foto = await _siapkan_foto(await _bytes_sampul(a))
+            if foto is not None:
+                sampul_bytes[str(aid)] = foto
+
+        aset_lampiran = [{**master_per_id.get(aid, {}), **snapshot.get(aid, {}), "id": aid}
+                         for aid in asset_ids]
 
         sel = susun_sel_lampiran(aset_lampiran, foto_st,
                                  foto_st_bersama=bool(st_bersama_id),
@@ -1996,10 +2009,11 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             tinggi_foto = 53 * rl_mm
             label_foto = {"sampul": "Foto barang", "serah": "Foto serah terima",
                           "serah_bersama": "Foto perwakilan"}
+            warna_bingkai = HexColor("#475569")
             gaya_kotak = TableStyle([
-                ("BOX", (0, 0), (-1, -1), 0.5, HexColor("#cbd5e1")),
+                ("BOX", (0, 0), (-1, -1), 1, warna_bingkai),
                 ("BACKGROUND", (0, 0), (-1, 0), HexColor("#f1f5f9")),
-                ("LINEBELOW", (0, 0), (-1, 0), 0.5, HexColor("#cbd5e1")),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.75, warna_bingkai),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 3 * rl_mm),
@@ -2027,6 +2041,8 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                 keterangan = KeepInFrame(lebar_isi, tinggi_judul - 4 * rl_mm,
                                           [Paragraph(judul, kecil)])
                 foto = Paragraph("<i>Foto tidak tersedia.</i>", kecil)
+                if raw == b"":
+                    foto = Paragraph("<i>Foto tidak terbaca.</i>", kecil)
                 if raw:
                     try:
                         im = RLImage(io.BytesIO(raw))
@@ -2047,7 +2063,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                     data_sel.append(None)   # penyeimbang agar pasangan utuh
                     continue
                 raw = (sampul_bytes.get(s["asset_id"]) if s["jenis"] == "sampul"
-                       else await _bytes_serah(s))
+                       else await _siapkan_foto(await _bytes_serah(s)))
                 data_sel.append(_kotak(s, raw))
 
             halaman_foto = [data_sel[i:i + SEL_PER_HALAMAN]
@@ -2068,10 +2084,13 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                         f"({_esc(str(_bukti.get('filename') or 'bukti.pdf'))}).</i>", kecil)]))
                 if sel_halaman:
                     el.append(Spacer(1, 2 * rl_mm))
+                    baris_foto = bagi_baris(sel_halaman)
                     el.append(Table(
                         [[c if c is not None else "" for c in baris]
-                         for baris in bagi_baris(sel_halaman)],
+                         for baris in baris_foto],
                         colWidths=[lebar_sel] * KOLOM, hAlign="CENTER",
+                        rowHeights=[tinggi_judul + tinggi_foto + 4 * rl_mm] * len(baris_foto),
+                        splitByRow=0,
                         style=TableStyle([
                             ("VALIGN", (0, 0), (-1, -1), "TOP"),
                             ("LEFTPADDING", (0, 0), (-1, -1), 2 * rl_mm),
