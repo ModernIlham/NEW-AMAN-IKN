@@ -306,6 +306,9 @@ async def create_indexes() -> None:
         # Jurnal transaksi persediaan: riwayat per barang, terbaru dulu
         await _idx(db.transaksi_persediaan, [("persediaan_id", 1), ("timestamp", -1)])
         await _idx(db.transaksi_persediaan, "timestamp")
+        await _idx(db.transaksi_persediaan, "id")
+        await _idx(db.assets, "sumber_draft.perolehan_id", sparse=True)
+        await _idx(db.assets, "perolehan_id", sparse=True)
         # Daftar Transaksi (filter kode → kunci `jenis`) & derivasi daftar
         # usang/rusak/tak dikuasai ({jenis: {$in: ...}}) — tanpa ini keduanya
         # memindai koleksi penuh.
@@ -341,6 +344,7 @@ async def create_indexes() -> None:
         await _idx(db.penganggaran, [("status", 1), ("tahun_anggaran", 1)])
         await _idx(db.penganggaran, "id", unique=True)
         # Register perolehan pengadaan: urut tanggal BAST + jalur id
+        await _idx(db.arsip_lbkp, "id", unique=True)
         await _idx(db.pengadaan, "tanggal_bast")
         await _idx(db.pengadaan, "id", unique=True)
         # Tiket BMN idle: cek duplikat aktif per aset + jalur id

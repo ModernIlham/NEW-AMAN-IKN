@@ -1738,6 +1738,7 @@ async def transisi_proses(tiket_id: str, payload: TransisiProsesIn,
                 "jumlah": 1,
                 "nilai": parse_harga(doc.get("purchase_price")),
                 "sumber_modul": "penggunaan", "ref_id": res.get("id"),
+                "kode_satker": res.get("kode_satker", ""),
                 "keterangan": (f"Transfer masuk dari {res.get('pihak_asal') or '-'}"
                                f" — BAST {res.get('nomor_bast') or '-'}"),
                 "oleh": user.get("username", "system")})

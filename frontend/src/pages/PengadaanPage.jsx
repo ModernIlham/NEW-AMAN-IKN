@@ -144,6 +144,8 @@ const BARANG_KOSONG = {
 export default function PengadaanPage({ user, onBack }) {
   const isAdmin = user?.role === "admin";
   const [data, setData] = useState(null);
+  const [halaman, setHalaman] = useState(1);
+  const permintaan = useRef(0);
   const [loading, setLoading] = useState(true);
   // Dialog perolehan baru: {data, barang: [], saving}
   const [form, setForm] = useState(null);
@@ -214,8 +216,9 @@ export default function PengadaanPage({ user, onBack }) {
   }, [lpbGab, kodeSatkerEfektif, revisiSatker]);
 
   const muat = useCallback(() => {
-    axios.get(`${API}/pengadaan`)
-      .then((r) => setData(r.data))
+    const urutan = ++permintaan.current;
+    axios.get(`${API}/pengadaan${halaman > 1 ? `?halaman=${halaman}` : ""}`)
+      .then((r) => { if (urutan === permintaan.current) setData(r.data); })
       .catch(() => toast.error("Gagal memuat register perolehan"))
       .finally(() => setLoading(false));
     // Daftar usulan penganggaran (opsional — kegagalan tak menahan register)
@@ -235,7 +238,7 @@ export default function PengadaanPage({ user, onBack }) {
         setOpsiPpk(semua.filter((pj) => (pj?.peran || []).includes("ppk")));
       })
       .catch(() => setOpsiPpk([]));
-  }, []);
+  }, [halaman]);
   useEffect(() => { muat(); }, [muat]);
 
   const fmtRp = (n) => `Rp${Math.round(Number(n || 0)).toLocaleString("id-ID")}`;
@@ -379,9 +382,9 @@ export default function PengadaanPage({ user, onBack }) {
       // Toast HIJAU hanya bila memang ada yang tercatat. Saat semua baris
       // gagal, "tidak ada barang baru" adalah kalimat yang menyesatkan —
       // seolah tak ada yang perlu dikerjakan (temuan audit).
-      if (bagian.length) {
-        toast.success(`Tercatat: ${bagian.join(" dan ")}`
-          + (d.nomor_lpb ? ` · LPB ${d.nomor_lpb}` : ""));
+      if (bagian.length || d.lpb_id) {
+        const pesan = bagian.length ? `Tercatat: ${bagian.join(" dan ")}` : "LPB diterbitkan";
+        toast.success(pesan + (d.nomor_lpb ? ` · LPB ${d.nomor_lpb}` : ""));
         // LPB baru terbit = dokumen resmi yang harus DICETAK dan DITEKEN.
         // Nomornya di dalam toast akan lenyap dalam beberapa detik, dan
         // satu-satunya jalan mencetaknya dulu adalah berpindah ke modul
@@ -784,11 +787,11 @@ export default function PengadaanPage({ user, onBack }) {
                         {/* SATU tombol. Pemilahan persediaan↔aset dikerjakan
                             server (lihat lpb_utils.pilah_barang_perolehan) —
                             bukan pengetahuan yang harus dihafal operator. */}
-                        {(p.barang || []).some((b) => !b.asset_id && !b.psd_item_id) && (
+                        {(p.lpb_menunggu || (p.barang || []).some((b) => !b.asset_id && !b.psd_item_id)) && (
                           <button type="button" aria-label="Catat semua barang BAST ke pencatatan"
                             title="Barang golongan 1 → Persediaan; golongan 2–8 → aset draft ber-NUP; lalu LPB terbit"
                             onClick={() => setDraftAset({
-                              perolehan: p, activityId: "", bookingNomor: true,
+                              perolehan: p, activityId: (p.barang || []).find((b) => !b.asset_id && b.draft_activity_id)?.draft_activity_id || "", bookingNomor: true,
                               // Kegiatan inventarisasi hanya wajib bila BAST ini
                               // memuat barang golongan ASET. Dihitung SEKALI di
                               // sini — daftar barangnya tak berubah selama
@@ -967,6 +970,13 @@ export default function PengadaanPage({ user, onBack }) {
               )}
             </div>
 
+            {data.halaman_akhir > 1 && (
+              <nav aria-label="Halaman register pengadaan" className="flex justify-center items-center gap-3">
+                <Button variant="outline" disabled={data.halaman <= 1} onClick={() => setHalaman(data.halaman - 1)}>Sebelumnya</Button>
+                <span>{data.halaman} / {data.halaman_akhir}</span>
+                <Button variant="outline" disabled={data.halaman >= data.halaman_akhir} onClick={() => setHalaman(data.halaman + 1)}>Berikutnya</Button>
+              </nav>
+            )}
             <p className="text-center text-[11px] text-muted-foreground pb-4">{data.catatan}</p>
           </>
         )}
@@ -1012,7 +1022,7 @@ export default function PengadaanPage({ user, onBack }) {
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-kontrak">No. Kontrak/SPK (opsional)</label>
-                <Input id="pgd-kontrak" value={form.data.nomor_kontrak} disabled={kunciIdentitas}
+                <Input id="pgd-kontrak" value={form.data.sifat === "non_kontrak" ? "" : form.data.nomor_kontrak} disabled={kunciIdentitas || form.data.sifat === "non_kontrak"}
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, nomor_kontrak: e.target.value } }))} />
               </div>
               <div>
@@ -1034,7 +1044,7 @@ export default function PengadaanPage({ user, onBack }) {
                   ditolak hanya mengundang operator mengisinya. */}
               <div className="sm:col-span-2">
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-sifat">Sifat Pengadaan</label>
-                <select id="pgd-sifat" value={form.data.sifat}
+                <select id="pgd-sifat" disabled={kunciIdentitas} value={form.data.sifat}
                   className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm"
                   data-testid="pengadaan-sifat"
                   onChange={(e) => setForm((f) => ({ ...f, data: dokumenSetelahGantiSifat(f.data, e.target.value) }))}>
@@ -1046,7 +1056,7 @@ export default function PengadaanPage({ user, onBack }) {
               {form.data.sifat === "kontrak" && (
                 <div>
                   <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-spspk">No. SP/SPK</label>
-                  <Input id="pgd-spspk" placeholder="SPK-014/PPK/VIII/2026" value={form.data.no_sp_spk}
+                  <Input id="pgd-spspk" disabled={kunciIdentitas} placeholder="SPK-014/PPK/VIII/2026" value={form.data.no_sp_spk}
                     data-testid="pengadaan-no-sp-spk"
                     onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_sp_spk: e.target.value } }))} />
                 </div>
@@ -1055,7 +1065,7 @@ export default function PengadaanPage({ user, onBack }) {
                 <>
                   <div>
                     <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-up">UP/TUP</label>
-                    <select id="pgd-up" value={form.data.jenis_up}
+                    <select id="pgd-up" disabled={kunciIdentitas} value={form.data.jenis_up}
                       className="w-full h-10 rounded-md border border-input bg-background px-2 text-sm"
                       data-testid="pengadaan-jenis-up"
                       onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, jenis_up: e.target.value } }))}>
@@ -1066,7 +1076,7 @@ export default function PengadaanPage({ user, onBack }) {
                   </div>
                   <div>
                     <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-spby">No. SPBy</label>
-                    <Input id="pgd-spby" placeholder="SPBy-021/BP/VIII/2026" value={form.data.no_spby}
+                    <Input id="pgd-spby" disabled={kunciIdentitas} placeholder="SPBy-021/BP/VIII/2026" value={form.data.no_spby}
                       data-testid="pengadaan-no-spby"
                       onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_spby: e.target.value } }))} />
                   </div>
@@ -1074,13 +1084,13 @@ export default function PengadaanPage({ user, onBack }) {
               )}
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-spp">No. SPP (opsional)</label>
-                <Input id="pgd-spp" placeholder="SPP-105/LS/2026" value={form.data.no_spp}
+                <Input id="pgd-spp" disabled={kunciIdentitas} placeholder="SPP-105/LS/2026" value={form.data.no_spp}
                   data-testid="pengadaan-no-spp"
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_spp: e.target.value } }))} />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-spm">No. SPM (opsional)</label>
-                <Input id="pgd-spm" placeholder="02847T/621001/2024" className="font-mono" value={form.data.no_spm}
+                <Input id="pgd-spm" disabled={kunciIdentitas} placeholder="02847T/621001/2024" className="font-mono" value={form.data.no_spm}
                   data-testid="pengadaan-no-spm"
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_spm: e.target.value } }))} />
               </div>
@@ -1091,13 +1101,13 @@ export default function PengadaanPage({ user, onBack }) {
                   pembayaran, jadi tak ikut disembunyikan oleh sifat. */}
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-nobukti">No. Bukti/Faktur (opsional)</label>
-                <Input id="pgd-nobukti" placeholder="INV-2026/08/0417" className="font-mono" value={form.data.no_bukti}
+                <Input id="pgd-nobukti" disabled={kunciIdentitas} placeholder="INV-2026/08/0417" className="font-mono" value={form.data.no_bukti}
                   data-testid="pengadaan-no-bukti"
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_bukti: e.target.value } }))} />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1" htmlFor="pgd-nodok">No. Dokumen (opsional)</label>
-                <Input id="pgd-nodok" placeholder="ND-77/PBJ/2026" value={form.data.no_dokumen}
+                <Input id="pgd-nodok" disabled={kunciIdentitas} placeholder="ND-77/PBJ/2026" value={form.data.no_dokumen}
                   data-testid="pengadaan-no-dokumen"
                   onChange={(e) => setForm((f) => ({ ...f, data: { ...f.data, no_dokumen: e.target.value } }))} />
               </div>

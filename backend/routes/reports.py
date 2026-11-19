@@ -38,7 +38,7 @@ from pydantic import BaseModel
 from db import db
 from auth_utils import (require_user, require_admin, require_super_admin,
                         require_user_or_query_token)
-from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi,
+from shared_utils import (pastikan_akses_kegiatan_id, ambang_kapitalisasi, filter_aset_pembukuan,
                           filter_aset_perhitungan,
                           get_photo_from_gridfs, limiter, pengaturan_kop,
                           scope_query_aset, scope_query_field_satker,
@@ -2760,7 +2760,7 @@ async def generate_dbkp_pdf(activity_id: str, _user: dict = Depends(require_user
     # double-count nilai BMN yang tak lagi dimiliki (§5A Prinsip 3).
     assets = await baca_laporan_lengkap(db.assets.find(
         active_asset_filter({"activity_id": activity_id}),
-        {"_id": 0, "asset_code": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1},
+        {"_id": 0, "asset_code": 1, "purchase_price": 1, "jumlah_bast": 1, "nilai_wajar_terakhir": 1},
     ), 100000, "Data aset laporan")
 
     # Uraian golongan: referensi kodefikasi (level 1) menimpa default standar
@@ -2875,7 +2875,7 @@ async def generate_dbkp_docx(activity_id: str, _user: dict = Depends(require_use
     ident = _activity_identity(activity, settings)
     assets = await baca_laporan_lengkap(db.assets.find(
         active_asset_filter({"activity_id": activity_id}),
-        {"_id": 0, "asset_code": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1},
+        {"_id": 0, "asset_code": 1, "purchase_price": 1, "jumlah_bast": 1, "nilai_wajar_terakhir": 1},
     ), 100000, "Data aset laporan")
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
@@ -2967,10 +2967,10 @@ async def generate_posisi_bmn_pdf(request: Request, _user: dict = Depends(requir
     # Posisi BMN di Neraca: hanya aset yang MASIH dimiliki — aset ber-SK
     # penghapusan (#234) dikecualikan agar nilai neraca tidak lebih saji (§5A).
     assets = await baca_laporan_lengkap(db.assets.find(
-        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
+        await filter_aset_pembukuan(_user, active_asset_filter()),
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "purchase_date": 1, "condition": 1,
-         "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
+         "inventory_status": 1, "jumlah_bast": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
          "masa_manfaat_tambah_tahun": 1,
          "masa_manfaat_override_semester": 1},
     ), 500000, "Data aset laporan")
@@ -3164,7 +3164,7 @@ async def generate_dbr_pdf(request: Request, _user: dict = Depends(require_user_
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await baca_laporan_lengkap(db.assets.find(
-        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
+        await filter_aset_pembukuan(_user, active_asset_filter()),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
          "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
     ), 500000, "Data aset laporan")
@@ -3244,7 +3244,7 @@ async def generate_kir_pdf(request: Request, _user: dict = Depends(require_user_
 
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     assets = await baca_laporan_lengkap(db.assets.find(
-        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
+        await filter_aset_pembukuan(_user, active_asset_filter()),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1, "condition": 1,
          "purchase_price": 1, "location": 1, "operasional_jenis": 1, "user": 1},
     ), 500000, "Data aset laporan")
@@ -3358,10 +3358,10 @@ async def generate_penyusutan_pdf(
 
     proj = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
             "purchase_price": 1, "purchase_date": 1, "condition": 1,
-            "inventory_status": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
+            "inventory_status": 1, "jumlah_bast": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
             "masa_manfaat_tambah_tahun": 1,
          "masa_manfaat_override_semester": 1}
-    assets = await baca_laporan_lengkap(db.assets.find(await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())), proj), 500000, "Data aset laporan")
+    assets = await baca_laporan_lengkap(db.assets.find(await filter_aset_pembukuan(_user, active_asset_filter()), proj), 500000, "Data aset laporan")
     diusulkan_ids = set()
     async for u in db.usulan_penghapusan.find(
             scope_query_field_satker(_user, {"status": {"$ne": "ditolak"}}),
@@ -3478,33 +3478,54 @@ async def generate_lbkp_pdf(
     jumlahnya, nilai 0, dan diungkap di catatan). Tidak pernah memuat
     data dummy: keterbatasan data historis dicantumkan eksplisit.
     """
+    from pelaporan_utils import kunci_unik_periode
+    kode = kode_satker_user(_user)
+    periode = await db.periode_pelaporan.find_one(
+        {"kunci_unik": kunci_unik_periode(tahun, semester), "kode_satker": kode or {"$in": [None, ""]}},
+        {"_id": 0})
+    if periode and periode.get("status") == "terkunci":
+        arsip_id = periode.get("arsip_lbkp")
+        if arsip_id:
+            arsip = await db.arsip_lbkp.find_one({"id": arsip_id, "periode_id": periode["id"]})
+            if not arsip:
+                raise HTTPException(status_code=503, detail="Arsip LBKP final belum dapat dibaca")
+            pdf = base64.b64decode(arsip["pdf"], validate=True)
+        else:
+            # Periode lama belum menyimpan salinan. Bekukan cetakan pertama secara atomik.
+            pdf = await bangun_lbkp(tahun, semester, _user, periode)
+            arsip_id = f"{periode['id']}:{periode.get('tanggal_kunci', '')}"
+            arsip = await db.arsip_lbkp.find_one_and_update(
+                {"_id": arsip_id}, {"$setOnInsert": {"id": arsip_id, "pdf": base64.b64encode(pdf).decode("ascii"), "periode_id": periode["id"]}},
+                upsert=True, return_document=True)
+            await db.periode_pelaporan.update_one(
+                {"id": periode["id"], "status": "terkunci", "tanggal_kunci": periode.get("tanggal_kunci")},
+                {"$set": {"arsip_lbkp": arsip_id},
+                 "$addToSet": {"riwayat": {"aksi": "arsip_cetak_lama", "arsip_lbkp": arsip_id}}})
+            pdf = base64.b64decode(arsip["pdf"], validate=True)
+    else:
+        pdf = await bangun_lbkp(tahun, semester, _user, periode)
+    suffix = f"_S{semester}" if semester else ""
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="LBKP_{tahun}{suffix}.pdf"'})
+
+
+async def bangun_lbkp(tahun, semester, _user, periode_rec):
     from reportlab.platypus import Table, Paragraph, Spacer
     from reportlab.lib.units import mm as rl_mm
     from kodefikasi_utils import GOLONGAN_DEFAULTS
-    from pelaporan_utils import kunci_unik_periode, penanda_final
+    from pelaporan_utils import penanda_final
     from pembukuan_utils import build_lbkp_rows, parse_harga, tombstones_penghapusan
     from pemeliharaan_utils import rentang_periode
 
     dari, sampai, label_periode = rentang_periode(tahun, semester)
-    # Scope satker (REVIEW-9 R15): periode pelaporan kini per-satker, jadi
-    # penanda FINAL pada laporan harus diambil dari periode SATKER INI —
-    # bukan periode satker lain yang kebetulan tahun/semesternya sama.
-    # Urutkan agar DETERMINISTIK (REVIEW-9 R15b): bila satker punya periode
-    # sendiri DAN ada periode era-lama tanpa stempel dengan kunci sama, tanpa
-    # sort Mongo boleh mengembalikan salah satunya — penanda "FINAL" pada
-    # laporan resmi jadi berubah-ubah. kode_satker terisi menang atas null.
-    periode_rec = await db.periode_pelaporan.find_one(
-        scope_query_field_satker(
-            _user, {"kunci_unik": kunci_unik_periode(tahun, semester)}),
-        {"_id": 0}, sort=[("kode_satker", -1)])
     sufiks_final = penanda_final(periode_rec)
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     # ISOLASI SATKER (REVIEW-9 R9): filter_aset_perhitungan TIDAK men-scope
     # satker (docstring-nya: dipanggil SESUDAH scoping). Query kosong = saldo
     # & mutasi SELURUH satker masuk laporan resmi milik satu satker.
     assets = await baca_laporan_lengkap(db.assets.find(
-        await filter_aset_perhitungan(await scope_query_aset(_user, {})),
-        {"_id": 0, "asset_code": 1, "purchase_price": 1, "purchase_date": 1,
+        await filter_aset_pembukuan(_user),
+        {"_id": 0, "asset_code": 1, "purchase_price": 1, "jumlah_bast": 1, "purchase_date": 1,
          "created_at": 1, "dihapus": 1, "penghapusan": 1},
     ), 500000, "Data aset laporan")
     tombstones = []
@@ -3541,7 +3562,7 @@ async def generate_lbkp_pdf(
             uraian_map[k["kode"]] = k["uraian"]
 
     per_kelas, n_tanpa_nilai = build_lbkp_rows(assets, tombstones, dari, sampai, uraian_map, ambang=amb)
-    if not per_kelas["gabungan"][0]:
+    if not per_kelas["gabungan"][0] and not sufiks_final:
         raise HTTPException(status_code=404,
                             detail=f"Belum ada data aset untuk {label_periode}")
 
@@ -3631,11 +3652,7 @@ async def generate_lbkp_pdf(
     ], doc.width))
     footer = _page_footer_factory("LBKP per Golongan")
     await asyncio.to_thread(doc.build, elements, onFirstPage=footer, onLaterPages=footer)
-    buffer.seek(0)
-    suffix = f"_S{semester}" if semester else ""
-    return StreamingResponse(
-        buffer, media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="LBKP_{tahun}{suffix}.pdf"'})
+    return buffer.getvalue()
 
 
 @reports_router.get("/pembukuan/lkb-pdf")
@@ -3658,7 +3675,7 @@ async def generate_lkb_pdf(request: Request, _user: dict = Depends(require_user_
     # dihapus=True) TIDAK ikut, selaras DBKP/Posisi Neraca/penyusutan/rekonsiliasi
     # (temuan review: tanpa filter ini LKB lebih saji & tak pernah rekon).
     assets = await baca_laporan_lengkap(db.assets.find(
-        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
+        await filter_aset_pembukuan(_user, active_asset_filter()),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "condition": 1, "purchase_price": 1},
     ), 500000, "Data aset laporan")
@@ -3829,12 +3846,12 @@ async def generate_calbmn_pdf(
     settings = await db.report_settings.find_one({"type": "global"}, {"_id": 0}) or {}
     # ISOLASI SATKER (REVIEW-9 R9) — lihat catatan di LBKP.
     assets = await baca_laporan_lengkap(db.assets.find(
-        await filter_aset_perhitungan(await scope_query_aset(_user, {})),
+        await filter_aset_pembukuan(_user),
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
              "purchase_price": 1, "purchase_date": 1, "condition": 1,
              "created_at": 1, "inventory_status": 1, "nomor_perkara": 1,
              "pihak_bersengketa": 1, "dihapus": 1, "penghapusan": 1,
-             "nilai_wajar_terakhir": 1, "revaluasi": 1,
+             "jumlah_bast": 1, "nilai_wajar_terakhir": 1, "revaluasi": 1,
              "masa_manfaat_tambah_tahun": 1,
          "masa_manfaat_override_semester": 1},
     ), 500000, "Data aset laporan")
@@ -4176,10 +4193,10 @@ async def generate_rekonsiliasi_xlsx(request: Request, _user: dict = Depends(req
     # ber-SK penghapusan agar sandingan SAKTI/MonSAKTI tidak selisih hanya karena
     # aset yang sudah dihapus masih ikut terhitung (§5A Prinsip 3).
     assets = await baca_laporan_lengkap(db.assets.find(
-        await filter_aset_perhitungan(await scope_query_aset(_user, active_asset_filter())),
+        await filter_aset_pembukuan(_user, active_asset_filter()),
         {"_id": 0, "asset_code": 1, "NUP": 1, "asset_name": 1,
          "purchase_price": 1, "location": 1, "condition": 1,
-         "nilai_wajar_terakhir": 1},
+         "jumlah_bast": 1, "nilai_wajar_terakhir": 1},
     ), 500000, "Data aset laporan")
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):

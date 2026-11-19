@@ -113,7 +113,7 @@ def nilai_perolehan(p: dict) -> float:
     return total
 
 
-def rekap_perolehan(items) -> dict:
+def rekap_perolehan(items, ringkasan=None) -> dict:
     """Ringkasan register: jumlah, nilai, kelengkapan, tautan aset."""
     per_jenis = {k: 0 for k in JENIS_PEROLEHAN}
     nilai = 0.0
@@ -134,10 +134,16 @@ def rekap_perolehan(items) -> dict:
                 belum_tertaut += 1
             if is_ekstrakomptabel(b):
                 ekstra += 1
-    return {"jumlah": len(items or []), "per_jenis": per_jenis,
-            "nilai": nilai, "dokumen_lengkap": lengkap,
-            "barang_total": barang_total, "belum_tertaut": belum_tertaut,
-            "ekstrakomptabel": ekstra}
+    hasil = {"jumlah": len(items or []), "per_jenis": per_jenis,
+             "nilai": nilai, "dokumen_lengkap": lengkap, "barang_total": barang_total,
+             "belum_tertaut": belum_tertaut, "ekstrakomptabel": ekstra}
+    if ringkasan is None:
+        return hasil
+    for jenis, jumlah in per_jenis.items():
+        ringkasan["per_jenis"][jenis] += jumlah
+    for key in hasil.keys() - {"per_jenis"}:
+        ringkasan[key] += hasil[key]
+    return ringkasan
 
 
 # ---------------------------------------------------------------------------
@@ -279,8 +285,8 @@ def kunci_ubah_perolehan(p: dict, ada_lpb: bool = False) -> dict:
     dihapus karena sudah "hidup" juga tak boleh diam-diam berganti isi.
     """
     tercatat = [b for b in (p.get("barang") or [])
-                if str(b.get("psd_item_id") or "").strip()
-                or str(b.get("asset_id") or "").strip()]
+                if b.get("lebur_tujuan") or b.get("master_pencatatan") or b.get("draft_activity_id")
+                or str(b.get("psd_item_id") or "").strip() or str(b.get("asset_id") or "").strip()]
     beku = bool(p.get("bast_ppk")) or bool(ada_lpb)
     if beku:
         sebab = ("BAST PPK→KPB sudah diterbitkan"

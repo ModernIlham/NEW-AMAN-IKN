@@ -378,6 +378,9 @@ async def usulkan_penghapusan_dari_ba(ba_id: str,
             # membuatnya lokal untuk seluruh fungsi, dan log_audit di bawah
             # (jalur BA tanpa kode_satker) akan meledak UnboundLocalError.
             record["kode_satker"] = kode_satker_user(user)
+        pinned = await db.pemusnahan.update_one({"id": ba_id}, {"$set": {"dasar_penghapusan": True}})
+        if not pinned.matched_count:
+            raise HTTPException(status_code=409, detail="BA sumber sudah dihapus")
         await db.usulan_penghapusan.insert_one({**record})
         dibuat += 1
         hasil.append({"asset_id": aid, "asset_name": a.get("asset_name"),
@@ -601,16 +604,28 @@ async def unduh_lampiran_ba(ba_id: str, file_id: str, request: Request,
                              "Content-Disposition": f'inline; filename="{meta.get("filename") or "bukti"}"'})
 
 
+async def _filter_ba_boleh_hapus(ba_id, user):
+    q = scope_query_field_satker(user, {"id": ba_id})
+    ba = await db.pemusnahan.find_one(q, {"_id": 0, "usulan_id": 1, "dasar_penghapusan": 1})
+    if ba is None:
+        raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+    if ba.get("usulan_id") or ba.get("dasar_penghapusan") or await db.usulan_penghapusan.find_one(
+            {"sumber_ba_id": ba_id}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="BA beserta lampirannya menjadi arsip proses pemusnahan atau penghapusan")
+    return {**q, "dasar_penghapusan": {"$ne": True}}
+
+
 @pemusnahan_router.delete("/pemusnahan/{ba_id}/lampiran/{file_id}")
 async def hapus_lampiran_ba(ba_id: str, file_id: str,
                             _admin: dict = Depends(require_admin)):
     """Hapus lampiran salah unggah (khusus admin)."""
+    q = await _filter_ba_boleh_hapus(ba_id, _admin)
     res = await db.pemusnahan.update_one(
-        scope_query_field_satker(_admin, {"id": ba_id}),
+        {**q, "lampiran.file_id": file_id},
         {"$pull": {"lampiran": {"file_id": file_id}},
          "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}})
     if res.matched_count == 0:
-        raise HTTPException(status_code=404, detail="BA tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Lampiran tidak ditemukan atau BA sudah menjadi arsip")
     if res.modified_count:
         await delete_document_from_gridfs(file_id)
     return {"ok": True, "file_id": file_id}
@@ -619,10 +634,9 @@ async def hapus_lampiran_ba(ba_id: str, file_id: str,
 @pemusnahan_router.delete("/pemusnahan/{ba_id}")
 async def hapus_pemusnahan(ba_id: str, _admin: dict = Depends(require_admin)):
     """Hapus BA salah input (khusus admin) + berkas lampirannya."""
-    ba = await db.pemusnahan.find_one({"id": ba_id}, {"_id": 0, "lampiran": 1})
-    res = await db.pemusnahan.delete_one(
-        scope_query_field_satker(_admin, {"id": ba_id}))
-    if res.deleted_count == 0:
+    q = await _filter_ba_boleh_hapus(ba_id, _admin)
+    ba = await db.pemusnahan.find_one_and_delete(q)
+    if ba is None:
         raise HTTPException(status_code=404, detail="BA tidak ditemukan")
     for lamp in (ba or {}).get("lampiran") or []:
         if lamp.get("file_id"):

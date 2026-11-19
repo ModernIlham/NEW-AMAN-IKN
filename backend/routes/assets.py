@@ -1152,7 +1152,7 @@ async def _enforce_pegawai_terdaftar(pengguna_nip, nip_lama=""):
     await enforce_pegawai_terdaftar(pengguna_nip, nip_lama)
 
 
-async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict:
+async def buat_aset_draft(data: AssetCreate, audit_user: str = "system", *, sumber=None) -> dict:
     """Buat SATU aset draft TANPA foto — dipakai Pengadaan "buat draft aset dari
     perolehan" (evaluasi #5). JAGA SELARAS dengan create_asset: bentuk dokumen
     photoless di bawah harus identik dengan `asset_doc` pada create_asset.
@@ -1171,10 +1171,11 @@ async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict
         raise HTTPException(
             status_code=400,
             detail=f"Kombinasi Kode Barang '{data.asset_code}' dan NUP '{data.NUP}' sudah digunakan dalam kegiatan ini")
-    asset_id = str(uuid.uuid4())
+    asset_id = sumber["id"] if sumber else str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     asset_doc = {
         "id": asset_id,
+        **({"_id": asset_id, "sumber_draft": sumber} if sumber else {}),
         **data.model_dump(),
         "photos": [],
         "photo_gridfs_ids": [],

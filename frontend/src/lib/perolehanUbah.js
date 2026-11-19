@@ -44,7 +44,7 @@ export function bersihkanDokumen(d) {
  */
 export function dokumenSetelahGantiSifat(d, sifat) {
   const hapus = sifat === "kontrak" ? ["jenis_up", "no_spby"]
-    : sifat === "non_kontrak" ? ["no_sp_spk"]
+    : sifat === "non_kontrak" ? ["no_sp_spk", "nomor_kontrak"]
       : [];
   const out = { ...d, sifat };
   for (const k of hapus) out[k] = "";

@@ -1283,7 +1283,7 @@ async def catat_mutasi_bmn(entri: dict):
             sudah = await db.mutasi_bmn.find_one(
                 {"asset_id": entri.get("asset_id"),
                  "kode_transaksi": str(entri.get("kode_transaksi") or "").strip(),
-                 "ref_id": ref}, {"_id": 1})
+                 "ref_id": ref, **({"baris_sumber": entri["baris_sumber"]} if "baris_sumber" in entri else {})}, {"_id": 1})
             if sudah:
                 logger.info("catat_mutasi_bmn dilewati (sudah tercatat): "
                             "%s kode %s ref %s", entri.get("asset_id"),
@@ -1472,6 +1472,17 @@ async def filter_aset_perhitungan(query=None) -> dict:
     else:
         q["activity_id"] = {"$in": sorted(layak)}
     return q
+
+
+async def filter_aset_pembukuan(user, query=None):
+    """Sertakan penerimaan alih status yang dibukukan langsung oleh satker."""
+    q = await filter_aset_perhitungan(await scope_query_aset(user, query))
+    transfer = {"activity_id": "", "perolehan_transfer.tiket_id": {"$exists": True}}
+    kode = kode_satker_user(user)
+    if kode:
+        transfer["kode_satker"] = kode
+    kegiatan = q.pop("activity_id")
+    return {"$and": [q, {"$or": [{"activity_id": kegiatan}, transfer]}]}
 
 
 # ── Penanda migrasi startup (S6) ────────────────────────────────────────────
