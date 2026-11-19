@@ -98,3 +98,31 @@ async def test_cetakan_lbkp_terkunci_dan_koreksi_berversi(contract):
     assert (await http.get(cetak, headers=auth)).content != asli.content
     assert (await http.get(url + "/lbkp/" + versi, headers=auth)).content == asli.content
     assert (await http.get(url + "/lbkp/" + versi, headers=contract.headers["b"])).status_code == 404
+
+
+async def test_lanjutkan_draf_lama_dengan_lpb_sebagian(contract):
+    db, http, auth = contract.db, contract.http, contract.headers["a"]
+    kode, tanggal = "3050102903", "2025-07-10"
+    nomor = "BA-" + uuid.uuid4().hex
+    dibuat = await http.post("/api/pengadaan", headers=auth, json={
+        "jenis": "pembelian", "pihak": "Penyedia", "nomor_bast": nomor, "tanggal_bast": tanggal,
+        "barang": [{"kode": kode, "uraian": "Kursi", "jumlah": 3, "harga_satuan": 2000000}]})
+    assert dibuat.status_code == 200
+    pid, aid = dibuat.json()["id"], uuid.uuid4().hex
+    await db.assets.insert_one({
+        "id": aid, "perolehan_id": pid, "activity_id": "contract-activity-a", "asset_code": kode,
+        "asset_name": "Kursi", "NUP": "1", "purchase_price": "2000000",
+        "notes": f"Draft otomatis dari perolehan Pengadaan (BAST {nomor}) (unit 1/3)"})
+    await db.pengadaan.update_one({"id": pid}, {"$set": {
+        "barang.0.asset_id": aid, "barang.0.asset_code": kode, "barang.0.NUP": "1"}})
+    await db.lpb.insert_one({"id": uuid.uuid4().hex, "perolehan_id": pid, "kategori": "aset",
+                             "items": [{"asset_id": aid}], "total_nilai": 2000000})
+    url = f"/api/pengadaan/{pid}/catat-semua"
+    result = await http.post(url, headers=auth, json={"booking_nomor": False})
+    assert result.status_code == 200, result.text
+    assert result.json()["aset_dibuat"] == 2
+    assert await db.assets.count_documents({"perolehan_id": pid}) == 3
+    baru = await db.lpb.find_one({"id": result.json()["lpb_id"]})
+    assert {b["nup"] for b in baru["items"]} == {"2", "3"}
+    assert baru["total_nilai"] == 4000000
+    assert (await http.post(url, headers=auth, json={})).json()["lpb_id"] == ""

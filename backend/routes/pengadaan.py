@@ -36,7 +36,7 @@ from db import db
 from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from pengadaan_utils import (
     DOKUMEN_PEROLEHAN, JENIS_PEROLEHAN, LABEL_DOKUMEN_SUMBER,
-    build_asset_perolehan_projection, dokumen_kurang_perolehan,
+    build_asset_perolehan_projection, dokumen_kurang_perolehan, dokumen_wajib_perolehan,
     is_ekstrakomptabel, kunci_ubah_perolehan, nilai_perolehan, rekap_perolehan,
     snapshot_penganggaran, snapshot_ppk, validate_perolehan,
 )
@@ -322,6 +322,7 @@ class TautkanIn(BaseModel):
 
 def _enrich(p: dict) -> dict:
     p.pop("giliran", None)
+    p["dokumen_wajib"] = dokumen_wajib_perolehan(p)
     p["dokumen_kurang"] = dokumen_kurang_perolehan(p)
     p["nilai"] = nilai_perolehan(p)
     for b in p.get("barang") or []:
@@ -375,7 +376,7 @@ async def list_pengadaan(_user: dict = Depends(require_user), halaman: int = 1):
     ringkasan = rekap_perolehan(items)
     if halaman_akhir > 1:
         ringkasan = rekap_perolehan([])
-        cursor = db.pengadaan.find(scope, {"_id": 0, "jenis": 1, "dokumen": 1, "barang": 1})
+        cursor = db.pengadaan.find(scope, {"_id": 0, "jenis": 1, "sifat": 1, "dokumen": 1, "barang": 1})
         while bagian := await cursor.to_list(ukuran):
             rekap_perolehan(bagian, ringkasan)
     # Status "sejauh mana masih boleh diubah" dihitung SEKALI untuk seluruh
@@ -861,6 +862,7 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
 
 
 @pengadaan_router.put("/pengadaan/{perolehan_id}/dokumen")
+@giliran_register
 async def perbarui_dokumen(perolehan_id: str, payload: DokumenIn,
                            _user: dict = Depends(require_writer)):
     """Perbarui checklist dokumen sumber (kunci di luar daftar diabaikan)."""
@@ -868,7 +870,7 @@ async def perbarui_dokumen(perolehan_id: str, payload: DokumenIn,
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
     await pastikan_akses_dok_satker(_user, p)  # isolasi satker (REVIEW-9 R8)
-    wajib = set(DOKUMEN_PEROLEHAN.get(p.get("jenis"), ()))
+    wajib = set(dokumen_wajib_perolehan(p))
     dokumen = {**(p.get("dokumen") or {}),
                **{k: bool(v) for k, v in payload.dokumen.items() if k in wajib}}
     now = datetime.now(timezone.utc).isoformat()

@@ -81,9 +81,14 @@ def validate_perolehan(data: dict, today_iso: str) -> list:
     return errors
 
 
+def dokumen_wajib_perolehan(p):
+    return [k for k in DOKUMEN_PEROLEHAN.get(p.get("jenis"), ())
+            if k != "kontrak" or p.get("sifat") != "non_kontrak"]
+
+
 def dokumen_kurang_perolehan(p: dict) -> list:
     """Label dokumen sumber yang belum tercentang untuk jenis perolehan."""
-    wajib = DOKUMEN_PEROLEHAN.get(p.get("jenis"), ())
+    wajib = dokumen_wajib_perolehan(p)
     ada = p.get("dokumen") or {}
     return [LABEL_DOKUMEN_SUMBER[k] for k in wajib if not ada.get(k)]
 

@@ -769,7 +769,7 @@ export default function PengadaanPage({ user, onBack }) {
                         </p>
                         <span className="text-xs font-bold text-foreground whitespace-nowrap">{fmtRp(p.nilai)}</span>
                         {(() => {
-                          const w = dokumenWajib[p.jenis] || [];
+                          const w = p.dokumen_wajib || dokumenWajib[p.jenis] || [];
                           if (!w.length) return null;
                           const n = w.filter((k) => (p.dokumen || {})[k]).length;
                           return (
@@ -884,7 +884,7 @@ export default function PengadaanPage({ user, onBack }) {
                       )}
                       {/* Checklist dokumen sumber */}
                       <div className="flex flex-wrap gap-1 mt-1.5">
-                        {(dokumenWajib[p.jenis] || []).map((k) => {
+                        {(p.dokumen_wajib || dokumenWajib[p.jenis] || []).map((k) => {
                           const ada = !!(p.dokumen || {})[k];
                           return (
                             <button key={k} type="button" onClick={() => toggleDokumen(p, k)}

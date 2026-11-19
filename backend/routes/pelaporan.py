@@ -237,7 +237,7 @@ async def hapus_periode(periode_id: str, _admin: dict = Depends(require_admin)):
     if res.deleted_count == 0:
         raise HTTPException(
             status_code=409,
-            detail="Periode tidak ditemukan atau terkunci (buka dulu kuncinya)")
+            detail="Hanya periode terbuka yang belum memiliki arsip LBKP final dapat dihapus")
     return {"ok": True, "id": periode_id}
 
 
