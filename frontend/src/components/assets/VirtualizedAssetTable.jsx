@@ -349,6 +349,7 @@ const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, on
                     <span className="font-semibold text-[11px] text-foreground truncate">{a.asset_code}</span>
                     {a.NUP && <span className="text-[8px] bg-muted text-muted-foreground px-1 rounded flex-shrink-0">{a.NUP}</span>}
                     <SimanMarker asset={a} />
+                    <BadgeStikerRingkas asset={a} className="inline-flex xl:hidden" />
                     {/* Kolom Lokasi baru muncul di xl; di bawah itu tabel ini
                         tak menampilkan pin sama sekali. Penanda ringkas ini
                         mengisi rentang lg..xl supaya "di ukuran layar apa pun"
@@ -358,7 +359,6 @@ const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, on
                     {(punyaKoordinat(a) || diDenah(a)) && (
                       <IkonLokasiAset asset={a} className="w-3 h-3 xl:hidden" />
                     )}
-                    <BadgeStikerRingkas asset={a} className="inline-flex xl:hidden" />
                   </div>
                   <div className="text-[10px] text-muted-foreground truncate leading-tight">{a.category || '-'}</div>
                 </div>
