@@ -64,7 +64,8 @@ async def test_jenis_pengadaan_tersimpan_dan_terekspor(contract):
     idem = {**headers, "Idempotency-Key": uuid.uuid4().hex}
     patch = await contract.http.patch(url, headers=idem, json={FIELD: "Non Kontrak BLU"})
     assert patch.status_code == 200, patch.text
-    assert patch.json()["nomor_kontrak"] == "K-arsip"
+    assert patch.json()["nomor_kontrak"] == ""
+    assert patch.json()["cara_bayar_kontrak"] == "Sekaligus"
     replay = await contract.http.patch(url, headers=idem, json={FIELD: "Non Kontrak BLU"})
     assert replay.status_code == 200 and replay.json()["version"] == patch.json()["version"]
     stale = await contract.http.patch(url, headers=headers, json={FIELD: "Kontrak BLU"})

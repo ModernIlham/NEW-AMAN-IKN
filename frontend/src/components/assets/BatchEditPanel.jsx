@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useMemo, useEffect } from "react";
+import React, { memo, useState, useCallback, useRef, useMemo, useEffect, useId } from "react";
 import {
   X, Loader2, CheckSquare, Tag, MapPin, Wrench, ClipboardList,
   Sticker, Building2, Camera, Images, FileCheck, Receipt,
@@ -29,6 +29,8 @@ import {
 } from "@/lib/pohonUnit";
 import { fieldLevel, labelLevel, levelAkar, levelRingkas } from "@/lib/eselonSatker";
 import { UKURAN_STIKER } from "@/lib/stikerAset";
+import jenisDokumen from "@/lib/jenisDokumenPengadaan.json";
+import { isNonKontrak } from "@/lib/jenisDokumenPengadaan";
 import PemilihUnitOrganisasi from "./PemilihUnitOrganisasi";
 import MarkerPinEditor from "./MarkerPinEditor";
 import MarkerDesignIcon from "./MarkerDesignIcon";
@@ -128,11 +130,11 @@ function ClearableInput({ value, onChange, onClear, isClear, ...props }) {
 }
 
 /** Select with clear option */
-function ClearableSelect({ value, onValueChange, children, placeholder, ...props }) {
+function ClearableSelect({ value, onValueChange, children, placeholder, triggerId, ...props }) {
   const isClear = value === "__clear__";
   return (
     <Select value={value || "__none__"} onValueChange={onValueChange} {...props}>
-      <SelectTrigger className={`h-9 min-w-0 text-[13px] bg-background ${isClear ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400' : ''}`}>
+      <SelectTrigger id={triggerId} className={`h-9 min-w-0 text-[13px] bg-background ${isClear ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400' : ''}`}>
         <SelectValue placeholder={placeholder || "—"} />
       </SelectTrigger>
       <SelectContent>
@@ -169,6 +171,8 @@ const BatchEditPanel = memo(function BatchEditPanel({
   attached = false,
 }) {
   const [updates, setUpdates] = useState({});
+  const pengadaanId = useId();
+  const nonKontrak = isNonKontrak(updates.jenis_dokumen_pengadaan);
   const [preparing, setPreparing] = useState(false);
   const applyingRef = useRef(false);
   // Versi saat draf dibuka, bukan versi baru dari WS yang tiba ketika mengetik.
@@ -451,6 +455,14 @@ const BatchEditPanel = memo(function BatchEditPanel({
     });
   };
 
+  const perubahan = { ...updates };
+  if (nonKontrak) {
+    perubahan.nomor_kontrak = "__clear__";
+    delete perubahan.cara_bayar_kontrak;
+  }
+  const clearFieldCount = Object.values(perubahan).filter(v => v === "__clear__").length;
+  const setFieldCount = Object.keys(perubahan).length - clearFieldCount;
+
   const handleApply = async () => {
     if (markerBusy || updating || applyingRef.current) return;
     // Snapshot ID aset terpilih SEKARANG (sinkron, sebelum dialog konfirmasi /
@@ -458,7 +470,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
     // menekan "Kosongkan" seleksi sesudah menekan Terapkan.
     const targetIds = selectedAssets instanceof Set
       ? Array.from(selectedAssets) : [...(selectedAssets || [])];
-    const finalUpdates = { ...updates };
+    const finalUpdates = { ...perubahan };
     // `__unit_id` hanya penanda pilihan di layar — yang dikirim adalah lima
     // kolom eselon yang sudah diturunkan darinya. Membiarkannya ikut terkirim
     // menambahkan field yang bukan milik registry aset ke muatan tulis.
@@ -478,8 +490,6 @@ const BatchEditPanel = memo(function BatchEditPanel({
     if (clearDocChecklist) finalUpdates.clear_document_checklist = true;
 
     // Count how many fields are being changed
-    const clearFieldCount = Object.values(updates).filter(v => v === "__clear__").length;
-    const setFieldCount = Object.keys(updates).filter(k => updates[k] !== "__clear__").length;
     const totalChanges = clearFieldCount + setFieldCount + activeItems.length + (clearPhotos ? 1 : 0) + (clearDocChecklist ? 1 : 0);
 
     if (totalChanges === 0) {
@@ -496,7 +506,9 @@ const BatchEditPanel = memo(function BatchEditPanel({
     const clearActions = [];
     if (clearPhotos) clearActions.push("semua foto");
     if (clearDocChecklist) clearActions.push("semua dokumen kelengkapan");
-    if (clearFieldCount > 0) clearActions.push(`${clearFieldCount} field data`);
+    if (nonKontrak) clearActions.push("nomor kontrak");
+    const clearLain = clearFieldCount - Number(nonKontrak);
+    if (clearLain > 0) clearActions.push(`${clearLain} field data`);
 
     if (clearActions.length > 0 || plan) {
       const ok = await confirm({
@@ -517,8 +529,8 @@ const BatchEditPanel = memo(function BatchEditPanel({
   };
 
   const activeDocCount = docItems.filter(d => d._active).length;
-  const clearCount = Object.values(updates).filter(v => v === "__clear__").length + (clearPhotos ? 1 : 0) + (clearDocChecklist ? 1 : 0);
-  const setCount = Object.keys(updates).filter(k => updates[k] !== "__clear__").length + activeDocCount;
+  const clearCount = clearFieldCount + (clearPhotos ? 1 : 0) + (clearDocChecklist ? 1 : 0);
+  const setCount = setFieldCount + activeDocCount;
   const hasUpdates = setCount > 0 || clearCount > 0;
 
   return (
@@ -694,17 +706,6 @@ const BatchEditPanel = memo(function BatchEditPanel({
               <ClearableInput placeholder="—" value={updates.perolehan_dari_nama === "__clear__" ? "" : updates.perolehan_dari_nama} isClear={updates.perolehan_dari_nama === "__clear__"} onChange={e => setField("perolehan_dari_nama", e.target.value)} onClear={() => toggleClearField("perolehan_dari_nama")} />
             </div>
             <div className="space-y-0.5">
-              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Nomor Kontrak</label>
-              <ClearableInput placeholder="—" value={updates.nomor_kontrak === "__clear__" ? "" : updates.nomor_kontrak} isClear={updates.nomor_kontrak === "__clear__"} onChange={e => setField("nomor_kontrak", e.target.value)} onClear={() => toggleClearField("nomor_kontrak")} />
-            </div>
-            <div className="space-y-0.5">
-              <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Cara Bayar Kontrak</label>
-              <ClearableSelect value={updates.cara_bayar_kontrak || "__none__"} onValueChange={v => setField("cara_bayar_kontrak", v)}>
-                <SelectItem value="Sekaligus">Sekaligus</SelectItem>
-                <SelectItem value="Bertahap (Termin)">Bertahap (Termin)</SelectItem>
-              </ClearableSelect>
-            </div>
-            <div className="space-y-0.5">
               <label className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Bukti Perolehan (BAST)</label>
               <ClearableInput placeholder="—" value={updates.nomor_bukti_perolehan === "__clear__" ? "" : updates.nomor_bukti_perolehan} isClear={updates.nomor_bukti_perolehan === "__clear__"} onChange={e => setField("nomor_bukti_perolehan", e.target.value)} onClear={() => toggleClearField("nomor_bukti_perolehan")} />
             </div>
@@ -730,6 +731,29 @@ const BatchEditPanel = memo(function BatchEditPanel({
               <datalist id="batch-garansi-jenis-opsi">
                 {["Pabrikan", "Distributor", "Toko", "Purna Jual", "Lainnya"].map(j => <option key={j} value={j} />)}
               </datalist>
+            </div>
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 rounded-md border border-border bg-muted/30 p-2 sm:grid-cols-2">
+            <div className="min-w-0 space-y-0.5">
+              <label htmlFor={`${pengadaanId}-jenis`} className="text-[10px] text-muted-foreground flex items-center gap-1"><FileText className="w-2.5 h-2.5" />Jenis Dokumen Pengadaan</label>
+              <ClearableSelect triggerId={`${pengadaanId}-jenis`} value={updates.jenis_dokumen_pengadaan} onValueChange={v => setField("jenis_dokumen_pengadaan", v)}>
+                {jenisDokumen.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+              </ClearableSelect>
+            </div>
+            <div className="min-w-0 space-y-0.5">
+              <label htmlFor={`${pengadaanId}-bayar`} className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Cara Bayar Kontrak</label>
+              <ClearableSelect triggerId={`${pengadaanId}-bayar`} disabled={nonKontrak} value={nonKontrak ? "__none__" : updates.cara_bayar_kontrak} onValueChange={v => setField("cara_bayar_kontrak", v)}>
+                <SelectItem value="Sekaligus">Sekaligus</SelectItem>
+                <SelectItem value="Bertahap (Termin)">Bertahap (Termin)</SelectItem>
+              </ClearableSelect>
+            </div>
+            <div className="min-w-0 space-y-0.5 sm:col-span-2">
+              <label htmlFor={`${pengadaanId}-nomor`} className="text-[10px] text-muted-foreground flex items-center gap-1"><FileCheck className="w-2.5 h-2.5" />Nomor Kontrak</label>
+              {nonKontrak ? (
+                <Input id={`${pengadaanId}-nomor`} className="h-9 text-[13px]" disabled placeholder="Akan dikosongkan pada aset terpilih" />
+              ) : (
+                <ClearableInput id={`${pengadaanId}-nomor`} placeholder="—" value={updates.nomor_kontrak === "__clear__" ? "" : updates.nomor_kontrak} isClear={updates.nomor_kontrak === "__clear__"} onChange={e => setField("nomor_kontrak", e.target.value)} onClear={() => toggleClearField("nomor_kontrak")} />
+              )}
             </div>
           </div>
           </Section>

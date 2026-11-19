@@ -571,6 +571,55 @@ def test_semua_jenis_bast_maksimal_dua_halaman(dbx, jenis):
                     f"{_MIN_ASET_DUA_HALAMAN} aset — batas mandat 2 lembar")
 
 
+def test_pdf_lampiran_foto_urut_dan_berlanjut_dengan_judul(dbx, monkeypatch):
+    import base64
+    from io import BytesIO
+    from unittest.mock import AsyncMock
+    import pypdfium2 as pdfium
+    from PIL import Image
+    import shared_utils
+
+    def foto(ukuran):
+        image = BytesIO()
+        Image.new("RGB", ukuran, "steelblue").save(image, "PNG")
+        return image.getvalue()
+
+    bukti = foto((80, 180))
+    monkeypatch.setattr(shared_utils, "get_document_from_gridfs", AsyncMock(return_value=bukti))
+    sampul = "data:image/png;base64," + base64.b64encode(foto((180, 80))).decode()
+
+    async def skenario():
+        aset = [
+            {"id": "akhir", "asset_code": "3070101001", "NUP": "1", "asset_name": "Barang akhir"},
+            {"id": "nup10", "asset_code": "3050101001", "NUP": "10", "asset_name": "Barang NUP 10"},
+            {"id": "tengah", "asset_code": "3060101001", "NUP": "1", "asset_name": "Barang tengah"},
+            {"id": "nup2", "asset_code": "3050101001", "NUP": "2", "asset_name": "Barang NUP 2 & rak"},
+        ]
+        await dbx.assets.insert_many([
+            {**a, "asset_code": "3999999999", "photos": [sampul]} for a in aset if a["id"] != "akhir"
+        ])
+        await dbx.bast_serah_terima.insert_one({
+            "id": "bast-foto", "kode_satker": SATKER, "jenis": "penggunaan_melekat",
+            "nomor": "BAST-foto", "tanggal": "2026-08-04",
+            "pihak_pertama": {"nama": "Penyerah"}, "pihak_kedua": {"nama": "Penerima"},
+            "asset_ids": [a["id"] for a in aset], "aset": aset, "sertakan_foto": True,
+            "foto_serah_terima": {"akhir": "serah-akhir", "nup10": "serah-10", "tengah": "serah-tengah"},
+            "foto_serah_terima_bersama": "serah-bersama",
+            "bukti": {"file_id": "scan", "content_type": "application/pdf", "filename": "bukti.pdf"},
+        })
+        resp = await _unwrap(rb.bast_pdf)("bast-foto", _user=USER)
+        return b"".join([chunk async for chunk in resp.body_iterator])
+
+    pdf = pdfium.PdfDocument(_jalan(skenario()))
+    pertama, kedua = [pdf[i].get_textpage().get_text_range() for i in range(len(pdf) - 2, len(pdf))]
+    assert "Halaman lampiran 1 dari 2" in pertama and "Halaman lampiran 2 dari 2" in kedua
+    assert "FOTO BUKTI SERAH TERIMA BARANG" in pertama and "FOTO BUKTI SERAH TERIMA BARANG" in kedua
+    assert pertama.index("3050101001 · NUP 2") < pertama.index("3050101001 · NUP 10") < pertama.index("3060101001 · NUP 1")
+    assert pertama.count("3050101001 · NUP 10") == pertama.count("3060101001 · NUP 1") == 2
+    assert "bukti.pdf" in pertama and "3999999999" not in pertama
+    assert kedua.index("3070101001 · NUP 1") < kedua.index("Foto perwakilan")
+
+
 # ── Sekat pembagi per BIDANG pada tabel objek serah terima (mandat pemilik) ──
 
 def test_pdf_sekat_bidang_dengan_jumlah_unit_dan_urutan_nup(dbx):

@@ -1917,20 +1917,24 @@ async def bast_pdf(bast_id: str, nilai: str = "",
     # disematkan sehingga bukti serah terima tak pernah ikut tercetak.
     if b.get("sertakan_foto"):
         import base64
-        from reportlab.platypus import Table as _Tbl, TableStyle as _TS
+        from reportlab.platypus import KeepInFrame, TableStyle
         from lampiran_foto_utils import (
-            KOLOM as _LK, bagi_baris, ringkas_lampiran, susun_sel_lampiran,
+            KOLOM, SEL_PER_HALAMAN, bagi_baris, ringkas_lampiran, susun_sel_lampiran,
         )
         from shared_utils import get_document_from_gridfs
 
+        # Identitas mengikuti tabel barang pada BAST. Master menyediakan foto
+        # terkini dan identitas cadangan untuk dokumen lama tanpa snapshot.
+        snapshot = {a["id"]: a for a in b.get("aset") or [] if a.get("id")}
+        asset_ids = b.get("asset_ids") or list(snapshot)
         aset_master = await db.assets.find(
-            {"id": {"$in": b.get("asset_ids") or []}},
+            {"id": {"$in": asset_ids}},
             {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
              "photos": 1, "photo_gridfs_ids": 1, "thumbnail_index": 1},
         ).to_list(500)
-        # Pertahankan urutan aset sesuai BAST (find() tidak menjamin urutan).
-        _urut = {aid: i for i, aid in enumerate(b.get("asset_ids") or [])}
-        aset_master.sort(key=lambda a: _urut.get(a.get("id"), 10**6))
+        master_per_id = {a["id"]: a for a in aset_master}
+        aset_lampiran = [{**master_per_id.get(aid, {}), **snapshot.get(aid, {}), "id": aid}
+                         for aid in asset_ids]
 
         async def _bytes_sampul(a):
             """Foto sampul aset → bytes (inline base64 atau GridFS)."""
@@ -1973,7 +1977,7 @@ async def bast_pdf(bast_id: str, nilai: str = "",
             if raw:
                 sampul_bytes[str(a.get("id"))] = raw
 
-        sel = susun_sel_lampiran(aset_master, foto_st,
+        sel = susun_sel_lampiran(aset_lampiran, foto_st,
                                  foto_st_bersama=bool(st_bersama_id),
                                  id_ber_sampul=set(sampul_bytes))
         # Bukti ttd berupa PDF tak bisa disematkan sebagai gambar, tetapi
@@ -1981,20 +1985,28 @@ async def bast_pdf(bast_id: str, nilai: str = "",
         # walau TIDAK ada satu pun foto (dulu blok ini dilewati seluruhnya).
         _catatan_bukti_pdf = bool(_bukti.get("file_id")) and not _bukti_gambar
         if sel or _catatan_bukti_pdf:
-            # Lebar/tinggi sel dihitung dari lebar dokumen supaya 2 kolom x 3
-            # baris benar-benar muat satu halaman tanpa meluber.
-            # Gaya keterangan sel: kecil & rata tengah, didefinisikan lokal
-            # supaya tidak bergantung pada kunci gaya global yang bisa berubah.
             kecil = ParagraphStyle(
-                "LampiranSel", parent=body, fontSize=7.5, leading=9.5,
-                alignment=TA_CENTER, spaceAfter=2)
-            _gap = 4 * rl_mm
-            lebar_sel = (doc.width - _gap * (_LK - 1)) / _LK
-            # Lebar yang benar-benar tersedia = lebar kolom dikurangi padding
-            # kanan sel; menskala terhadap `lebar_sel` membuat foto landscape
-            # meluber ~2 mm ke kolom sebelah.
-            lebar_gambar = lebar_sel - _gap / 2
-            tinggi_foto = 62 * rl_mm
+                "LampiranSel", parent=body, fontSize=8.5, leading=10.5,
+                alignment=TA_CENTER, spaceAfter=0)
+            lebar_grid = doc.width - 12  # padding Frame ReportLab, 6 pt per sisi
+            lebar_sel = lebar_grid / KOLOM
+            lebar_kotak = lebar_sel - 4 * rl_mm
+            lebar_isi = lebar_kotak - 6 * rl_mm
+            tinggi_judul = 16 * rl_mm
+            tinggi_foto = 53 * rl_mm
+            label_foto = {"sampul": "Foto barang", "serah": "Foto serah terima",
+                          "serah_bersama": "Foto perwakilan"}
+            gaya_kotak = TableStyle([
+                ("BOX", (0, 0), (-1, -1), 0.5, HexColor("#cbd5e1")),
+                ("BACKGROUND", (0, 0), (-1, 0), HexColor("#f1f5f9")),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.5, HexColor("#cbd5e1")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 3 * rl_mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 3 * rl_mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 2 * rl_mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * rl_mm),
+            ])
 
             async def _bytes_serah(s):
                 if s["jenis"] == "serah_bersama":
@@ -2008,23 +2020,26 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                 except Exception:
                     return None
 
-            def _kotak(judul, raw):
-                """Satu sel: keterangan + foto ter-skala di dalam batas sel."""
-                isi = [Paragraph(f"<b>{_esc(judul)}</b>", kecil)]
+            def _kotak(s, raw):
+                judul = f"{label_foto[s['jenis']]}<br/><b>{_esc(s['judul'])}</b>"
+                if s["nama"]:
+                    judul += f"<br/>{_esc(s['nama'])}"
+                keterangan = KeepInFrame(lebar_isi, tinggi_judul - 4 * rl_mm,
+                                          [Paragraph(judul, kecil)])
+                foto = Paragraph("<i>Foto tidak tersedia.</i>", kecil)
                 if raw:
                     try:
                         im = RLImage(io.BytesIO(raw))
-                        sk = min(lebar_gambar / im.imageWidth,
-                                 tinggi_foto / im.imageHeight)
+                        sk = min(lebar_isi / im.imageWidth,
+                                 (tinggi_foto - 4 * rl_mm) / im.imageHeight)
                         im.drawWidth = im.imageWidth * sk
                         im.drawHeight = im.imageHeight * sk
                         im.hAlign = "CENTER"
-                        isi.append(im)
+                        foto = im
                     except Exception:
-                        isi.append(Paragraph("<i>Foto tidak terbaca.</i>", kecil))
-                else:
-                    isi.append(Paragraph("<i>Foto tidak tersedia.</i>", kecil))
-                return isi
+                        foto = Paragraph("<i>Foto tidak terbaca.</i>", kecil)
+                return Table([[keterangan], [foto]], colWidths=[lebar_kotak],
+                             rowHeights=[tinggi_judul, tinggi_foto], style=gaya_kotak)
 
             data_sel = []
             for s in sel:
@@ -2033,41 +2048,37 @@ async def bast_pdf(bast_id: str, nilai: str = "",
                     continue
                 raw = (sampul_bytes.get(s["asset_id"]) if s["jenis"] == "sampul"
                        else await _bytes_serah(s))
-                data_sel.append(_kotak(s["judul"], raw))
+                data_sel.append(_kotak(s, raw))
 
-            el.append(PageBreak())
-            el.extend(_title_block("LAMPIRAN\nFOTO BUKTI SERAH TERIMA BARANG"))
+            halaman_foto = [data_sel[i:i + SEL_PER_HALAMAN]
+                            for i in range(0, len(data_sel), SEL_PER_HALAMAN)] or [[]]
             r = ringkas_lampiran(sel)
-            el.append(Paragraph(
-                f"{r['aset']} barang · {r['foto_serah_terima']} foto serah terima"
-                + (" · 1 foto perwakilan untuk seluruh barang"
-                   if r["ada_foto_bersama"] else ""), kecil))
-            el.append(Spacer(1, 3 * rl_mm))
-
-            # Bukti ttd berupa PDF tidak bisa disematkan sebagai gambar;
-            # catatannya DIPULIHKAN di sini (sempat hilang saat lampiran
-            # dirombak) supaya pembaca tahu scan bertanda tangan itu ada
-            # sebagai berkas terpisah.
-            if _catatan_bukti_pdf:
-                el.append(Paragraph(
-                    "<i>Scan BAST bertanda tangan tersimpan sebagai berkas "
-                    f"terpisah ({_esc(str(_bukti.get('filename') or 'bukti.pdf'))}).</i>",
-                    kecil))
-                el.append(Spacer(1, 2 * rl_mm))
-
-            if data_sel:
-                baris = bagi_baris(data_sel)
-                tabel = _Tbl(
-                    [[c if c is not None else "" for c in br] for br in baris],
-                    colWidths=[lebar_sel] * _LK, hAlign="CENTER")
-                tabel.setStyle(_TS([
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), _gap / 2),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                    ("TOPPADDING", (0, 0), (-1, -1), 2),
-                ]))
-                el.append(tabel)
+            for halaman, sel_halaman in enumerate(halaman_foto, 1):
+                el.append(PageBreak())
+                el.extend(_title_block("LAMPIRAN\nFOTO BUKTI SERAH TERIMA BARANG"))
+                if len(halaman_foto) > 1:
+                    el.append(Paragraph(f"Halaman lampiran {halaman} dari {len(halaman_foto)}", kecil))
+                if halaman == 1 and sel:
+                    el.append(Paragraph(
+                        f"{r['aset']} foto barang · {r['foto_serah_terima']} foto serah terima"
+                        + (" · 1 foto perwakilan" if r["ada_foto_bersama"] else ""), kecil))
+                if halaman == 1 and _catatan_bukti_pdf:
+                    el.append(KeepInFrame(lebar_grid, 12 * rl_mm, [Paragraph(
+                        "<i>Scan BAST bertanda tangan tersimpan sebagai berkas terpisah "
+                        f"({_esc(str(_bukti.get('filename') or 'bukti.pdf'))}).</i>", kecil)]))
+                if sel_halaman:
+                    el.append(Spacer(1, 2 * rl_mm))
+                    el.append(Table(
+                        [[c if c is not None else "" for c in baris]
+                         for baris in bagi_baris(sel_halaman)],
+                        colWidths=[lebar_sel] * KOLOM, hAlign="CENTER",
+                        style=TableStyle([
+                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 2 * rl_mm),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), 2 * rl_mm),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * rl_mm),
+                            ("TOPPADDING", (0, 0), (-1, -1), 2 * rl_mm),
+                        ])))
 
     footer = _page_footer_factory(f"BAST — {judul_jenis[:60]}")
     await asyncio.to_thread(doc.build, el, onFirstPage=footer,

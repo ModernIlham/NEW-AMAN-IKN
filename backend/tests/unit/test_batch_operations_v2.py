@@ -71,6 +71,26 @@ def test_preflight_deduplicates_versions_and_preserves_missing(database):
     run(scenario())
 
 
+def test_batch_jenis_non_kontrak_mengosongkan_nomor_dalam_tulisan_yang_sama(database):
+    async def scenario():
+        await asset(database, jenis_dokumen_pengadaan="Kontrak", nomor_kontrak="K-1",
+                    cara_bayar_kontrak="Sekaligus", nomor_bukti_perolehan="KW-1")
+        invalid = await payload(database, updates={"jenis_dokumen_pengadaan": "salah"})
+        with pytest.raises(HTTPException) as exc:
+            await batch.execute(invalid, USER)
+        assert exc.value.status_code == 422
+        req = await payload(database, updates={"jenis_dokumen_pengadaan": " Non Kontrak BLU "})
+        result = await batch.execute(req, USER)
+        assert result["applied"] == 1
+        saved = await database.assets.find_one({"id": "a1"})
+        assert saved["version"] == 2
+        assert saved["jenis_dokumen_pengadaan"] == "Non Kontrak BLU"
+        assert saved["nomor_kontrak"] == ""
+        assert saved["cara_bayar_kontrak"] == "Sekaligus"
+        assert saved["nomor_bukti_perolehan"] == "KW-1"
+    run(scenario())
+
+
 def test_unique_applied_missing_conflict_and_unchanged_counts(database):
     async def scenario():
         await asset(database)

@@ -3,6 +3,20 @@ import { Tag } from "lucide-react";
 import IkonStikerBelum from "./IkonStikerBelum";
 import { keteranganStiker } from "@/lib/stikerAset";
 
+export function BadgeStikerRingkas({ asset, className = "inline-flex" }) {
+  const { terpasang, huruf, status, ukuran } = keteranganStiker(asset);
+  const keterangan = `Stiker: ${status}${ukuran ? `, ukuran ${ukuran}` : ""}`;
+  return (
+    <span role="img" aria-label={keterangan} title={keterangan}
+      data-testid={`stiker-ringkas-${asset.id}`}
+      className={`h-4 min-w-4 shrink-0 items-center justify-center rounded px-0.5 text-[10px] font-bold leading-none ${terpasang
+        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
+        : "bg-muted text-muted-foreground"} ${className}`}>
+      {huruf || <Tag aria-hidden="true" className="h-2.5 w-2.5" />}
+    </span>
+  );
+}
+
 /**
  * Badge status stiker: pil DUA BAGIAN — status di kiri, UKURAN di tutup kanan.
  *

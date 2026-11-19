@@ -1,12 +1,36 @@
 import React from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axios from "axios";
 import BatchEditPanel from "../BatchEditPanel";
 import BatchOperationStatus from "../BatchOperationStatus";
 jest.mock("axios");
+beforeAll(() => { window.HTMLElement.prototype.scrollIntoView = () => {}; });
 beforeEach(() => axios.get.mockResolvedValue({ data: { items: [] } }));
 const selected = new Set(["a"]);
+
+test("jenis pengadaan satu kelompok dengan cara bayar dan batch Non Kontrak mengosongkan nomor", async () => {
+  const prepare = jest.fn().mockResolvedValue({ metadata: { total: 1 } });
+  const apply = jest.fn();
+  render(<BatchEditPanel selectedCount={1} categories={[]} onPrepare={prepare} onApply={apply}
+    selectedAssets={selected} assets={[{ id: "a", version: 4 }]} />);
+  fireEvent.click(screen.getByTestId("batch-toggle-more"));
+  const jenis = screen.getByRole("combobox", { name: "Jenis Dokumen Pengadaan" });
+  const bayar = screen.getByRole("combobox", { name: "Cara Bayar Kontrak" });
+  expect(jenis.parentElement.nextElementSibling).toBe(bayar.parentElement);
+  fireEvent.keyDown(jenis, { key: "ArrowDown" });
+  fireEvent.keyDown(await screen.findByRole("option", { name: "Non Kontrak BLU" }), { key: "Enter" });
+  expect(bayar).toBeDisabled();
+  expect(screen.getByLabelText("Nomor Kontrak")).toBeDisabled();
+  fireEvent.click(screen.getByTestId("batch-apply-btn"));
+  await waitFor(() => expect(prepare).toHaveBeenCalledWith(
+    { jenis_dokumen_pengadaan: "Non Kontrak BLU", nomor_kontrak: "__clear__" }, ["a"], { a: 4 },
+  ));
+  expect(await screen.findByTestId("confirm-dialog")).toHaveTextContent("mengosongkan nomor kontrak");
+  await act(async () => fireEvent.click(screen.getByTestId("confirm-dialog-confirm")));
+  expect(apply).toHaveBeenCalledTimes(1);
+});
+
 test("draf memakai versi saat dibuka, preflight mendahului konfirmasi, klik ganda hanya satu operasi", async () => {
   let resolve;
   const prepare = jest.fn(() => new Promise(r => { resolve = r; }));

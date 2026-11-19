@@ -19,6 +19,7 @@ import {
 import { DocumentChecklist } from "./DocumentChecklist";
 import { InputTanggal } from "@/components/ui/input-tanggal";
 import { buildAssetPatch, buildEditFormData, emptyAssetForm } from "../../lib/assetFormData";
+import { isNonKontrak } from "../../lib/jenisDokumenPengadaan";
 import { ASSET_FIELD_REGISTRY } from "../../lib/assetFields";
 import { bangunChecklist, rekomendasiKelengkapan } from "@/lib/kelengkapanBmn";
 import InventoryFieldSheet, { PENGGUNA_MELEKAT_OPTIONS, PENGGUNA_NAME_LABELS, OPERASIONAL_JENIS_OPTIONS, CONDITION_OPTIONS, SUB_KLASIFIKASI_OPTIONS, TEMUAN_PENCATATAN_OPTIONS } from "./InventoryFieldSheet";
@@ -1362,7 +1363,13 @@ const AssetForm = memo(({
     // yang tampak di layar sama dengan yang tersimpan.
     const isi = (name === "koordinat_latitude" || name === "koordinat_longitude")
       ? normalisasiKoordinat(value) : value;
-    setFormData(p => ({ ...p, [name]: isi }));
+    setFormData(p => {
+      const next = { ...p, [name]: isi };
+      if (name === "jenis_dokumen_pengadaan" && (isNonKontrak(isi) || isNonKontrak(p[name]))) {
+        next.nomor_kontrak = "";
+      }
+      return next;
+    });
     clearFieldError(name);
   }, [clearFieldError]);
 
@@ -2151,6 +2158,7 @@ const AssetForm = memo(({
         payload = {
           ...formData, inventory_status: autoStatus, photo: coverPhoto, photos: compressedPhotos, document_checklist: cleanedChecklist,
         };
+        if (isNonKontrak(payload.jenis_dokumen_pengadaan)) payload.nomor_kontrak = "";
       }
       
       // Check payload size

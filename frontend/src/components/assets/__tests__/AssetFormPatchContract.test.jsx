@@ -65,6 +65,8 @@ test("tambah aset menyediakan jenis dokumen tanpa menebak nilai bawaan", async (
   await screen.findByTestId("asset-barang-bersejarah");
   fireEvent.click(screen.getByRole("button", { name: "Pengadaan" }));
   expect(screen.getByLabelText("Jenis Dokumen Pengadaan")).toHaveValue("");
+  expect(screen.getByLabelText("Nomor Kontrak")).toBeDisabled();
+  expect(screen.getByLabelText("Cara Bayar Kontrak")).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Jenis Dokumen Pengadaan"), { target: { value: "Non Kontrak BLU" } });
   expect(screen.getByLabelText("Nomor Kontrak")).toBeDisabled();
   expect(screen.getByTestId("asset-bukti-perolehan")).not.toBeDisabled();
@@ -79,12 +81,24 @@ test.each(["Non Kontrak/Penerimaan Barang", "Non Kontrak BLU"])("jenis %s tersim
   fireEvent.click(screen.getByRole("button", { name: "Pengadaan" }));
   fireEvent.change(screen.getByLabelText("Jenis Dokumen Pengadaan"), { target: { value: jenis } });
   expect(screen.getByLabelText("Nomor Kontrak")).toBeDisabled();
+  expect(screen.getByLabelText("Nomor Kontrak")).toHaveValue("");
   expect(screen.getByLabelText("Cara Bayar Kontrak")).toBeDisabled();
   expect(screen.getByTestId("asset-bukti-perolehan")).not.toBeDisabled();
   fireEvent.change(screen.getByTestId("asset-bukti-perolehan"), { target: { value: "KW-1" } });
   fireEvent.click(screen.getByTestId("asset-form-submit"));
   await waitFor(() => expect(initial.onOptimisticSubmit).toHaveBeenCalledWith(
-    { jenis_dokumen_pengadaan: jenis, nomor_bukti_perolehan: "KW-1" }, true, "a1", true,
+    { jenis_dokumen_pengadaan: jenis, nomor_kontrak: "", nomor_bukti_perolehan: "KW-1" }, true, "a1", true,
+  ));
+});
+
+test("menyimpan aset yang sudah Non Kontrak membersihkan nomor kontrak lama", async () => {
+  const initial = props();
+  Object.assign(initial.editAsset, { jenis_dokumen_pengadaan: "Non Kontrak BLU", nomor_kontrak: "K-arsip" });
+  render(<AssetForm {...initial} />);
+  await screen.findByTestId("asset-barang-bersejarah");
+  fireEvent.click(screen.getByTestId("asset-form-submit"));
+  await waitFor(() => expect(initial.onOptimisticSubmit).toHaveBeenCalledWith(
+    { nomor_kontrak: "" }, true, "a1", true,
   ));
 });
 
