@@ -18,8 +18,16 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
-## [#1148] Aksesibilitas — tombol ikon bernama, label form tertaut, kegiatan bisa dibuka dengan keyboard — 2026-11-18
+## [#1148] Ubah Massal — pegawai internal bisa dipilih; aksesibilitas tombol & label form — 2026-11-19
 
+- Perbaikan: di panel **Ubah Massal**, kolom Nama Pengguna kini punya tombol
+  **Pilih** yang mencakup pegawai **Internal** (Master Pegawai satker),
+  Instansi Eksternal, dan Pihak Ketiga. Sebelumnya hanya ada "Orang luar",
+  sehingga pegawai satker sendiri harus diketik manual. Pegawai berstatus
+  meninggal tidak dapat dipilih (sama seperti di form aset).
+- Perbaikan tampilan: kolom NIP/NIK Pegawai dan tombol Ambil GPS di Ubah
+  Massal kini sejajar dengan kolom di sebelahnya (sebelumnya turun beberapa
+  piksel).
 - Perbaikan: kegiatan inventarisasi kini bisa dibuka dengan **keyboard**
   (Tab ke judul kegiatan, lalu Enter). Sebelumnya kartu kegiatan hanya bisa
   diklik dengan mouse.
