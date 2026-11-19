@@ -11,20 +11,20 @@ function Form({ jenis = "" }) {
     onChange={({ target: { name, value } }) => setFormData(p => ({ ...p, [name]: value }))} />;
 }
 
-test.each(["", ...pilihan])("penguncian dan nilai historis untuk %s", async jenis => {
+test.each(["", ...pilihan])("penguncian isian kontrak untuk %s", async jenis => {
   render(<Form jenis={jenis} />);
   const non = jenis.startsWith("Non Kontrak");
   const nomor = screen.getByLabelText("Nomor Kontrak");
   const bayar = screen.getByLabelText("Cara Bayar Kontrak");
   expect(screen.getByLabelText("Jenis Dokumen Pengadaan")).toHaveValue(jenis);
-  expect(nomor.disabled).toBe(non);
-  expect(bayar.disabled).toBe(non);
-  expect(nomor).toHaveValue("KON-1");
+  expect(nomor.disabled).toBe(!jenis || non);
+  expect(bayar.disabled).toBe(!jenis || non);
+  expect(nomor).toHaveValue(non ? "" : "KON-1");
   expect(bayar).toHaveValue("Sekaligus");
   if (non) {
     await userEvent.type(nomor, "tidak boleh");
-    expect(nomor).toHaveValue("KON-1");
-    expect(screen.getByTestId("asset-non-kontrak-info")).toHaveTextContent("tetap disimpan");
+    expect(nomor).toHaveValue("");
+    expect(nomor).toHaveAccessibleDescription(expect.stringContaining("akan dikosongkan"));
   }
 });
 

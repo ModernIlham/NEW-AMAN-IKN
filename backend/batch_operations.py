@@ -22,6 +22,9 @@ from db import db, fs_bucket
 from checklist_storage import (array as media_array, photo_count as checklist_photo_count,
                                prepare_checklist, discard_staged)
 from inventarisasi_stempel import stempel
+from jenis_dokumen_pengadaan import (
+    kosongkan_nomor_kontrak_non_kontrak, normalisasi_jenis_dokumen_pengadaan,
+)
 from marker_pin import bersihkan_marker_doc
 from shared_utils import (
     kode_satker_user, pastikan_akses_kegiatan_id,
@@ -126,6 +129,12 @@ async def normalize_updates(updates):
         if not isinstance(value, (str, int, float)) or isinstance(value, bool):
             error("invalid_value", f"Nilai {key} harus berupa teks atau angka.", 400)
         scalars[key] = "" if value == "__clear__" else str(value)
+    if "jenis_dokumen_pengadaan" in scalars:
+        try:
+            scalars["jenis_dokumen_pengadaan"] = normalisasi_jenis_dokumen_pengadaan(
+                scalars["jenis_dokumen_pengadaan"])
+        except ValueError as exc:
+            error("invalid_value", str(exc), 422)
     normalisasi_koordinat_doc(scalars)
     await bersihkan_marker_doc(scalars)
     if scalars.get("pengguna_nip"):
@@ -293,6 +302,8 @@ async def _prepare_photos(photos):
 
 async def _asset_changes(asset, normalized, prepared, now_str, new_gids, checklist_staging=None):
     fields = copy.deepcopy(normalized["scalars"])
+    if fields.keys() & {"jenis_dokumen_pengadaan", "nomor_kontrak"}:
+        kosongkan_nomor_kontrak_non_kontrak(fields, asset)
     unset = sisip_geo_ke_update(asset, fields)
     delete_gids = []
     if normalized["clear_photos"]:

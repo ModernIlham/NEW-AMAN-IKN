@@ -28,7 +28,8 @@ import spasial_penempatan as sp
 import inventarisasi_stempel as stempel_inv
 from models import AssetCreate, AssetResponse
 from jenis_dokumen_pengadaan import (
-    normalisasi_jenis_dokumen_pengadaan, pertahankan_jenis_dokumen_lama,
+    kosongkan_nomor_kontrak_non_kontrak, normalisasi_jenis_dokumen_pengadaan,
+    pertahankan_jenis_dokumen_lama,
 )
 from auth_utils import (
     require_admin, require_super_admin, require_user,
@@ -1187,6 +1188,7 @@ async def buat_aset_draft(data: AssetCreate, audit_user: str = "system") -> dict
         "updated_at": now,
         "version": 1,
     }
+    kosongkan_nomor_kontrak_non_kontrak(asset_doc)
     # WAKTU INVENTARISASI. Aset "Berlebih" lahir LANGSUNG berstatus
     # ditemukan — ia justru diciptakan karena barangnya ada di lapangan.
     # Tanpa cap di sini seluruh temuan berlebih hilang dari linimasa, padahal
@@ -1338,6 +1340,7 @@ async def create_asset(asset: AssetCreate, request: Request, _user: dict = Depen
         **({"idem_key": idem_key} if idem_key else {}),
     }
 
+    kosongkan_nomor_kontrak_non_kontrak(asset_doc)
     # SPASIAL: turunkan `geo` untuk indeks 2dsphere (lihat spasial_utils.py).
     terapkan_geo(asset_doc)
 
@@ -2369,6 +2372,7 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     }
 
     pertahankan_jenis_dokumen_lama(update_data, existing, asset.model_fields_set)
+    kosongkan_nomor_kontrak_non_kontrak(update_data, existing)
 
     # WAKTU INVENTARISASI. Jalur ini juga bisa menandai aset "Ditemukan"
     # untuk PERTAMA kalinya (form aset disimpan dengan status baru), jadi
@@ -2474,7 +2478,11 @@ async def update_asset(asset_id: str, asset: AssetCreate, request: Request,
     invalidate_asset_cache()
     audit_user = _user.get("name") or _user.get("username") or request.headers.get("X-Audit-User", "unknown")
     audit_user_id = _user.get("id") or request.headers.get("X-Audit-User-Id", "")
-    changes = compute_changes(existing, asset.model_dump())
+    changes = compute_changes(existing, {
+        **asset.model_dump(),
+        "jenis_dokumen_pengadaan": update_data["jenis_dokumen_pengadaan"],
+        "nomor_kontrak": update_data["nomor_kontrak"],
+    })
     if changes:
         await log_audit("update", asset.activity_id, asset_id, asset.asset_code, asset.asset_name, audit_user, changes=changes, nup=asset.NUP or "")
     # Prinsip 1 Bab 5: identitas terbaca yang berubah lewat form ikut
@@ -2619,6 +2627,7 @@ async def patch_asset(asset_id: str, request: Request, _user: dict = Depends(req
 
     if not update_data and not has_photo_ops:
         raise HTTPException(status_code=400, detail="Tidak ada field yang diubah")
+    kosongkan_nomor_kontrak_non_kontrak(update_data, existing)
 
     # Validate uniqueness: asset_code + NUP (only if either changed)
     new_code = update_data.get("asset_code", existing["asset_code"])

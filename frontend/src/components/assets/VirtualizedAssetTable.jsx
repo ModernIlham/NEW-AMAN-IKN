@@ -5,6 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useJangkarDaftarAset } from "@/hooks/usePosisiDaftarAset";
 import { Camera, Briefcase, Tag, CreditCard, Trash2, History, ClipboardCheck, Lock, Cloud, CloudOff, Check, RotateCcw, Clock, Loader2, AlertTriangle, BookOpen, User, RefreshCcw, ShieldCheck } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
+import { BadgeStikerRingkas } from "./BadgeStiker";
 import BadgeDraf from "./BadgeDraf";
 import IkonStikerBelum from "./IkonStikerBelum";
 import { diDenah, labelBarisLokasi, punyaKoordinat } from "@/lib/koordinatAset";
@@ -357,6 +358,7 @@ const VirtualizedAssetTable = memo(({ daftarkanGulir, assets, editId, onEdit, on
                     {(punyaKoordinat(a) || diDenah(a)) && (
                       <IkonLokasiAset asset={a} className="w-3 h-3 xl:hidden" />
                     )}
+                    <BadgeStikerRingkas asset={a} className="inline-flex xl:hidden" />
                   </div>
                   <div className="text-[10px] text-muted-foreground truncate leading-tight">{a.category || '-'}</div>
                 </div>

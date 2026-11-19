@@ -1,5 +1,6 @@
 import { ASSET_DEFAULT_SCALARS, ASSET_SCALAR_FIELDS } from "./assetFields";
 import { normalisasiJenisOperasional } from "./jenisOperasional";
+import { isNonKontrak } from "./jenisDokumenPengadaan";
 import { bangunChecklist, rekomendasiKelengkapan } from "./kelengkapanBmn";
 
 /** Fresh form containers; no React state, storage, request or media fetch. */
@@ -40,8 +41,10 @@ export function buildAssetPatch({
 }) {
   const patch = {};
   for (const key of [...ASSET_SCALAR_FIELDS, "activity_id"]) {
-    if (String(formData[key] ?? "") !== String(original[key] ?? "")) {
-      patch[key] = formData[key];
+    const value = key === "nomor_kontrak" && isNonKontrak(formData.jenis_dokumen_pengadaan)
+      ? "" : formData[key];
+    if (String(value ?? "") !== String(original[key] ?? "")) {
+      patch[key] = value;
     }
   }
   if (autoStatus !== (original.inventory_status ?? "")) patch.inventory_status = autoStatus;

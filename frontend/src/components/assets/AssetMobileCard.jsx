@@ -2,7 +2,7 @@ import React, { memo, useState, useRef } from "react";
 import { Camera, Briefcase, Trash2, Lock, Cloud, Check, RotateCcw, RefreshCcw, MoreVertical, BookOpen, History, CreditCard, AlertTriangle, ShieldCheck, CheckCircle2, XCircle, PlusCircle, Scale, CircleDashed } from "lucide-react";
 import IkonLokasiAset from "./IkonLokasiAset";
 import BadgeDraf from "./BadgeDraf";
-import BadgeStiker from "./BadgeStiker";
+import BadgeStiker, { BadgeStikerRingkas } from "./BadgeStiker";
 import { labelBarisLokasi } from "@/lib/koordinatAset";
 import { sisaGaransi } from "../../lib/garansi";
 import { kelasStatusInventarisasi } from "../../lib/warnaAset";
@@ -40,6 +40,7 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
   };
   
   const priceFormatted = formatPrice(asset.purchase_price);
+  const lokasi = labelBarisLokasi(asset);
   // Garansi pindah menyatu dengan NUP (HP): dihitung sekali di sini.
   const garansi = sisaGaransi(asset.garansi_hingga);
   
@@ -358,14 +359,15 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                   penempatan denahnya sudah ada — penandanya menempel pada ikon
                   pin ini, jadi tanpa barisnya ia takkan pernah terlihat justru
                   pada aset yang paling sering belum diisi lokasinya. */}
-              {labelBarisLokasi(asset) && (
+              {lokasi ? (
                 <span className="flex items-center gap-0.5 min-w-0">
                   <IkonLokasiAset asset={asset} className="w-3 h-3" />
+                  <BadgeStikerRingkas asset={asset} className="hidden md:inline-flex" />
                   <span className="truncate min-w-0">
-                    {labelBarisLokasi(asset)}
+                    {lokasi}
                   </span>
                 </span>
-              )}
+              ) : <BadgeStikerRingkas asset={asset} className="hidden md:inline-flex" />}
             </div>
             {/* Row 3: Eselon, Price, Stiker — same flexible layout as row 2 */}
             <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
@@ -380,7 +382,7 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                   Rp {priceFormatted}
                 </span>
               )}
-              <BadgeStiker asset={asset} />
+              <BadgeStiker asset={asset} className="md:hidden" />
               {/* Status inventarisasi = IKON SAJA (HP) — makna via warna +
                   tooltip/aria; label teks dihapus demi hemat ruang. */}
               {(() => {

@@ -18,6 +18,8 @@ Logika di sini sengaja MURNI (tanpa I/O, tanpa reportlab) agar bisa diuji
 unit; pemanggil di `routes/bast.py` yang mengubah hasilnya jadi elemen PDF.
 """
 
+from kodefikasi_utils import urutkan_aset_bmn
+
 KOLOM = 2
 BARIS_PER_HALAMAN = 3
 SEL_PER_HALAMAN = KOLOM * BARIS_PER_HALAMAN  # 6
@@ -50,7 +52,8 @@ def susun_sel_lampiran(aset_rows, foto_st_per_aset=None, foto_st_bersama=False,
     list[dict | None] — `None` = sel kosong penyeimbang. Tiap dict berkunci:
         jenis    : "sampul" | "serah" | "serah_bersama"
         asset_id : id aset ("" untuk serah_bersama)
-        judul    : label singkat untuk dicetak di atas foto
+        judul    : kode barang dan NUP atau keterangan foto bersama
+        nama     : nama barang
         kunci    : nilai dari `foto_st_per_aset` (untuk jenis serah)
     """
     peta = dict(foto_st_per_aset or {})
@@ -59,9 +62,10 @@ def susun_sel_lampiran(aset_rows, foto_st_per_aset=None, foto_st_bersama=False,
     def _kolom_sekarang():
         return len(sel) % kolom if kolom > 0 else 0
 
-    for a in aset_rows or []:
+    for a in urutkan_aset_bmn(aset_rows):
         aid = str(a.get("id") or "")
         judul = _judul_aset(a)
+        nama = str(a.get("asset_name") or "").strip()
         ada_sampul = id_ber_sampul is None or aid in id_ber_sampul
         ada_serah = bool(aid and peta.get(aid))
         if not ada_sampul and not ada_serah:
@@ -75,24 +79,22 @@ def susun_sel_lampiran(aset_rows, foto_st_per_aset=None, foto_st_bersama=False,
 
         if ada_sampul:
             sel.append({"jenis": "sampul", "asset_id": aid,
-                        "judul": judul, "kunci": None})
+                        "judul": judul, "nama": nama, "kunci": None})
         if ada_serah:
             sel.append({"jenis": "serah", "asset_id": aid,
-                        "judul": f"Serah terima — {judul}",
+                        "judul": judul, "nama": nama,
                         "kunci": peta[aid]})
     if foto_st_bersama:
         sel.append({"jenis": "serah_bersama", "asset_id": "",
-                    "judul": "Serah terima — berlaku untuk seluruh barang",
+                    "judul": "Berlaku untuk seluruh barang", "nama": "",
                     "kunci": "__bersama__"})
     return sel
 
 
 def _judul_aset(a):
-    kode = str(a.get("asset_code") or "").strip()
+    kode = str(a.get("asset_code") or "").strip() or "(tanpa kode)"
     nup = str(a.get("NUP") or "").strip()
-    nama = str(a.get("asset_name") or "").strip()
-    kepala = " · NUP ".join([x for x in (kode, nup) if x]) or "(tanpa kode)"
-    return f"{kepala} — {nama}" if nama else kepala
+    return f"{kode} · NUP {nup}" if nup else kode
 
 
 def bagi_baris(sel, kolom=KOLOM):
@@ -121,5 +123,5 @@ def ringkas_lampiran(sel):
     total = len(sel)                     # halaman dihitung dari SEL, termasuk kosong
     halaman = max(1, (total + SEL_PER_HALAMAN - 1) // SEL_PER_HALAMAN) if total else 0
     return {"aset": n_sampul, "foto_serah_terima": n_serah,
-            "ada_foto_bersama": bersama, "total_foto": total,
+            "ada_foto_bersama": bersama, "total_foto": len(isi),
             "perkiraan_halaman": halaman}

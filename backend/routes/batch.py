@@ -19,6 +19,9 @@ from pymongo import UpdateOne, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from asset_fields import BATCHABLE_FIELD_NAMES
+from jenis_dokumen_pengadaan import (
+    kosongkan_nomor_kontrak_non_kontrak, normalisasi_jenis_dokumen_pengadaan,
+)
 from marker_pin import bersihkan_marker_doc
 from meili_utils import jadwalkan_sync_id
 from spasial_utils import sisip_geo_ke_update
@@ -239,6 +242,13 @@ async def batch_update_assets(data: BatchUpdateRequest, request: Request, x_user
     for k, v in list(clean_updates.items()):
         if v == "__clear__":
             clean_updates[k] = ""
+    if "jenis_dokumen_pengadaan" in clean_updates:
+        try:
+            clean_updates["jenis_dokumen_pengadaan"] = normalisasi_jenis_dokumen_pengadaan(
+                clean_updates["jenis_dokumen_pengadaan"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        kosongkan_nomor_kontrak_non_kontrak(clean_updates)
 
     # Koordinat memakai pemisah desimal TITIK, sama seperti jalur tunggal.
     # Dilakukan SESUDAH sentinel `__clear__` diterjemahkan agar "kosongkan"
