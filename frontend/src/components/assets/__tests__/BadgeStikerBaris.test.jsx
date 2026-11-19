@@ -98,10 +98,10 @@ describe("baris HP memakai badge itu", () => {
     expect(within(badge).getByTestId("ikon-stiker-belum")).toBeInTheDocument();
   });
 
-  it("kartu tablet menaruh huruf ringkas di samping pin lokasi", () => {
+  it("kartu tablet menaruh huruf ringkas di kiri pin lokasi", () => {
     render(<AssetMobileCard asset={{ ...sudah("Sedang"), location: "Gudang" }} />);
     const badge = screen.getByTestId("stiker-ringkas-a1");
-    expect(badge.previousElementSibling).toHaveAttribute("data-testid", "lokasi-penanda-a1");
+    expect(badge.nextElementSibling).toHaveAttribute("data-testid", "lokasi-penanda-a1");
     expect(badge).toHaveTextContent("M");
     expect(badge).toHaveClass("hidden", "md:inline-flex", "bg-emerald-100");
     expect(screen.getByTestId("badge-stiker")).toHaveClass("md:hidden");
@@ -159,15 +159,18 @@ describe("kolom stiker di tabel desktop", () => {
   });
 
   it.each([["Kecil", "S"], ["Sedang", "M"], ["Besar", "L"]])(
-    "tabel ringkas menaruh %s (%s) di samping lokasi dengan warna status",
+    "tabel ringkas menaruh %s (%s) di kiri lokasi dengan penanda statusnya",
     (ukuran, huruf) => {
       const lokasi = { koordinat_latitude: "-1.4", koordinat_longitude: "116.8" };
       pasang([{ ...belum(ukuran), ...lokasi }, { ...sudah(ukuran), ...lokasi, id: "a2" }]);
       const badge = screen.getByTestId("stiker-ringkas-a1");
       const terpasang = screen.getByTestId("stiker-ringkas-a2");
-      expect(badge.previousElementSibling).toHaveAttribute("data-testid", "lokasi-penanda-a1");
+      expect(badge.nextElementSibling).toHaveAttribute("data-testid", "lokasi-penanda-a1");
+      expect(terpasang.nextElementSibling).toHaveAttribute("data-testid", "lokasi-penanda-a2");
       expect(badge.textContent).toBe(huruf);
       expect(terpasang.textContent).toBe(huruf);
+      expect(within(badge).getByTestId("ikon-stiker-belum")).toBeInTheDocument();
+      expect(within(terpasang).queryByTestId("ikon-stiker-belum")).toBeNull();
       expect(badge).toHaveClass("bg-muted", "xl:hidden");
       expect(terpasang).toHaveClass("bg-emerald-100");
     });

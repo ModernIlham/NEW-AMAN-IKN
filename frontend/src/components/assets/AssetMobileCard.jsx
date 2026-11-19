@@ -361,8 +361,8 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                   pada aset yang paling sering belum diisi lokasinya. */}
               {lokasi ? (
                 <span className="flex items-center gap-0.5 min-w-0">
-                  <IkonLokasiAset asset={asset} className="w-3 h-3" />
                   <BadgeStikerRingkas asset={asset} className="hidden md:inline-flex" />
+                  <IkonLokasiAset asset={asset} className="w-3 h-3" />
                   <span className="truncate min-w-0">
                     {lokasi}
                   </span>
