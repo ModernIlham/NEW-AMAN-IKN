@@ -33,7 +33,7 @@ import PemilihUnitOrganisasi from "./PemilihUnitOrganisasi";
 import MarkerPinEditor from "./MarkerPinEditor";
 import MarkerDesignIcon from "./MarkerDesignIcon";
 import IkonKelompok from "../pegawai/IkonKelompok";
-import TombolOrangLuar from "../pegawai/TombolOrangLuar";
+import TombolPilihPengguna from "../pegawai/TombolPilihPengguna";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -764,7 +764,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
               <div className="batch-field-grid grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {/* Melekat ke */}
                 <div className="space-y-0.5 sm:col-span-2">
-                  <label className="text-[10px] text-muted-foreground">Melekat ke</label>
+                  <label className="block text-[10px] text-muted-foreground">Melekat ke</label>
                   <div className="grid grid-cols-3 gap-1">
                     {PENGGUNA_MELEKAT_OPTIONS.map(o => (
                       <button key={o} type="button" onClick={() => setPenggunaMelekat(o)}
@@ -781,31 +781,43 @@ const BatchEditPanel = memo(function BatchEditPanel({
                     {PENGGUNA_NAME_LABELS[updates.pengguna_melekat_ke] || "Nama Pengguna"}
                     <IkonKelompok nomor={updates.pengguna_nip === "__clear__" ? "" : updates.pengguna_nip} ukuran={12} />
                   </label>
-                  <div className="flex items-start gap-1">
+                  {/* items-stretch: tombol Pilih setinggi isiannya di semua lebar layar */}
+                  <div className="flex items-stretch gap-1">
                     <div className="flex-1 min-w-0">
                       <ClearableInput placeholder="—" value={updates.user === "__clear__" ? "" : updates.user} isClear={updates.user === "__clear__"} onChange={e => setField("user", e.target.value)} onClear={() => toggleClearField("user")} />
                     </div>
-                    {/* Pengguna dari instansi eksternal / pihak ketiga (PGW-08) */}
-                    <TombolOrangLuar kecil testId="batch-pengguna-luar"
-                      onPilih={(o) => { setField("user", o.nama || ""); setField("pengguna_nip", o.nip || ""); }} />
+                    {/* Pemilih SEMUA kelompok: pegawai internal (Master Pegawai)
+                        + instansi eksternal + pihak ketiga. Dulu hanya ada tombol
+                        "Orang luar", jadi pegawai satker sendiri harus diketik. */}
+                    <TombolPilihPengguna testId="batch-pengguna-pilih"
+                      terpilihNip={updates.pengguna_nip === "__clear__" ? "" : updates.pengguna_nip}
+                      onPilih={(o) => {
+                        setField("user", o.nama || "");
+                        setField("pengguna_nip", o.nip || "");
+                        // Jabatan hanya ikut bila aset memang melekat ke Jabatan —
+                        // ubah massal menimpa SEMUA aset terpilih.
+                        if (updates.pengguna_melekat_ke === "Jabatan" && (o.jabatan || "").trim()) {
+                          setField("pengguna_jabatan", o.jabatan.trim());
+                        }
+                      }} />
                   </div>
                 </div>
                 {/* NIP/NIK pegawai pengguna */}
                 <div className="space-y-0.5 order-2 sm:order-none">
-                  <label className="text-[10px] text-muted-foreground">NIP/NIK Pegawai</label>
+                  <label className="block text-[10px] text-muted-foreground">NIP/NIK Pegawai</label>
                   <ClearableInput placeholder="—" value={updates.pengguna_nip === "__clear__" ? "" : updates.pengguna_nip} isClear={updates.pengguna_nip === "__clear__"} onChange={e => setField("pengguna_nip", e.target.value)} onClear={() => toggleClearField("pengguna_nip")} />
                 </div>
                 {/* Nama Jabatan (bila melekat ke Jabatan) — di HP di atas Nama */}
                 {updates.pengguna_melekat_ke === "Jabatan" && (
                   <div className="space-y-0.5 order-1 sm:order-none">
-                    <label className="text-[10px] text-muted-foreground">Nama Jabatan</label>
+                    <label className="block text-[10px] text-muted-foreground">Nama Jabatan</label>
                     <ClearableInput placeholder="Contoh: Kepala Subbagian Umum" value={updates.pengguna_jabatan === "__clear__" ? "" : updates.pengguna_jabatan} isClear={updates.pengguna_jabatan === "__clear__"} onChange={e => setField("pengguna_jabatan", e.target.value)} onClear={() => toggleClearField("pengguna_jabatan")} />
                   </div>
                 )}
                 {/* Jenis Operasional (bila melekat ke Operasional) — di HP di atas Nama */}
                 {updates.pengguna_melekat_ke === "Operasional" && (
                   <div className="space-y-0.5 order-1 sm:order-none">
-                    <label className="text-[10px] text-muted-foreground">Jenis Operasional</label>
+                    <label className="block text-[10px] text-muted-foreground">Jenis Operasional</label>
                     <div className="grid grid-cols-2 gap-1">
                       {OPERASIONAL_JENIS_OPTIONS.map(o => (
                         <button key={o} type="button" onClick={() => setOperasionalJenis(o)}
@@ -837,7 +849,7 @@ const BatchEditPanel = memo(function BatchEditPanel({
                 <ClearableInput placeholder="—" value={updates.koordinat_longitude === "__clear__" ? "" : updates.koordinat_longitude} isClear={updates.koordinat_longitude === "__clear__"} onChange={e => setField("koordinat_longitude", e.target.value)} onClear={() => toggleClearField("koordinat_longitude")} />
               </div>
               <div className="space-y-0.5">
-                <label className="text-[10px] text-muted-foreground">Ambil Otomatis</label>
+                <label className="block text-[10px] text-muted-foreground">Ambil Otomatis</label>
                 <button
                   type="button"
                   onClick={fetchGPS}
