@@ -18,11 +18,33 @@ Logika di sini sengaja MURNI (tanpa I/O, tanpa reportlab) agar bisa diuji
 unit; pemanggil di `routes/bast.py` yang mengubah hasilnya jadi elemen PDF.
 """
 
+import io
+
 from kodefikasi_utils import urutkan_aset_bmn
 
 KOLOM = 2
 BARIS_PER_HALAMAN = 3
 SEL_PER_HALAMAN = KOLOM * BARIS_PER_HALAMAN  # 6
+
+
+def siapkan_foto_lampiran(raw):
+    """Siapkan JPEG untuk kotak foto ±7,4 cm, sekitar 330 dpi di sisi panjang."""
+    from PIL import Image, ImageOps
+
+    ukuran = (960, 960)
+    with Image.open(io.BytesIO(raw)) as sumber:
+        sumber.draft("RGB", ukuran)
+        foto = ImageOps.exif_transpose(sumber)
+        ada_alfa = "A" in foto.getbands() or "transparency" in foto.info
+        foto = foto.convert("RGBA" if ada_alfa else "RGB")
+        foto.thumbnail(ukuran, Image.Resampling.LANCZOS)
+        if ada_alfa:
+            latar = Image.new("RGB", foto.size, "white")
+            latar.paste(foto, mask=foto.getchannel("A"))
+            foto = latar
+        hasil = io.BytesIO()
+        foto.save(hasil, format="JPEG", quality=88)
+    return hasil.getvalue()
 
 
 def susun_sel_lampiran(aset_rows, foto_st_per_aset=None, foto_st_bersama=False,
