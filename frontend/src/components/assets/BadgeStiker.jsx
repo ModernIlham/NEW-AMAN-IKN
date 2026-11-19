@@ -10,11 +10,10 @@ export function BadgeStikerRingkas({ asset, className = "inline-flex" }) {
   return (
     <span role="img" aria-label={keterangan} title={keterangan}
       data-testid={`stiker-ringkas-${asset.id}`}
-      className={`h-4 min-w-4 shrink-0 items-center justify-center gap-0.5 rounded px-0.5 text-[10px] font-bold leading-none ${terpasang
+      className={`h-4 min-w-4 shrink-0 items-center justify-center rounded px-0.5 text-[10px] font-bold leading-none ${terpasang
         ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300"
         : "bg-muted text-muted-foreground"} ${className}`}>
-      {(!terpasang || !huruf) && <Ikon aria-hidden="true" className="h-3 w-3 shrink-0" />}
-      {huruf}
+      {huruf || <Ikon aria-hidden="true" className="h-3 w-3" />}
     </span>
   );
 }

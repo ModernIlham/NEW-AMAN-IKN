@@ -169,11 +169,21 @@ describe("kolom stiker di tabel desktop", () => {
       expect(terpasang.nextElementSibling).toHaveAttribute("data-testid", "lokasi-penanda-a2");
       expect(badge.textContent).toBe(huruf);
       expect(terpasang.textContent).toBe(huruf);
-      expect(within(badge).getByTestId("ikon-stiker-belum")).toBeInTheDocument();
-      expect(within(terpasang).queryByTestId("ikon-stiker-belum")).toBeNull();
+      expect(badge.querySelector("svg")).toBeNull();
+      expect(terpasang.querySelector("svg")).toBeNull();
       expect(badge).toHaveClass("bg-muted", "xl:hidden");
       expect(terpasang).toHaveClass("bg-emerald-100");
     });
+
+  it("tabel ringkas memakai ikon sesuai status saat ukuran kosong", () => {
+    pasang([belum(""), { ...sudah(""), id: "a2" }]);
+    const belumTerpasang = screen.getByTestId("stiker-ringkas-a1");
+    const terpasang = screen.getByTestId("stiker-ringkas-a2");
+    expect(belumTerpasang.textContent).toBe("");
+    expect(terpasang.textContent).toBe("");
+    expect(within(belumTerpasang).getByTestId("ikon-stiker-belum")).toBeInTheDocument();
+    expect(terpasang.querySelector("svg.lucide-tag")).toBeInTheDocument();
+  });
 });
 
 describe("popup stiker di kartu galeri", () => {
