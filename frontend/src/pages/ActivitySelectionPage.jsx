@@ -721,7 +721,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 <LayoutGrid className="w-4 h-4" /><span className="hidden sm:inline">Modul</span>
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={onLogout} className="gap-1">
+            <Button variant="outline" size="sm" onClick={onLogout} className="gap-1" aria-label="Keluar">
               <LogOut className="w-4 h-4" /><span className="hidden sm:inline">Keluar</span>
             </Button>
           </div>
@@ -771,6 +771,7 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                 <select
                   value={selectedSatker}
                   onChange={e => setSelectedSatker(e.target.value)}
+                  aria-label="Filter satker"
                   className="flex-1 max-w-xs h-9 px-3 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring cursor-pointer"
                   data-testid="satker-filter-select"
                 >
@@ -967,7 +968,18 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
                     )}
                     <span className="text-xs text-muted-foreground">{act.tanggal_mulai} - {act.tanggal_selesai || 'berlangsung'}</span>
                   </div>
-                  <h3 className="font-semibold text-foreground text-lg break-words">{act.nama_kegiatan}</h3>
+                  {/* Judul = tombol sungguhan: kartu (div onClick) hanya bisa diklik
+                      mouse; tanpa ini pengguna keyboard/pembaca layar tak bisa
+                      membuka kegiatan (WCAG 2.1.1). Klik di mana pun pada kartu
+                      tetap berfungsi seperti dulu. */}
+                  <h3 className="font-semibold text-foreground text-lg break-words">
+                    <button type="button"
+                      onClick={(e) => { e.stopPropagation(); onSelectActivity(act); }}
+                      className="text-left break-words rounded-sm min-w-0 min-h-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      data-testid={`activity-open-${act.id}`}>
+                      {act.nama_kegiatan}
+                    </button>
+                  </h3>
                   {act.deskripsi && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{act.deskripsi}</p>}
                   <div className="flex items-center gap-3 mt-3 text-sm flex-wrap">
                     <span className="flex items-center gap-1 text-muted-foreground"><Package className="w-4 h-4 flex-shrink-0" /><b>{act.total_assets || 0}</b> aset</span>

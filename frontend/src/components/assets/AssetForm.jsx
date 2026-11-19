@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useEffect, useMemo, startTransition } from "react";
+import React, { memo, useState, useCallback, useRef, useEffect, useMemo, useId, startTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   Plus, X, Camera, Trash2, Check, ChevronDown, Search,
@@ -524,6 +524,10 @@ const AssetForm = memo(({
   closeGuardRef,
   alwaysExpanded = false
 }) => {
+  // Awalan id unik per instans form — menautkan <Label htmlFor> ke inputnya
+  // (WCAG 1.3.1/4.1.2) tanpa risiko id ganda bila form dirender dua kali.
+  const idForm = useId();
+  const idF = (nama) => `${idForm}-${nama}`;
   const [formSection, setFormSection] = useState("basic");
   const [formErrors, setFormErrors] = useState([]);
   // Inline per-field validation: { [fieldName]: message }. Rendered as a red
@@ -2535,6 +2539,7 @@ const AssetForm = memo(({
             { key: "documents", label: "Dokumen", icon: ShieldCheck }
           ].map(t => (
             <button key={t.key} type="button" onClick={() => setFormSection(t.key)}
+              aria-label={t.label} aria-pressed={formSection === t.key}
               className={`flex-1 flex items-center justify-center gap-1 py-1 text-xs font-medium border-b-2 ${
                 formSection === t.key ? 'border-teal-700 text-blue-700 bg-card' : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
@@ -2771,15 +2776,15 @@ const AssetForm = memo(({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1 min-w-0"><Label className="text-xs">NUP</Label><Input name="NUP" value={formData.NUP} onChange={handleInputChange} placeholder="1" className="h-8" /></div>
-                <div className="space-y-1 min-w-0"><Label className="text-xs">Serial Number</Label><Input name="serial_number" value={formData.serial_number} onChange={handleInputChange} className="h-8" /></div>
+                <div className="space-y-1 min-w-0"><Label className="text-xs" htmlFor={idF("serial_number")}>Serial Number</Label><Input id={idF("serial_number")} name="serial_number" value={formData.serial_number} onChange={handleInputChange} className="h-8" /></div>
               </div>
-              <div className="space-y-1"><Label className="text-xs">Nama Aset *</Label><Input name="asset_name" value={formData.asset_name} onChange={handleInputChange} required className={`h-8${fieldErrCls("asset_name")}`} aria-invalid={!!fieldErrors.asset_name} />{renderFieldError("asset_name")}</div>
+              <div className="space-y-1"><Label className="text-xs" htmlFor={idF("asset_name")}>Nama Aset *</Label><Input id={idF("asset_name")} name="asset_name" value={formData.asset_name} onChange={handleInputChange} required className={`h-8${fieldErrCls("asset_name")}`} aria-invalid={!!fieldErrors.asset_name} />{renderFieldError("asset_name")}</div>
               
               {/* Category */}
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
                   <Label className="text-xs">Kategori *</Label>
-                  <Button type="button" variant="ghost" size="sm" onClick={onShowCategoryManager} className="h-5 w-5 p-0"><Settings className="w-3 h-3" /></Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={onShowCategoryManager} aria-label="Kelola kategori" title="Kelola kategori" className="h-5 w-5 p-0"><Settings className="w-3 h-3" /></Button>
                 </div>
                 <DropdownMenu open={categoryDropdownOpen} onOpenChange={setCategoryDropdownOpen}>
                   <DropdownMenuTrigger asChild>
@@ -2830,13 +2835,13 @@ const AssetForm = memo(({
               </div>
               
               <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1 min-w-0"><Label className="text-xs">Brand</Label><Input name="brand" value={formData.brand} onChange={handleInputChange} className="h-8" /></div>
-                <div className="space-y-1 min-w-0"><Label className="text-xs">Model</Label><Input name="model" value={formData.model} onChange={handleInputChange} className="h-8" /></div>
+                <div className="space-y-1 min-w-0"><Label className="text-xs" htmlFor={idF("brand")}>Brand</Label><Input id={idF("brand")} name="brand" value={formData.brand} onChange={handleInputChange} className="h-8" /></div>
+                <div className="space-y-1 min-w-0"><Label className="text-xs" htmlFor={idF("model")}>Model</Label><Input id={idF("model")} name="model" value={formData.model} onChange={handleInputChange} className="h-8" /></div>
               </div>
               <div className="space-y-1"><Label className="text-xs">Kode Register</Label><Input name="kode_register" value={formData.kode_register} onChange={handleInputChange} placeholder="32 karakter hex" maxLength={32} className="h-8" /></div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1 min-w-0"><Label className="text-xs">Tanggal Beli</Label><InputTanggal name="purchase_date" value={formData.purchase_date} onChange={handleInputChange} className="h-8 min-h-0 min-w-0 gap-1 px-2 py-0 text-sm [&_svg]:ml-0" aria-label="Tanggal beli" data-testid="asset-purchase-date" /></div>
-                <div className="space-y-1"><Label className="text-xs">Harga (Rp)</Label><Input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleInputChange} className="h-8" /></div>
+                <div className="space-y-1"><Label className="text-xs" htmlFor={idF("purchase_price")}>Harga (Rp)</Label><Input id={idF("purchase_price")} type="number" name="purchase_price" value={formData.purchase_price} onChange={handleInputChange} className="h-8" /></div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
@@ -2906,8 +2911,8 @@ const AssetForm = memo(({
                 const f2 = lv2 ? fieldLevel(lv2) : "";
                 return (
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="text-xs">{labelLevel(lv1)}</Label>
-                    <select name={f1} value={formData[f1] || ''} onChange={e => { handleInputChange(e); if (f2) setFormData(p => ({...p, [f2]: ''})); }} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon1-select">
+                  <div className="space-y-1"><Label className="text-xs" htmlFor={idF("unit-1")}>{labelLevel(lv1)}</Label>
+                    <select id={idF("unit-1")} name={f1} value={formData[f1] || ''} onChange={e => { handleInputChange(e); if (f2) setFormData(p => ({...p, [f2]: ''})); }} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon1-select">
                       <option value="">-- Pilih {labelLevel(lv1)} --</option>
                       {(activity?.eselon1 || []).map((es, i) => {
                         const nama = typeof es === 'object' ? es.nama : es;
@@ -2916,8 +2921,8 @@ const AssetForm = memo(({
                     </select>
                   </div>
                   {f2 && (
-                  <div className="space-y-1"><Label className="text-xs">{labelLevel(lv2)}</Label>
-                    <select name={f2} value={formData[f2] || ''} onChange={handleInputChange} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon2-select">
+                  <div className="space-y-1"><Label className="text-xs" htmlFor={idF("unit-2")}>{labelLevel(lv2)}</Label>
+                    <select id={idF("unit-2")} name={f2} value={formData[f2] || ''} onChange={handleInputChange} className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm" data-testid="asset-eselon2-select">
                       <option value="">-- Pilih {labelLevel(lv2)} --</option>
                       {(() => {
                         const sel = (activity?.eselon1 || []).find(es => (typeof es === 'object' ? es.nama : es) === formData[f1]);
@@ -2983,12 +2988,12 @@ const AssetForm = memo(({
                   </div>
                 )}
                 <div className="space-y-1">
-                  <Label className="text-xs flex items-center gap-1.5">
+                  <Label className="text-xs flex items-center gap-1.5" htmlFor={idF("user")}>
                     {PENGGUNA_NAME_LABELS[formData.pengguna_melekat_ke] || "Pengguna"}
                     <IkonKelompok nomor={nipTunda} />
                   </Label>
                   <div className="flex gap-1.5">
-                    <Input name="user" value={formData.user} onChange={handleInputChange} className="h-8 flex-1 min-w-0" data-testid="input-pengguna-nama" />
+                    <Input id={idF("user")} name="user" value={formData.user} onChange={handleInputChange} className="h-8 flex-1 min-w-0" data-testid="input-pengguna-nama" />
                     {/* Tap kartu e-KTP → pegawai terisi otomatis (identifikasi cepat) */}
                     <button type="button" title="Tap kartu pegawai (e-KTP/NFC)"
                       onClick={() => setKartuTapOpen(true)}
@@ -3092,10 +3097,10 @@ const AssetForm = memo(({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1"><Label className="text-xs">Kondisi</Label>
-                  <Select value={formData.condition} onValueChange={v => handleSelectChange("condition", v)}><SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <Select value={formData.condition} onValueChange={v => handleSelectChange("condition", v)}><SelectTrigger className="h-8" aria-label="Kondisi"><SelectValue /></SelectTrigger>
                     <SelectContent>{CONDITION_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.value}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-1"><Label className="text-xs">Status</Label>
-                  <Select value={formData.status} onValueChange={v => handleSelectChange("status", v)}><SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <Select value={formData.status} onValueChange={v => handleSelectChange("status", v)}><SelectTrigger className="h-8" aria-label="Status"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Aktif">Aktif</SelectItem>
                       <SelectItem value="Idle">Idle</SelectItem>
@@ -3108,10 +3113,10 @@ const AssetForm = memo(({
               <div className="p-2 bg-muted rounded-lg space-y-2">
                 <div className="flex items-center gap-1.5"><Tag className="w-3.5 h-3.5 text-muted-foreground" /><Label className="text-xs font-medium">Informasi Stiker</Label></div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Select value={formData.stiker_status} onValueChange={handleStikerStatusChange}><SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <Select value={formData.stiker_status} onValueChange={handleStikerStatusChange}><SelectTrigger className="h-7 text-xs" aria-label="Status stiker"><SelectValue /></SelectTrigger>
                     <SelectContent><SelectItem value="Belum Terpasang">Belum Terpasang</SelectItem><SelectItem value="Sudah Terpasang">Sudah Terpasang</SelectItem></SelectContent></Select>
                   <Select value={formData.stiker_ukuran || ""} onValueChange={v => setFormData(p => ({...p, stiker_ukuran: v}))}>
-                    <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Pilih ukuran" /></SelectTrigger>
+                    <SelectTrigger className="h-7 text-xs" aria-label="Ukuran stiker"><SelectValue placeholder="Pilih ukuran" /></SelectTrigger>
                     <SelectContent>
                       {UKURAN_STIKER.map(u => (
                         <SelectItem key={u} value={u}>{u}</SelectItem>
@@ -3175,7 +3180,7 @@ const AssetForm = memo(({
                   </button>
                 </div>
                 <Select value={formData.inventory_status || "Belum Diinventarisasi"} onValueChange={handleInventoryStatusChange}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs" aria-label="Status inventarisasi"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Belum Diinventarisasi">Belum Diinventarisasi</SelectItem>
                     <SelectItem value="Ditemukan">Ditemukan</SelectItem>
@@ -3245,7 +3250,7 @@ const AssetForm = memo(({
                   </Label>
                   <Select value={formData.temuan_pencatatan || "__none__"}
                     onValueChange={v => handleSelectChange("temuan_pencatatan", v === "__none__" ? "" : v)}>
-                    <SelectTrigger className="h-7 text-xs" data-testid="select-temuan-pencatatan">
+                    <SelectTrigger className="h-7 text-xs" aria-label="Temuan pencatatan" data-testid="select-temuan-pencatatan">
                       <SelectValue placeholder="Tidak ada temuan" />
                     </SelectTrigger>
                     <SelectContent>
@@ -3262,7 +3267,7 @@ const AssetForm = memo(({
                     <div className="space-y-1">
                       <Label className="text-[10px] text-amber-700 dark:text-amber-400">Klasifikasi</Label>
                       <Select value={formData.klasifikasi_tidak_ditemukan || ""} onValueChange={handleKlasifikasiChange}>
-                        <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Pilih klasifikasi" /></SelectTrigger>
+                        <SelectTrigger className="h-7 text-xs" aria-label="Klasifikasi tidak ditemukan"><SelectValue placeholder="Pilih klasifikasi" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Kesalahan Pencatatan">Kesalahan Pencatatan</SelectItem>
                           <SelectItem value="Tidak Ditemukan Lainnya">Tidak Ditemukan Lainnya</SelectItem>
@@ -3277,7 +3282,7 @@ const AssetForm = memo(({
                       <div className="space-y-1">
                         <Label className="text-[10px] text-amber-700 dark:text-amber-400">Sub Klasifikasi</Label>
                         <Select value={formData.sub_klasifikasi || ""} onValueChange={v => setFormData(p => ({...p, sub_klasifikasi: v}))}>
-                          <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Pilih sub-kategori" /></SelectTrigger>
+                          <SelectTrigger className="h-7 text-xs" aria-label="Sub-klasifikasi"><SelectValue placeholder="Pilih sub-kategori" /></SelectTrigger>
                           <SelectContent>
                             {/* Salinan ketiga daftar ini dulu ditulis tangan di sini
                                 dan bisa menua sendiri tanpa ada yang menagih. Kini
@@ -3388,7 +3393,7 @@ const AssetForm = memo(({
                   <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
                 </div>
               </div>
-              <div className="space-y-1"><Label className="text-xs">Catatan</Label><Input name="notes" value={formData.notes} onChange={handleInputChange} className="h-8" /></div>
+              <div className="space-y-1"><Label className="text-xs" htmlFor={idF("notes")}>Catatan</Label><Input id={idF("notes")} name="notes" value={formData.notes} onChange={handleInputChange} className="h-8" /></div>
             </>)}
             
             {formSection === "procurement" && (<>
