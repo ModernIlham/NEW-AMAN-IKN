@@ -261,7 +261,8 @@ def heavy_route(path, method="GET"):
     if method == "POST":
         return (path in {"/api/assets/cards/bulk", "/api/compress-pdf"}
                 or path.endswith(("/batch-pdf-zip", "/kirim-ttd"))
-                or path == "/api/persediaan/nota-dinas/terbitkan")
+                or path == "/api/persediaan/nota-dinas/terbitkan"
+                or (path.startswith("/api/pelaporan/periode/") and path.endswith("/kunci")))
     if method != "GET":
         return False
     if path.startswith(("/api/jobs/", "/api/unduhan/", "/api/backup/")):
