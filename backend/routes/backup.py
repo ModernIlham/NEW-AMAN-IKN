@@ -114,6 +114,9 @@ def _amankan_portal_hasil_pulih(col_name: str, docs: list):
                     doc[field] = max(0, int(doc.get(field, 0))) + 1
                 except (TypeError, ValueError, OverflowError):
                     doc[field] = 1
+    elif col_name == "pengadaan":
+        for doc in docs:
+            doc.pop("giliran", None)
     elif col_name == "portal_penugasan":
         for doc in docs:
             # Pemilik lease tidak hidup dalam DB hasil restore. Selain itu,

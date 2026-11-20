@@ -122,6 +122,8 @@ def test_route_registry_covers_renderers_and_excludes_file_downloads():
     assert budget.heavy_route("/api/assets/cards/bulk", "POST")
     assert budget.heavy_route("/api/inventory-activities/k/batch-pdf-zip", "POST")
     assert budget.heavy_route("/api/bast/b/kirim-ttd", "POST")
+    assert budget.heavy_route("/api/pelaporan/periode/p/kunci", "POST")
+    assert not budget.heavy_route("/api/pelaporan/periode/p/lbkp/v")
     for path in ("/api/assets", "/api/health", "/api/jobs/x/download", "/api/unduhan/x/file", "/api/backup/download/x"):
         assert not budget.heavy_route(path), path
     assert not budget.heavy_route("/api/export/xlsx/async", "POST")
@@ -138,6 +140,7 @@ def test_actual_file_route_inventory_requires_budget_or_explicit_non_renderer_re
         "/api/inventory-activities/{activity_id}/documents/{idx}": "serve existing attachment",
         "/api/assets/{asset_id}/checklist/{item_idx}/documents/{doc_idx}": "serve existing attachment",
         "/api/assets/{asset_id}/bast": "serve existing attachment",
+        "/api/pelaporan/periode/{periode_id}/lbkp/{versi}": "serve archived LBKP PDF",
         "/api/inventory-activities/{activity_id}/pengesahan-dokumen/{doc_id}": "serve existing attachment",
         "/api/ttd/permintaan/{sr_id}/dokumen": "serve existing attachment",
         "/api/ttd/tandatangan/{sr_id}/dokumen": "serve existing attachment",

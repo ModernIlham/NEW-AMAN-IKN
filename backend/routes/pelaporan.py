@@ -5,6 +5,7 @@ terkunci. Saat terkunci, PDF LBKP & CaLBMN periode itu diberi penanda
 FINAL. Kunci dapat dibuka kembali oleh admin dengan alasan (riwayat
 tercatat) — jejak tidak pernah dihapus.
 """
+import base64
 import uuid
 from datetime import datetime, timezone
 
@@ -131,18 +132,40 @@ async def kunci_periode(periode_id: str, admin: dict = Depends(require_admin)):
     if errors:
         raise HTTPException(status_code=400, detail="; ".join(errors))
     now = datetime.now(timezone.utc).isoformat()
+    from routes.reports import bangun_lbkp
+    versi = str(uuid.uuid4())
+    pemilik = {**admin, "kode_satker": p.get("kode_satker") or ""}
+    final = {**p, "status": "terkunci", "tanggal_kunci": now}
+    pdf = await bangun_lbkp(p["tahun"], p.get("semester"), pemilik, final)
+    await db.arsip_lbkp.insert_one({"_id": versi, "id": versi, "periode_id": periode_id, "tanggal": now,
+                                    "pdf": base64.b64encode(pdf).decode("ascii")})
     res = await db.periode_pelaporan.find_one_and_update(
         # Anti-balapan: hanya periode yang masih terbuka
-        _q_periode(admin, {"id": periode_id, "status": "terbuka"}),
-        {"$set": {"status": "terkunci", "tanggal_kunci": now,
+        _q_periode(admin, {"id": periode_id, "status": "terbuka", "updated_at": p.get("updated_at")}),
+        {"$set": {"arsip_lbkp": versi, "status": "terkunci", "tanggal_kunci": now,
                   "dikunci_oleh": admin.get("username"), "updated_at": now},
-         "$push": {"riwayat": {"aksi": "dikunci", "tanggal": now,
+         "$push": {"riwayat": {"aksi": "dikunci", "arsip_lbkp": versi, "tanggal": now,
                                "oleh": admin.get("username"), "alasan": ""}}},
         projection={"_id": 0}, return_document=True)
     if not res:
+        await db.arsip_lbkp.delete_one({"_id": versi})
         raise HTTPException(status_code=409,
                             detail="Periode berubah oleh proses lain — muat ulang")
     return res
+
+
+@pelaporan_router.get("/pelaporan/periode/{periode_id}/lbkp/{versi}")
+async def versi_lbkp(periode_id: str, versi: str, user: dict = Depends(require_user)):
+    from fastapi.responses import Response
+    periode = await db.periode_pelaporan.find_one(
+        _q_periode(user, {"id": periode_id}), {"riwayat": 1, "arsip_lbkp": 1})
+    if not periode or not (periode.get("arsip_lbkp") == versi or any(
+            r.get("arsip_lbkp") == versi for r in periode.get("riwayat", []))):
+        raise HTTPException(404, "Versi LBKP tidak ditemukan")
+    arsip = await db.arsip_lbkp.find_one({"id": versi, "periode_id": periode_id})
+    if not arsip:
+        raise HTTPException(503, "Arsip LBKP final belum dapat dibaca")
+    return Response(base64.b64decode(arsip["pdf"], validate=True), media_type="application/pdf")
 
 
 @pelaporan_router.post("/pelaporan/periode/{periode_id}/buka")
@@ -160,7 +183,7 @@ async def buka_periode(periode_id: str, payload: BukaKunciIn,
     now = datetime.now(timezone.utc).isoformat()
     res = await db.periode_pelaporan.find_one_and_update(
         _q_periode(admin, {"id": periode_id, "status": "terkunci"}),
-        {"$set": {"status": "terbuka", "tanggal_kunci": "",
+        {"$unset": {"arsip_lbkp": ""}, "$set": {"status": "terbuka", "tanggal_kunci": "",
                   "dikunci_oleh": "", "updated_at": now},
          "$push": {"riwayat": {"aksi": "dibuka", "tanggal": now,
                                "oleh": admin.get("username"),
@@ -210,11 +233,11 @@ async def atur_tenggat_periode(periode_id: str, payload: TenggatIn,
 async def hapus_periode(periode_id: str, _admin: dict = Depends(require_admin)):
     """Hapus periode salah input (hanya yang masih terbuka)."""
     res = await db.periode_pelaporan.delete_one(
-        _q_periode(_admin, {"id": periode_id, "status": "terbuka"}))
+        _q_periode(_admin, {"id": periode_id, "status": "terbuka", "riwayat.arsip_lbkp": {"$exists": False}}))
     if res.deleted_count == 0:
         raise HTTPException(
             status_code=409,
-            detail="Periode tidak ditemukan atau terkunci (buka dulu kuncinya)")
+            detail="Hanya periode terbuka yang belum memiliki arsip LBKP final dapat dihapus")
     return {"ok": True, "id": periode_id}
 
 

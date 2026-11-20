@@ -64,7 +64,7 @@ async def _insert_jurnal(jurnal):
             m = await db.persediaan.find_one(
                 {"id": pid}, {"_id": 0, "kode_satker": 1})
             jurnal["kode_satker"] = str((m or {}).get("kode_satker") or "")
-    await db.transaksi_persediaan.insert_one(jurnal)
+    await db.transaksi_persediaan.insert_one(dict(jurnal))
 
 
 async def _scope_jurnal(user, query=None) -> dict:
@@ -2975,6 +2975,10 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
     menggandakan stok — respons pertama disimpan & diputar ulang. Pemanggil
     internal (impor massal / Pengadaan) tak mengoper `request` → dilewati.
     """
+    return await _catat_masuk(item_id, data, request, user)
+
+
+async def _catat_masuk(item_id, data, request, user, sumber=""):
     await _gerbang_wajib_persetujuan(request)
     from shared_utils import kunci_idem
     idem_key = kunci_idem(
@@ -3006,7 +3010,7 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
     tautan_penyedia, peringatan_kebijakan = await _tautan_penyedia(data, user)
 
     now = datetime.now(timezone.utc)
-    batch_id = str(uuid.uuid4())
+    batch_id = sumber or str(uuid.uuid4())
     ref = (data.no_bukti or data.no_kontrak or "").strip()
 
     # Ambil dulu untuk stok_sebelum + expired_default (best-effort snapshot;
@@ -3036,18 +3040,27 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
     expired = (data.expired or item.get("expired_default") or "").strip()
     layer = buat_layer(batch_id, now.isoformat(), data.jumlah, data.harga_satuan, expired, ref)
 
-    updated = await db.persediaan.find_one_and_update(
-        {"id": item_id},
-        {"$push": {"batches": layer},
-         "$inc": {"stok": int(data.jumlah), "version": 1},
-         "$set": {"updated_at": now.isoformat()}},
-        projection={"_id": 0},
-        return_document=True,
-    )
-    if updated is None:
-        raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
+    if sumber:
+        existing = await db.transaksi_persediaan.find_one({"id": sumber}, {"_id": 0})
+        if existing:
+            if sumber in (item.get("jurnal_masuk_pending") or {}):
+                await db.persediaan.update_one({"id": item_id}, {"$unset": {f"jurnal_masuk_pending.{sumber}": ""}})
+            return {"transaksi": existing, "stok": existing["stok_sesudah"]}
+        updated = item
+        stok_sesudah = int(item.get("stok") or 0) + int(data.jumlah)
+    else:
+        updated = await db.persediaan.find_one_and_update(
+            {"id": item_id},
+            {"$push": {"batches": layer},
+             "$inc": {"stok": int(data.jumlah), "version": 1},
+             "$set": {"updated_at": now.isoformat()}},
+            projection={"_id": 0},
+            return_document=True,
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Barang persediaan tidak ditemukan")
 
-    stok_sesudah = int(updated.get("stok", 0) or 0)
+        stok_sesudah = int(updated.get("stok", 0) or 0)
     jurnal = {
         "id": str(uuid.uuid4()),
         "arah": "masuk",
@@ -3077,6 +3090,22 @@ async def transaksi_masuk(item_id: str, data: TransaksiMasukIn,
         "petugas": user.get("username") or user.get("user_id") or "-",
         "timestamp": now.isoformat(),
     }
+    if sumber:
+        field = f"jurnal_masuk_pending.{sumber}"
+        pending = (item.get("jurnal_masuk_pending") or {}).get(sumber)
+        if not pending:
+            jurnal.update({"id": sumber, "kode_satker": item.get("kode_satker", "")})
+            res = await db.persediaan.update_one(
+                {"id": item_id, "stok": item.get("stok"), field: {"$exists": False}},
+                {"$push": {"batches": layer}, "$inc": {"stok": int(data.jumlah), "version": 1},
+                 "$set": {field: jurnal, "updated_at": now.isoformat()}})
+            if not res.matched_count:
+                raise HTTPException(status_code=409, detail="Saldo berubah saat penerimaan, silakan ulangi pencatatan")
+            pending = jurnal
+        await db.transaksi_persediaan.update_one({"_id": sumber}, {"$setOnInsert": pending}, upsert=True)
+        await db.persediaan.update_one({"id": item_id}, {"$unset": {field: ""}})
+        return {"transaksi": pending, "stok": pending["stok_sesudah"]}
+
     try:
         await _insert_jurnal(jurnal)
     except Exception:

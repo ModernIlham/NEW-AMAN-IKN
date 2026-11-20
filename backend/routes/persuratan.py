@@ -472,7 +472,7 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
                                  kode_satker: str = "",
                                  jenis_naskah: str = "Laporan",
                                  referensi: str = "LPB",
-                                 kode_klasifikasi: str = "") -> tuple:
+                                 kode_klasifikasi: str = "", sumber_id: str = "") -> tuple:
     """Pesan satu nomor surat keluar otomatis untuk dokumen modul persediaan.
 
     → `(nomor, surat_id)`; keduanya "" bila gagal dipesan.
@@ -511,6 +511,10 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
     _pesan = pesan_satker_wajib(kode_satker, "nomor surat otomatis")
     if _pesan:
         raise HTTPException(status_code=400, detail=_pesan)
+    if sumber_id:
+        surat = await db.surat.find_one({"id": sumber_id, "kode_satker": kode_satker}, {"nomor": 1})
+        if surat:
+            return surat["nomor"], sumber_id
     atur = await _pengaturan(kode_satker)
     # `kode_klasifikasi` (pilihan operator) MENANG atas aturan pemetaan —
     # urutan yang sama persis dengan booking manual di Registrasi Persuratan.
@@ -530,8 +534,9 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
                          kode_klasifikasi=kode_klas,
                          kode_unit=atur["kode_unit"],
                          kode_bawaan=atur["kode_klasifikasi_default"])
-    surat_id = str(uuid.uuid4())
+    surat_id = sumber_id or str(uuid.uuid4())
     await db.surat.insert_one({
+        **({"_id": sumber_id} if sumber_id else {}),
         "id": surat_id, "jenis": "keluar", "no_agenda": no_agenda,
         "sisipan": 0,
         "tahun": tahun, "nomor": nomor, "status": "dibooking",
@@ -558,14 +563,14 @@ async def booking_nomor_otomatis(user, tgl_iso: str, perihal: str,
 async def booking_nomor_lpb(user, tgl_iso: str, perihal: str,
                             tujuan: str = "", keterangan: str = "",
                             kode_satker: str = "",
-                            kode_klasifikasi: str = "") -> tuple:
+                            kode_klasifikasi: str = "", sumber_id: str = "") -> tuple:
     """Delegator kontrak lama — deret nomor tetap tunggal lewat
     `booking_nomor_otomatis` (jangan menyalin logikanya ke tempat lain)."""
     return await booking_nomor_otomatis(
         user, tgl_iso, perihal or "Laporan Penerimaan Barang (LPB)",
         tujuan=tujuan, keterangan=keterangan or "booking otomatis dari LPB",
         kode_satker=kode_satker, jenis_naskah="Laporan", referensi="LPB",
-        kode_klasifikasi=kode_klasifikasi)
+        kode_klasifikasi=kode_klasifikasi, sumber_id=sumber_id)
 
 
 async def _nama_kegiatan(kegiatan_id: str) -> str:

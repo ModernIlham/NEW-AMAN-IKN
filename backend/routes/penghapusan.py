@@ -264,18 +264,18 @@ async def transisi_usulan(usulan_id: str, payload: TransisiIn,
         # ref_id), sehingga ref usulan yang berbeda lolos → saldo CaLBMN dobel.
         # Pola sama dengan `terproyeksi` di routes/penggunaan.py.
         if terproyeksi:
-            from pembukuan_utils import parse_harga
+            from pembukuan_utils import nilai_buku_aset
             from shared_utils import catat_mutasi_bmn
             aset = await db.assets.find_one(
                 {"id": res.get("asset_id")},
-                {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1})
+                {"_id": 0, "asset_code": 1, "NUP": 1, "purchase_price": 1, "nilai_wajar_terakhir": 1})
             await catat_mutasi_bmn({
                 "asset_id": res.get("asset_id"), "kode_transaksi": "301",
                 "kode_barang": str((aset or {}).get("asset_code") or ""),
                 "nup": str((aset or {}).get("NUP") or ""),
                 "tanggal_buku": (res.get("tanggal_sk") or now[:10]),
                 "jumlah": 1,
-                "nilai": parse_harga((aset or {}).get("purchase_price")),
+                "nilai": nilai_buku_aset(aset or {}),
                 "sumber_modul": "penghapusan", "ref_id": res.get("id"),
                 "keterangan": f"SK Penghapusan {res.get('nomor_sk') or '-'}",
                 "oleh": admin.get("username", "system")})

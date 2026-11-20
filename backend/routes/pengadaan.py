@@ -7,9 +7,13 @@ resmi tetap di SAKTI; kanal pengadaan tetap SiRUP/SPSE/e-Katalog — AMAN
 alat bantu tertib dokumen satker. Barang perolehan yang belum tertaut
 dapat dibuatkan draft aset otomatis (buat-draft-aset, NUP berurut).
 """
+import asyncio
 import re
+from contextvars import ContextVar
+from functools import wraps
+from inspect import signature
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
@@ -32,12 +36,12 @@ from db import db
 from shared_utils import kode_satker_user, scope_query_field_satker, pastikan_akses_dok_satker, delete_document_from_gridfs, get_document_from_gridfs, log_audit
 from pengadaan_utils import (
     DOKUMEN_PEROLEHAN, JENIS_PEROLEHAN, LABEL_DOKUMEN_SUMBER,
-    build_asset_perolehan_projection, dokumen_kurang_perolehan,
+    build_asset_perolehan_projection, dokumen_kurang_perolehan, dokumen_wajib_perolehan,
     is_ekstrakomptabel, kunci_ubah_perolehan, nilai_perolehan, rekap_perolehan,
     snapshot_penganggaran, snapshot_ppk, validate_perolehan,
 )
 from pengadaan_dokumen import (
-    baris_dokumen, bersihkan_dokumen, validate_dokumen,
+    KUNCI_DOKUMEN, baris_dokumen, bersihkan_dokumen, validate_dokumen,
 )
 from penandatangan_dokumen import (
     bersihkan_penandatangan, validate_penandatangan,
@@ -46,6 +50,62 @@ from penandatangan_dokumen import (
 pengadaan_router = APIRouter()
 
 _PROJ_ASET = {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1}
+
+
+_register_aktif = ContextVar("register_pengadaan_aktif", default=None)
+
+
+def giliran_register(handler):
+    """Serialisasikan perubahan sumber yang sama di seluruh worker Mongo standalone."""
+    params = signature(handler)
+
+    @wraps(handler)
+    async def jalankan(*args, **kwargs):
+        data = params.bind(*args, **kwargs).arguments
+        pid = data["perolehan_id"]
+        pemilik = (asyncio.current_task(), pid)
+        if _register_aktif.get() == pemilik:
+            return await handler(*args, **kwargs)
+        user = data.get("user") or data.get("_user") or data.get("_admin")
+        task = asyncio.current_task()
+        q = scope_query_field_satker(user, {"id": pid})
+        token = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
+        jeda = timedelta(minutes=5)
+        res = await db.pengadaan.update_one(
+            {**q, "$or": [{"giliran": {"$exists": False}}, {"giliran.sampai": {"$lte": now}}]},
+            {"$set": {"giliran": {"token": token, "sampai": now + jeda}}})
+        if not res.matched_count:
+            sumber = await db.pengadaan.find_one({"id": pid}, {"_id": 0, "kode_satker": 1})
+            if sumber is None:
+                raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
+            await pastikan_akses_dok_satker(user, sumber)
+            raise HTTPException(status_code=409, detail="Register sedang diproses. Muat ulang lalu coba kembali.")
+        milik = {"id": pid, "giliran.token": token}
+
+        async def perpanjang():
+            while True:
+                await asyncio.sleep(30)
+                try:
+                    renewed = await db.pengadaan.update_one(
+                        milik, {"$set": {"giliran.sampai": datetime.now(timezone.utc) + jeda}})
+                except Exception:
+                    task.cancel()
+                    raise
+                if not renewed.matched_count:
+                    task.cancel()
+                    return
+
+        worker = asyncio.create_task(perpanjang())
+        ctx = _register_aktif.set(pemilik)
+        try:
+            return await handler(*args, **kwargs)
+        finally:
+            _register_aktif.reset(ctx)
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
+            await db.pengadaan.update_one(milik, {"$unset": {"giliran": ""}})
+    return jalankan
 
 
 class BarangIn(BaseModel):
@@ -231,6 +291,9 @@ async def _proyeksi_perolehan_ke_aset(perolehan: dict) -> None:
     """
     now = datetime.now(timezone.utc).isoformat()
     proj = build_asset_perolehan_projection(perolehan, now)
+    await db.assets.update_many(
+        {"sumber_draft.perolehan_id": perolehan["id"], "perolehan_id": perolehan["id"]},
+        {"$set": proj})
     for b in perolehan.get("barang") or []:
         aid = str(b.get("asset_id") or "").strip()
         if aid:
@@ -258,6 +321,8 @@ class TautkanIn(BaseModel):
 
 
 def _enrich(p: dict) -> dict:
+    p.pop("giliran", None)
+    p["dokumen_wajib"] = dokumen_wajib_perolehan(p)
     p["dokumen_kurang"] = dokumen_kurang_perolehan(p)
     p["nilai"] = nilai_perolehan(p)
     for b in p.get("barang") or []:
@@ -265,28 +330,79 @@ def _enrich(p: dict) -> dict:
     return p
 
 
+async def _draft_lama(registers):
+    """Cocokkan draf keluaran versi lama lewat FK, NUP awal, dan catatan unit asal."""
+    register = {p["id"]: p for p in registers if any(
+        b.get("asset_id") and not b.get("draft_activity_id") and not b.get("leburan")
+        for b in p.get("barang", []))}
+    hasil = {}
+    if not register:
+        return hasil
+    aset = {}
+    async for a in db.assets.find({
+            "perolehan_id": {"$in": list(register)}, "sumber_draft": {"$exists": False},
+            "notes": {"$regex": "^Draft otomatis dari perolehan Pengadaan "}},
+            {"_id": 0, "id": 1, "perolehan_id": 1, "activity_id": 1, "asset_code": 1, "NUP": 1, "notes": 1}):
+        aset.setdefault(a["perolehan_id"], []).append(a)
+    for pid, daftar in aset.items():
+        p = register[pid]
+        by_id = {a["id"]: a for a in daftar}
+        by_nup = {(a.get("activity_id"), a.get("asset_code"), a.get("NUP")): a for a in daftar}
+        for idx, b in enumerate(p["barang"]):
+            awal = by_id.get(b.get("asset_id"))
+            if not awal or awal.get("asset_code") != b.get("kode") or not str(awal.get("NUP", "")).isdigit():
+                continue
+            jumlah = unit_per_baris(b.get("jumlah"))
+            unit = [awal]
+            for ke in range(2, jumlah + 1):
+                a = by_nup.get((awal.get("activity_id"), b["kode"], str(int(awal["NUP"]) + ke - 1)))
+                if not a or not a["notes"].endswith(f"(unit {ke}/{jumlah})"):
+                    break
+                unit.append(a)
+            hasil.setdefault(pid, {})[idx] = unit
+    return hasil
+
+
 @pengadaan_router.get("/pengadaan")
-async def list_pengadaan(_user: dict = Depends(require_user)):
+async def list_pengadaan(_user: dict = Depends(require_user), halaman: int = 1):
     """Register perolehan (BAST terbaru dulu) + ringkasan + label."""
-    items = [_enrich(p) async for p in db.pengadaan.find(scope_query_field_satker(_user), {"_id": 0})
-             .sort("tanggal_bast", -1).limit(500)]
+    scope = scope_query_field_satker(_user)
+    jumlah = await db.pengadaan.count_documents(scope)
+    ukuran = 500
+    halaman_akhir = max(1, (jumlah + ukuran - 1) // ukuran)
+    halaman = min(max(halaman, 1), halaman_akhir)
+    items = [_enrich(p) async for p in db.pengadaan.find(scope, {"_id": 0})
+             .sort([("tanggal_bast", -1), ("id", 1)]).skip((halaman - 1) * ukuran).limit(ukuran)]
+    ringkasan = rekap_perolehan(items)
+    if halaman_akhir > 1:
+        ringkasan = rekap_perolehan([])
+        cursor = db.pengadaan.find(scope, {"_id": 0, "jenis": 1, "sifat": 1, "dokumen": 1, "barang": 1})
+        while bagian := await cursor.to_list(ukuran):
+            rekap_perolehan(bagian, ringkasan)
     # Status "sejauh mana masih boleh diubah" dihitung SEKALI untuk seluruh
     # halaman: satu query LPB untuk semua id, bukan satu query per baris.
     # Tanpa ini, register 500 baris = 500 round-trip hanya untuk menentukan
     # tombol ubah aktif atau tidak.
     ids = [p["id"] for p in items]
     tertunjuk_lpb = set()
+    tercetak = set()
+    lama = await _draft_lama(items)
     if ids:
         async for l in db.lpb.find(
                 {"$or": [{"perolehan_id": {"$in": ids}},
                          {"perolehan_ids": {"$in": ids}}]},
-                {"_id": 0, "perolehan_id": 1, "perolehan_ids": 1}):
+                {"_id": 0, "perolehan_id": 1, "perolehan_ids": 1, "items.asset_id": 1}):
+            tercetak.update(b.get("asset_id") for b in l.get("items", []))
             if l.get("perolehan_id"):
                 tertunjuk_lpb.add(l["perolehan_id"])
             tertunjuk_lpb.update(l.get("perolehan_ids") or [])
     for p in items:
+        for idx, unit in lama.get(p["id"], {}).items():
+            b = p["barang"][idx]
+            if len(unit) < unit_per_baris(b["jumlah"]) or any(a["id"] not in tercetak for a in unit):
+                p["lpb_menunggu"] = True
         p["ubah"] = kunci_ubah_perolehan(p, p["id"] in tertunjuk_lpb)
-    return {"items": items, "ringkasan": rekap_perolehan(items),
+    return {"items": items, "ringkasan": ringkasan, "halaman": halaman, "halaman_akhir": halaman_akhir,
             "label_jenis": {k: v[0] for k, v in JENIS_PEROLEHAN.items()},
             "kode_jenis": {k: v[1] for k, v in JENIS_PEROLEHAN.items()},
             "label_dokumen": LABEL_DOKUMEN_SUMBER,
@@ -299,6 +415,7 @@ async def list_pengadaan(_user: dict = Depends(require_user)):
 
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/daftarkan-persediaan")
+@giliran_register
 async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_writer)):
     """Barang perolehan ber-kode persediaan (awalan '1') → master persediaan
     + transaksi masuk berjurnal FIFO (audit G4 #6 — jalur BAST konsumsi).
@@ -309,7 +426,7 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
     Baris yang sudah pernah didaftarkan (psd_item_id) dilewati.
     """
     from routes.persediaan import (PersediaanCreate, TransaksiMasukIn,
-                                   create_persediaan, transaksi_masuk)
+                                   create_persediaan, _catat_masuk)
 
     p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     if not p:
@@ -360,7 +477,7 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
         # diam-diam diganti master baru — barisnya dilaporkan gagal supaya
         # operator memilih ulang, karena membuat kartu stok baru diam-diam
         # justru bentuk kesalahan yang sama.
-        mid = str(row.get("psd_master_id") or "").strip()
+        mid = str(row.get("master_pencatatan") or row.get("psd_master_id") or "").strip()
         if mid:
             it = await db.persediaan.find_one(
                 scope_query_field_satker(user, {"id": mid}),
@@ -417,15 +534,17 @@ async def daftarkan_persediaan(perolehan_id: str, user: dict = Depends(require_w
                     gagal.append(f"{row.get('uraian')}: {e.detail}")
                     continue
         try:
-            await transaksi_masuk(it["id"], TransaksiMasukIn(
-                jenis="pembelian", jumlah=jumlah,
+            await db.pengadaan.update_one({"id": perolehan_id}, {"$set": {f"barang.{idx_baris}.master_pencatatan": it["id"]}})
+            sumber = str(uuid.uuid5(uuid.NAMESPACE_URL, f"pengadaan:{perolehan_id}:{idx_baris}"))
+            await _catat_masuk(it["id"], TransaksiMasukIn(
+                jenis=p["jenis"] if p.get("jenis") in {"hibah_masuk", "transfer_masuk"} else "pembelian", jumlah=jumlah,
                 harga_satuan=float(row.get("harga_satuan") or 0),
                 no_bukti=str(p.get("nomor_bast") or ""), jenis_dokumen="BAST",
                 tgl_dokumen=str(p.get("tanggal_bast") or ""),
                 no_kontrak=str(p.get("nomor_kontrak") or ""),
                 penyedia=str(p.get("pihak") or ""), perolehan_id=perolehan_id,
                 keterangan="Didaftarkan dari perolehan Pengadaan",
-            ), user=user)
+            ), request=None, user=user, sumber=sumber)
         except HTTPException as e:
             gagal.append(f"{row.get('uraian')}: {e.detail}")
             continue
@@ -531,6 +650,8 @@ async def buat_perolehan(payload: PerolehanIn, user: dict = Depends(require_writ
     from persediaan_utils import today_wib
     today_iso = today_wib()
     data = payload.model_dump()
+    if data.get("sifat") == "non_kontrak":
+        data["nomor_kontrak"] = ""
     errors = (validate_perolehan(data, today_iso)
               + validate_dokumen(data.get("sifat"), data))
     if errors:
@@ -625,6 +746,7 @@ async def _ada_lpb_menunjuk(perolehan_id: str) -> bool:
 
 
 @pengadaan_router.put("/pengadaan/{perolehan_id}")
+@giliran_register
 async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
                          user: dict = Depends(require_writer)):
     """Perbaiki register perolehan yang salah input.
@@ -647,6 +769,12 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
 
     kunci = kunci_ubah_perolehan(p, await _ada_lpb_menunjuk(perolehan_id))
     data = payload.model_dump()
+
+    for field in ("sifat", *KUNCI_DOKUMEN):
+        if field not in payload.model_fields_set:
+            data[field] = p.get(field, "")
+    if data.get("sifat") == "non_kontrak":
+        data["nomor_kontrak"] = ""
 
     # 1. Daftar barang — null berarti "biarkan apa adanya".
     if data.get("barang") is None:
@@ -671,9 +799,12 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
     # 2. Identitas dokumen — dibandingkan, bukan dipercaya. Klien lama yang
     #    tidak tahu kunci ini tetap tak bisa menembusnya.
     if not kunci["identitas"]:
+        identitas_lama = dict(p)
+        if p.get("sifat") == "non_kontrak":
+            identitas_lama["nomor_kontrak"] = ""
         berubah = [f for f in ("jenis", "pihak", "pihak_instansi_id", "nomor_kontrak",
-                               "nomor_bast", "tanggal_bast")
-                   if str(data.get(f) or "").strip() != str(p.get(f) or "").strip()]
+                               "nomor_bast", "tanggal_bast", "sifat", *KUNCI_DOKUMEN)
+                   if str(data.get(f) or "").strip() != str(identitas_lama.get(f) or "").strip()]
         if berubah:
             raise HTTPException(status_code=409, detail=(
                 f"{kunci['alasan']} (yang ditolak: {', '.join(berubah)})"))
@@ -701,12 +832,15 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
     }
     # Checklist dokumen sengaja TIDAK ikut disentuh: ia menyatakan "berkasnya
     # ada di tangan", dan itu tidak berubah hanya karena nomornya diperbaiki.
+    if data.get("sifat") == "non_kontrak" and (p.get("dokumen") or {}).get("kontrak"):
+        ubah["dokumen"] = {**p["dokumen"], "kontrak": False}
     perubahan = [{"field": f, "from": str(p.get(f) or ""), "to": str(ubah[f] or "")}
-                 for f in ("jenis", "pihak", "pihak_instansi_id", "nomor_kontrak",
-                           "nomor_bast", "tanggal_bast", "keterangan")
+                 for f in ubah if f not in {"barang", "updated_at", "updated_by"}
                  if str(p.get(f) or "") != str(ubah[f] or "")]
     nilai_lama, nilai_baru = nilai_perolehan(p), nilai_perolehan(ubah)
-    if nilai_lama != nilai_baru or len(p.get("barang") or []) != len(barang_rows):
+    def isi_baris(rows):
+        return [{k: v for k, v in row.items() if v not in ("", None)} for row in rows]
+    if isi_baris(p.get("barang") or []) != isi_baris(barang_rows):
         perubahan.append({"field": "barang",
                           "from": f"{len(p.get('barang') or [])} baris · {nilai_lama:.0f}",
                           "to": f"{len(barang_rows)} baris · {nilai_baru:.0f}"})
@@ -728,6 +862,7 @@ async def ubah_perolehan(perolehan_id: str, payload: PerolehanUbahIn,
 
 
 @pengadaan_router.put("/pengadaan/{perolehan_id}/dokumen")
+@giliran_register
 async def perbarui_dokumen(perolehan_id: str, payload: DokumenIn,
                            _user: dict = Depends(require_writer)):
     """Perbarui checklist dokumen sumber (kunci di luar daftar diabaikan)."""
@@ -735,7 +870,7 @@ async def perbarui_dokumen(perolehan_id: str, payload: DokumenIn,
     if not p:
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
     await pastikan_akses_dok_satker(_user, p)  # isolasi satker (REVIEW-9 R8)
-    wajib = set(DOKUMEN_PEROLEHAN.get(p.get("jenis"), ()))
+    wajib = set(dokumen_wajib_perolehan(p))
     dokumen = {**(p.get("dokumen") or {}),
                **{k: bool(v) for k, v in payload.dokumen.items() if k in wajib}}
     now = datetime.now(timezone.utc).isoformat()
@@ -747,6 +882,7 @@ async def perbarui_dokumen(perolehan_id: str, payload: DokumenIn,
 
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/tautkan")
+@giliran_register
 async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
                          _user: dict = Depends(require_writer)):
     """Tautkan/lepaskan baris barang ke aset master (cegah entri ganda)."""
@@ -758,6 +894,8 @@ async def tautkan_barang(perolehan_id: str, payload: TautkanIn,
     if payload.index >= len(barang):
         raise HTTPException(status_code=400, detail="Baris barang tidak ada")
     row = barang[payload.index]
+    if (row.get("draft_activity_id") and not row.get("asset_id")) or row.get("lebur_tujuan"):
+        raise HTTPException(409, "Lanjutkan pencatatan baris yang tertunda terlebih dahulu")
     prev_aid = str(row.get("asset_id") or "").strip()   # aset lama (lepas back-link)
     aid = str(payload.asset_id or "").strip()
     if aid:
@@ -817,6 +955,7 @@ class LeburkanIn(BaseModel):
 
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/leburkan")
+@giliran_register
 async def leburkan_ke_aset(perolehan_id: str, payload: LeburkanIn,
                            user: dict = Depends(require_writer)):
     """Leburkan baris pengadaan ke aset yang SUDAH tercatat — PENGEMBANGAN NILAI.
@@ -847,11 +986,13 @@ async def leburkan_ke_aset(perolehan_id: str, payload: LeburkanIn,
     if payload.index >= len(barang):
         raise HTTPException(status_code=400, detail="Baris barang tidak ada")
     row = barang[payload.index]
+    if row.get("draft_activity_id") or (row.get("lebur_tujuan") and row["lebur_tujuan"] != payload.asset_id):
+        raise HTTPException(409, "Baris sudah terikat pada pencatatan sebelumnya")
 
     aset = await db.assets.find_one(
         {"id": str(payload.asset_id).strip()},
         {"_id": 0, "id": 1, "asset_code": 1, "NUP": 1, "asset_name": 1,
-         "purchase_price": 1, "activity_id": 1, "dihapus": 1})
+         "purchase_price": 1, "activity_id": 1, "dihapus": 1, "leburan_pending": 1})
     if not aset:
         raise HTTPException(status_code=404, detail="Aset tujuan tidak ditemukan")
     # Guard ASET tersendiri: register-nya sudah ber-guard, tetapi tanpa ini
@@ -868,7 +1009,10 @@ async def leburkan_ke_aset(perolehan_id: str, payload: LeburkanIn,
         raise HTTPException(status_code=400, detail=(
             "Harga satuan baris ini 0 — tak ada nilai yang bisa dikembangkan."))
 
-    lama = parse_harga(aset.get("purchase_price"))
+    sumber = str(uuid.uuid5(uuid.NAMESPACE_URL, f"lebur:{perolehan_id}:{payload.index}"))
+    field = f"leburan_pending.{sumber}"
+    pending = (aset.get("leburan_pending") or {}).get(sumber)
+    lama = pending["nilai_lama"] if pending else parse_harga(aset.get("purchase_price"))
     ringkas = ringkas_leburan(row, aset, lama)
     now = datetime.now(timezone.utc).isoformat()
     tgl = (str(payload.tanggal_buku or "").strip()[:10]
@@ -877,23 +1021,31 @@ async def leburkan_ke_aset(perolehan_id: str, payload: LeburkanIn,
     # `purchase_price` disimpan STRING di seluruh jalur create — baca lama,
     # jumlahkan, tulis balik string. `$inc` pada string ditolak Mongo SETELAH
     # efek lain terlanjur jalan (pelajaran kapitalisasi pemeliharaan).
-    await db.assets.update_one(
-        {"id": aset["id"]},
-        {"$set": {"purchase_price": str(int(round(ringkas["nilai_baru"]))),
-                  "updated_at": now},
-         "$inc": {"version": 1}})
-    await catat_mutasi_bmn({
+    await db.pengadaan.update_one({"id": perolehan_id}, {"$set": {
+        f"barang.{payload.index}.lebur_tujuan": aset["id"]}})
+    if not pending:
+        applied = await db.assets.update_one(
+            {"id": aset["id"], "purchase_price": aset.get("purchase_price"), field: {"$exists": False}},
+            {"$set": {"purchase_price": str(int(round(ringkas["nilai_baru"]))),
+                      field: {"nilai_lama": lama}, "updated_at": now},
+             "$inc": {"version": 1}})
+        if not applied.matched_count:
+            raise HTTPException(409, "Nilai aset berubah saat peleburan. Ulangi pencatatan.")
+    tercatat = await catat_mutasi_bmn({
         "asset_id": aset["id"], "kode_transaksi": KODE_TRANSAKSI_LEBUR,
         "kode_barang": str(aset.get("asset_code") or ""),
         "nup": str(aset.get("NUP") or ""),
         # jumlah 0: murni transaksi NILAI — unitnya tetap satu kesatuan.
         "tanggal_buku": tgl, "jumlah": 0, "nilai": nilai,
-        "sumber_modul": "pengadaan", "ref_id": perolehan_id,
+        "sumber_modul": "pengadaan", "ref_id": perolehan_id, "baris_sumber": payload.index,
         "keterangan": (f"Peleburan pengadaan BAST {p.get('nomor_bast') or '-'}"
                        + (f": {str(payload.keterangan).strip()}"
                           if str(payload.keterangan or "").strip() else ""))[:200],
         "oleh": user.get("username", "system")})
 
+    if tercatat is False:
+        raise HTTPException(503, "Nilai aset telah diperbarui. Ulangi peleburan untuk melengkapi jurnal.")
+    row.pop("lebur_tujuan", None)
     # Barisnya ditandai TERLEBUR, bukan sekadar tertaut: tanpa penanda ini
     # "Catat Semua Barang" tak bisa membedakannya dari baris yang menunggu
     # dijadikan aset baru, dan `peringatan_nup` akan menghitungnya sebagai
@@ -907,7 +1059,7 @@ async def leburkan_ke_aset(perolehan_id: str, payload: LeburkanIn,
         {"$set": {"barang": barang, "updated_at": now}})
     await db.assets.update_one(
         {"id": aset["id"]},
-        {"$set": build_asset_perolehan_projection(p, now)})
+        {"$set": build_asset_perolehan_projection(p, now), "$unset": {field: ""}})
     await log_audit("pengadaan_leburkan", "", perolehan_id,
                     username=user.get("username", "system"),
                     detail=(f"Jurnal {KODE_TRANSAKSI_LEBUR} Rp{int(nilai):,} ke "
@@ -922,6 +1074,7 @@ class BuatDraftAsetIn(BaseModel):
 
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/buat-draft-aset")
+@giliran_register
 async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                                          payload: BuatDraftAsetIn,
                                          user: dict = Depends(require_writer)):
@@ -980,7 +1133,10 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
         next_nup[kode] += 1
         return str(next_nup[kode])
 
-    for row in barang:
+    for idx, row in enumerate(barang):
+        if row.get("lebur_tujuan"):
+            gagal.append(f"{row.get('uraian')}: selesaikan peleburan ke aset tujuan")
+            continue
         if str(row.get("asset_id") or "").strip():
             dilewati_tertaut += 1
             continue
@@ -1024,18 +1180,34 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
         nilai_draft = harga_satuan * porsi
         catatan_jumlah = (f" — jumlah pada BAST: {jumlah:g} unit"
                           if jumlah != 1 and n_unit == 1 else "")
+        tujuan = row.get("draft_activity_id") or payload.activity_id
+        if tujuan != payload.activity_id:
+            gagal.append(f"{row.get('uraian')}: lanjutkan di kegiatan semula ({tujuan})")
+            continue
+        await db.pengadaan.update_one({"id": perolehan_id}, {"$set": {
+            f"barang.{idx}.draft_activity_id": tujuan, "lpb_menunggu": True}})
+        pertama = {}
         gagal_baris = False
         for unit_ke in range(1, n_unit + 1):
             sub = (f" (unit {unit_ke}/{n_unit})" if n_unit > 1 else "")
+            aid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"aset-pengadaan:{perolehan_id}:{idx}:{unit_ke}"))
+            if unit_ke <= len(row.get("unit_lama", [])):
+                aid = row["unit_lama"][unit_ke - 1]
+            doc = await db.assets.find_one({"id": aid}, {"_id": 0})
+            sumber = {"id": aid, "perolehan_id": perolehan_id, "baris": idx, "unit": unit_ke,
+                      "harga_satuan": harga_satuan, "jumlah_bast": porsi}
             draft = AssetCreate(
                 asset_code=kode,
-                NUP=await _nup_berikut(kode),
+                NUP=doc["NUP"] if doc else await _nup_berikut(kode),
                 asset_name=str(row.get("uraian") or "").strip(),
                 category=kategori_by_kode.get(kode, ""),
                 purchase_date=str(p.get("tanggal_bast") or "").strip()[:10],
                 purchase_price=str(int(round(nilai_draft))),
                 nomor_bast=str(p.get("nomor_bast") or "").strip(),
-                nomor_kontrak=str(p.get("nomor_kontrak") or "").strip(),
+                jenis_dokumen_pengadaan={"kontrak": "Kontrak", "non_kontrak": "Non Kontrak/Penerimaan Barang"}.get(p.get("sifat"), ""),
+                nomor_kontrak="" if p.get("sifat") == "non_kontrak" else str(p.get("nomor_kontrak") or "").strip(),
+                nomor_spm=str(p.get("no_spm") or "").strip(),
+                nomor_bukti_perolehan=str(p.get("no_bukti") or "").strip(),
                 perolehan_dari_nama=str(p.get("pihak") or "").strip(),
                 supplier=str(p.get("pihak") or "").strip(),
                 notes=(f"Draft otomatis dari perolehan Pengadaan "
@@ -1043,15 +1215,20 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                 activity_id=payload.activity_id,
             )
             try:
-                doc = await buat_aset_draft(
-                    draft, audit_user=user.get("name") or user.get("username") or "system")
+                if not doc:
+                    doc = await buat_aset_draft(
+                        draft, audit_user=user.get("name") or user.get("username") or "system", sumber=sumber)
+                    dibuat += 1
             except HTTPException as e:
+                if unit_ke == 1 and not await db.assets.find_one({"id": aid}, {"_id": 1}):
+                    await db.pengadaan.update_one({"id": perolehan_id}, {"$unset": {
+                        f"barang.{idx}.draft_activity_id": ""}})
                 gagal.append(f"{row.get('uraian')}{sub}: {e.detail}")
                 gagal_baris = True
                 break
             if unit_ke == 1:
-                row.update({"asset_id": doc["id"], "asset_code": doc["asset_code"],
-                            "NUP": doc["NUP"], "asset_name": doc["asset_name"]})
+                pertama = {"asset_id": doc["id"], "asset_code": doc["asset_code"],
+                           "NUP": doc["NUP"], "asset_name": doc["asset_name"]}
             # Back-link dokumen sumber (§5A gap #6) ke aset draft yang baru dibuat.
             #
             # `jumlah_bast` ikut distempel HANYA bila record ini berdiri untuk
@@ -1068,7 +1245,7 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
             # Jurnal Buku Barang (G7): perolehan → kode 101/102/103/105.
             from shared_utils import catat_mutasi_bmn
             kode_trx = str(JENIS_PEROLEHAN.get(p.get("jenis"), ("", "101"))[1]).split("/")[0]
-            await catat_mutasi_bmn({
+            tercatat = await catat_mutasi_bmn({
                 "asset_id": doc["id"], "kode_transaksi": kode_trx or "101",
                 "kode_barang": doc["asset_code"], "nup": str(doc["NUP"]),
                 "tanggal_buku": (str(p.get("tanggal_bast") or "").strip()[:10]
@@ -1082,6 +1259,10 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                 "sumber_modul": "pengadaan", "ref_id": perolehan_id,
                 "keterangan": f"Draft aset dari BAST {p.get('nomor_bast') or '-'}",
                 "oleh": user.get("username", "system")})
+            if tercatat is False:
+                gagal.append(f"{kode} NUP {doc['NUP']}: jurnal perolehan perlu dicatat ulang")
+                gagal_baris = True
+                break
             # HANYA field yang dibutuhkan LPB — JANGAN pernah menyalin dokumen
             # aset mentah (temuan audit adversarial). `buat_aset_draft`
             # mengembalikan dict YANG SAMA yang dioper ke `insert_one()`, dan
@@ -1101,16 +1282,12 @@ async def buat_draft_aset_dari_perolehan(perolehan_id: str,
                 "harga_satuan": harga_satuan,
                 "jumlah_bast": porsi,
             })
-            dibuat += 1
-        if gagal_baris:
-            continue
-
-    if dibuat:
-        await db.pengadaan.update_one(
-            {"id": perolehan_id},
-            {"$set": {"barang": barang,
-                      "updated_at": datetime.now(timezone.utc).isoformat()}})
-    p["barang"] = barang
+        if not gagal_baris:
+            row.update(pertama)
+            await db.pengadaan.update_one({"id": perolehan_id}, {"$set": {
+                **{f"barang.{idx}.{key}": val for key, val in pertama.items()},
+                "updated_at": now}})
+    p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
     return {"dibuat": dibuat, "dilewati_tertaut": dilewati_tertaut,
             "dilewati_tanpa_kode": dilewati_tanpa_kode,
             "dilewati_persediaan": dilewati_persediaan,
@@ -1144,6 +1321,7 @@ class CatatSemuaIn(BaseModel):
 
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/catat-semua")
+@giliran_register
 async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
                              user: dict = Depends(require_writer)):
     """SATU tombol: seluruh barang BAST masuk ke buku yang benar + LPB terbit.
@@ -1169,16 +1347,55 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
         raise HTTPException(status_code=404, detail="Perolehan tidak ditemukan")
     await pastikan_akses_dok_satker(user, p)  # isolasi satker (REVIEW-9 R8)
 
+    lama = (await _draft_lama([p])).get(perolehan_id, {})
+    if lama:
+        tercetak = set()
+        async for lpb in db.lpb.find({"$or": [{"perolehan_id": perolehan_id}, {"perolehan_ids": perolehan_id}]},
+                                    {"items.asset_id": 1}):
+            tercetak.update(b.get("asset_id") for b in lpb.get("items", []))
+        if any(len(unit) < unit_per_baris(p["barang"][idx]["jumlah"]) for idx, unit in lama.items()):
+            dikenal = {a["id"] for unit in lama.values() for a in unit}
+            dikenal.update(await db.assets.distinct("id", {"sumber_draft.perolehan_id": perolehan_id}))
+            tercatat = await db.mutasi_bmn.distinct("asset_id", {
+                "ref_id": perolehan_id, "sumber_modul": "pengadaan",
+                "kode_transaksi": {"$in": ["101", "102", "103", "105"]}})
+            if set(tercatat) - dikenal:
+                raise HTTPException(409, "Sebagian NUP lama sudah memiliki jurnal yang perlu dicocokkan dengan register sebelum melanjutkan")
+        for idx, unit in lama.items():
+            b = p["barang"][idx]
+            n_unit = unit_per_baris(b["jumlah"])
+            if len(unit) == n_unit and all(a["id"] in tercetak for a in unit):
+                continue
+            ids = [a["id"] for a in unit]
+            status = {"unit_lama": ids, "draft_activity_id": unit[0]["activity_id"]}
+            if len(unit) < n_unit:
+                status["asset_id"] = ""
+            b.update(status)
+            await db.pengadaan.update_one({"id": perolehan_id}, {"$set": {
+                **{f"barang.{idx}.{k}": v for k, v in status.items()}, "lpb_menunggu": True}})
+
+    # Replaying this stage after interruption also completes the adoption of older drafts.
+    for idx, b in enumerate(p.get("barang") or []):
+        for ke, aid in enumerate(b.get("unit_lama", []), 1):
+            await db.assets.update_one({"id": aid, "sumber_draft": {"$exists": False}}, {"$set": {
+                "sumber_draft": {"id": aid, "perolehan_id": perolehan_id, "baris": idx, "unit": ke,
+                                 "harga_satuan": b["harga_satuan"],
+                                 "jumlah_bast": porsi_baris(b["jumlah"], unit_per_baris(b["jumlah"]))}}})
     pilah = pilah_barang_perolehan(p.get("barang") or [])
     hasil_aset = {}
     if pilah["aset"]:
-        if not str(payload.activity_id or "").strip():
+        kegiatan = str(payload.activity_id or "").strip()
+        if not kegiatan:
+            tujuan = {b.get("draft_activity_id") for _, b in pilah["aset"]}
+            if len(tujuan) == 1:
+                kegiatan = tujuan.pop()
+        if not kegiatan:
             raise HTTPException(
                 status_code=400,
                 detail=(f"BAST ini memuat {len(pilah['aset'])} barang golongan "
                         "aset tetap — pilih kegiatan inventarisasi tujuannya."))
         hasil_aset = await buat_draft_aset_dari_perolehan(
-            perolehan_id, BuatDraftAsetIn(activity_id=payload.activity_id),
+            perolehan_id, BuatDraftAsetIn(activity_id=kegiatan),
             user=user)
     hasil_psd = {}
     if pilah["persediaan"]:
@@ -1187,14 +1404,27 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
     # LPB sisi ASET — satu baris per NUP nyata. Inilah bukti terima BMN yang
     # selama ini hanya dipunyai persediaan.
     lpb_id, nomor_lpb = "", ""
-    aset_dibuat = hasil_aset.get("aset_dibuat") or []
-    if aset_dibuat:
+    p = await db.pengadaan.find_one({"id": perolehan_id}, {"_id": 0})
+    aset_lpb = []
+    if p.get("lpb_menunggu") and not hasil_aset.get("gagal"):
+        tercetak = set()
+        async for lpb in db.lpb.find({"$or": [{"perolehan_id": perolehan_id}, {"perolehan_ids": perolehan_id}]},
+                                    {"items.asset_id": 1}):
+            tercetak.update(b.get("asset_id") for b in lpb.get("items", []))
+        async for a in db.assets.find({"sumber_draft.perolehan_id": perolehan_id},
+                {"_id": 0, "sumber_draft": 1, "id": 1, "asset_code": 1, "asset_name": 1, "NUP": 1}
+                ).sort([("sumber_draft.baris", 1), ("sumber_draft.unit", 1)]):
+            if a["id"] not in tercetak:
+                aset_lpb.append({**a, **a["sumber_draft"]})
+        if not aset_lpb:
+            await db.pengadaan.update_one({"id": perolehan_id}, {"$unset": {"lpb_menunggu": ""}})
+    if aset_lpb:
         # Snapshot sumber DILEKATKAN ke tiap baris: tanggal kedatangan, PPK
         # berikut NIP-nya, dan No. Bukti/Faktur berdiri di area tabel bersama
         # barangnya — dan kepala surat berhenti mengulangnya. Seluruh baris
         # berasal dari satu register, jadi bundelnya tercetak SEKALI di bawah
         # tabel, bukan berulang per baris.
-        items = baris_lpb_dari_aset(aset_dibuat, sumber=snapshot_sumber(p))
+        items = baris_lpb_dari_aset(aset_lpb, sumber=snapshot_sumber(p))
         tgl = str(p.get("tanggal_bast") or "").strip()[:10] or \
             datetime.now(timezone.utc).date().isoformat()
         # Satker DOKUMEN dibekukan dari perolehannya, bukan dari pemanggil:
@@ -1202,6 +1432,8 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
         # & nomor suratnya "" (yang membuatnya tampil di SEMUA satker) —
         # pola sama dengan bast.py yang memakai kode_satker milik dokumen.
         ks_dok = str(p.get("kode_satker") or "").strip() or kode_satker_user(user)
+        sidik = ",".join(a["id"] for a in aset_lpb)
+        lpb_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"lpb:{perolehan_id}:{sidik}"))
         surat_id = ""
         if payload.booking_nomor:
             from routes.persuratan import booking_nomor_lpb
@@ -1212,10 +1444,10 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
                 tujuan=str(p.get("pihak") or "").strip(),
                 keterangan=f"booking otomatis dari pencatatan BAST {p.get('nomor_bast') or '-'}",
                 kode_satker=ks_dok,
-                kode_klasifikasi=payload.kode_klasifikasi)
-        lpb_id = str(uuid.uuid4())
+                kode_klasifikasi=payload.kode_klasifikasi,
+                sumber_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"surat-lpb:{lpb_id}")))
         await db.lpb.insert_one({
-            "id": lpb_id, "nomor": nomor_lpb, "surat_id": surat_id,
+            "_id": lpb_id, "id": lpb_id, "nomor": nomor_lpb, "surat_id": surat_id,
             # Pembeda kolom & judul dokumen: NUP hanya bermakna untuk BMN.
             "kategori": "aset",
             "tanggal": tgl,
@@ -1237,6 +1469,8 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
+        await db.pengadaan.update_one({"id": perolehan_id}, {"$unset": {"lpb_menunggu": ""}})
+
     ringkas = ringkas_pencatatan(hasil_aset, hasil_psd,
                                  tanpa_kode=len(pilah["tanpa_kode"]))
     await log_audit("pengadaan_catat_semua", "", perolehan_id,
@@ -1256,6 +1490,7 @@ async def catat_semua_barang(perolehan_id: str, payload: CatatSemuaIn,
 
 
 @pengadaan_router.put("/pengadaan/{perolehan_id}/ppk")
+@giliran_register
 async def tetapkan_ppk(perolehan_id: str, payload: TetapkanPpkIn,
                        user: dict = Depends(require_writer)):
     """Tetapkan / ganti / kosongkan PPK pada register perolehan.
@@ -1279,6 +1514,10 @@ async def tetapkan_ppk(perolehan_id: str, payload: TetapkanPpkIn,
     else:
         snap_ppk = snapshot_ppk(None)
     now = datetime.now(timezone.utc).isoformat()
+    if p.get("bast_ppk") and "ppk" not in p["bast_ppk"]:
+        await db.pengadaan.update_one(
+            {"id": perolehan_id, "bast_ppk.ppk": {"$exists": False}},
+            {"$set": {"bast_ppk.ppk": {key: p.get(key, "") for key in snapshot_ppk(None)}}})
     await db.pengadaan.update_one(
         {"id": perolehan_id}, {"$set": {**snap_ppk, "updated_at": now}})
     p.update(snap_ppk)
@@ -1363,6 +1602,7 @@ class BastPpkIn(BaseModel):
 
 
 @pengadaan_router.post("/pengadaan/{perolehan_id}/bast-ppk-kpb")
+@giliran_register
 async def terbitkan_bast_ppk_kpb(perolehan_id: str, payload: BastPpkIn,
                                  user: dict = Depends(require_writer)):
     """Terbitkan BAST PPK → KPB untuk satu perolehan (idempoten).
@@ -1442,6 +1682,7 @@ async def terbitkan_bast_ppk_kpb(perolehan_id: str, payload: BastPpkIn,
         })
 
     rekaman = {
+        "ppk": {key: p.get(key, "") for key in snapshot_ppk(None)},
         "nomor": nomor, "surat_id": surat_id, "tanggal": tgl,
         # Snapshot KPB dibekukan DI SINI: dokumen historis tak boleh berganti
         # penanda tangan hanya karena registry pejabat berubah kemudian.
@@ -1560,8 +1801,9 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
     el.append(Paragraph(f"{frasa}, kami yang bertanda tangan di bawah ini:", isi))
     el.append(Spacer(1, 1.5 * rl_mm))
 
-    p1 = {"nama": p.get("ppk_nama"), "nip": p.get("ppk_nip"),
-          "jabatan": p.get("ppk_jabatan") or "Pejabat Pembuat Komitmen"}
+    ppk = bp.get("ppk", p)
+    p1 = {"nama": ppk.get("ppk_nama"), "nip": ppk.get("ppk_nip"),
+          "jabatan": ppk.get("ppk_jabatan") or "Pejabat Pembuat Komitmen"}
     # Jabatan dicetak = KAPASITAS dokumen ("Kuasa Pengguna Barang" ber-awalan
     # Plt./Plh.), bukan snapshot jabatan struktural — BAST lama yang terlanjur
     # menyimpan "Direktur ..." di kpb_jabatan ikut ternormalkan saat render.
@@ -1828,7 +2070,7 @@ async def bangun_bast_ppk_pdf(perolehan_id: str, _user: dict) -> bytes:
          'header': 'PIHAK KESATU,', 'role': 'Yang Menyerahkan,',
          'nama': p1.get("nama") or "................................",
          'after': baris_identitas_ttd(
-             p1.get("nip"), str(p.get("ppk_status_kepegawaian") or "").strip()
+             p1.get("nip"), str(ppk.get("ppk_status_kepegawaian") or "").strip()
              or await status_kepegawaian_by_nip(p1.get("nip")))},
     ], doc.width))
 
@@ -2107,6 +2349,7 @@ async def hapus_lampiran_perolehan(perolehan_id: str, file_id: str,
 
 
 @pengadaan_router.delete("/pengadaan/{perolehan_id}")
+@giliran_register
 async def hapus_perolehan(perolehan_id: str,
                           _admin: dict = Depends(require_admin)):
     """Hapus register perolehan SALAH INPUT (admin) + berkas lampirannya.
@@ -2131,8 +2374,8 @@ async def hapus_perolehan(perolehan_id: str,
 
     # Penjaga anti-yatim: register yang sudah "hidup" tak boleh dihapus.
     tercatat = [b for b in (p.get("barang") or [])
-                if str(b.get("psd_item_id") or "").strip()
-                or str(b.get("asset_id") or "").strip()]
+                if b.get("lebur_tujuan") or b.get("master_pencatatan") or b.get("draft_activity_id")
+                or str(b.get("psd_item_id") or "").strip() or str(b.get("asset_id") or "").strip()]
     if tercatat:
         raise HTTPException(status_code=409, detail=(
             f"{len(tercatat)} barang sudah tercatat ke stok/aset dari perolehan "

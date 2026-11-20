@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from auth_utils import (require_admin, require_user,
                         require_user_or_query_token, require_writer)
 from db import db
+from shared_utils import filter_aset_pembukuan
 from shared_utils import kunci_idem, scope_query_field_satker
 from kodefikasi_utils import normalize_kode, validate_kode
 from mutasi_bmn_utils import (
@@ -599,14 +600,12 @@ async def dbkp_json(_user: dict = Depends(require_user)):
     from pembukuan_utils import build_dbkp_rows, posisi_neraca
     from persediaan_utils import nilai_persediaan_dari_batches
     from report_filters import active_asset_filter
-    from shared_utils import (ambang_kapitalisasi, filter_aset_perhitungan,
-                              scope_query_aset)
+    from shared_utils import ambang_kapitalisasi
 
-    q = await filter_aset_perhitungan(
-        await scope_query_aset(_user, active_asset_filter()))
+    q = await filter_aset_pembukuan(_user, active_asset_filter())
     assets = await db.assets.find(
         q, {"_id": 0, "asset_code": 1, "purchase_price": 1,
-            "nilai_wajar_terakhir": 1}).to_list(500000)
+            "jumlah_bast": 1, "nilai_wajar_terakhir": 1}).to_list(500000)
     uraian_map = {k: u for k, u in GOLONGAN_DEFAULTS}
     async for k in db.kodefikasi.find({"level": 1}, {"_id": 0, "kode": 1, "uraian": 1}):
         if k.get("uraian"):
