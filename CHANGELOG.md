@@ -18,6 +18,12 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1154] Kartu aset HP — kategori pindah ke bawah kode aset — 2026-11-20
+
+- Tampilan HP kini mengikuti susunan tablet: kategori tepat di bawah kode
+  aset, nama barang pindah ke baris bawah sebaris dengan lokasi.
+- Posisi badge stiker di HP tidak berubah.
+
 ## [#1153] Kartu aset tablet — stiker di samping NUP, kategori & nama barang bertukar posisi — 2026-11-20
 
 - Tampilan tablet: huruf stiker ringkas (S/M/L atau ikon) kini menempel

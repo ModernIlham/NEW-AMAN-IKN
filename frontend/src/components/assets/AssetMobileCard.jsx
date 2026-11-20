@@ -300,14 +300,9 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                       (permintaan pemilik) — bukan di baris kategori/lokasi. */}
                   <BadgeStikerRingkas asset={asset} className="hidden md:inline-flex" />
                 </div>
-                {/* HP: nama barang di bawah kode. Tablet: posisinya DITUKAR
-                    dengan kategori — kategori naik ke sini, nama barang turun
-                    ke baris lokasi di bawah. */}
-                <div className="flex md:hidden items-center gap-1 min-w-0">
-                  <BadgeDraf assetId={asset.id} className="shrink-0" />
-                  <div className="text-xs text-muted-foreground truncate">{asset.asset_name}</div>
-                </div>
-                <div className="hidden md:block text-xs text-muted-foreground truncate" data-testid={`card-kategori-${asset.id}`}>
+                {/* HP & tablet: kategori tepat di bawah kode aset; nama barang
+                    turun ke baris lokasi di bawah (permintaan pemilik). */}
+                <div className="text-xs text-muted-foreground truncate" data-testid={`card-kategori-${asset.id}`}>
                   {asset.category}
                 </div>
               </div>
@@ -363,8 +358,7 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                 wraps to the next line where natural (flex-wrap), and only
                 truncates when a single value exceeds the whole row width. */}
             <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
-              <span className="truncate min-w-0 md:hidden">{asset.category}</span>
-              <span className="hidden md:flex items-center gap-1 min-w-0" data-testid={`card-nama-tablet-${asset.id}`}>
+              <span className="flex items-center gap-1 min-w-0" data-testid={`card-nama-${asset.id}`}>
                 <BadgeDraf assetId={asset.id} className="shrink-0" />
                 <span className="truncate min-w-0">{asset.asset_name}</span>
               </span>
