@@ -109,14 +109,17 @@ describe("baris HP memakai badge itu", () => {
     expect(screen.getByTestId("badge-stiker")).toHaveClass("md:hidden");
   });
 
-  it("kartu tablet menukar posisi: kategori di bawah kode, nama barang di baris lokasi", () => {
+  it("kartu HP & tablet: kategori di bawah kode, nama barang di baris lokasi", () => {
     render(<AssetMobileCard asset={{ ...sudah("Sedang"), location: "Gudang" }} />);
     const kategori = screen.getByTestId("card-kategori-a1");
     expect(kategori).toHaveTextContent("Alat");
-    expect(kategori).toHaveClass("hidden", "md:block");
-    const nama = screen.getByTestId("card-nama-tablet-a1");
+    expect(kategori).not.toHaveClass("hidden");
+    const nama = screen.getByTestId("card-nama-a1");
     expect(nama).toHaveTextContent("Laptop");
-    expect(nama).toHaveClass("hidden", "md:flex");
+    expect(nama).not.toHaveClass("hidden");
+    // Satu-satunya tampilan nama/kategori — tak ada salinan tersembunyi.
+    expect(screen.getAllByText("Laptop")).toHaveLength(1);
+    expect(screen.getAllByText("Alat")).toHaveLength(1);
     // Nama barang sebaris dengan pin lokasi.
     expect(nama.parentElement).toContainElement(screen.getByTestId("lokasi-penanda-a1"));
   });
