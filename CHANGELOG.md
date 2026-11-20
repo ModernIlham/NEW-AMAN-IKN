@@ -18,6 +18,14 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1153] Kartu aset tablet — stiker di samping NUP, kategori & nama barang bertukar posisi — 2026-11-20
+
+- Tampilan tablet: huruf stiker ringkas (S/M/L atau ikon) kini menempel
+  tepat di samping NUP, tidak lagi di samping kategori/lokasi.
+- Tampilan tablet: kategori kini berada di bawah kode aset, sedangkan nama
+  barang pindah ke baris bawah, sebaris dengan lokasi.
+- Tampilan HP tidak berubah.
+
 ## [#1148] Ubah Massal — pegawai internal bisa dipilih; aksesibilitas tombol & label form — 2026-11-19
 
 - Perbaikan: di panel **Ubah Massal**, kolom Nama Pengguna kini punya tombol

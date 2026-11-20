@@ -296,10 +296,19 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                       )}
                     </span>
                   )}
+                  {/* Tablet: huruf stiker ringkas menempel tepat di samping NUP
+                      (permintaan pemilik) — bukan di baris kategori/lokasi. */}
+                  <BadgeStikerRingkas asset={asset} className="hidden md:inline-flex" />
                 </div>
-                <div className="flex items-center gap-1 min-w-0">
+                {/* HP: nama barang di bawah kode. Tablet: posisinya DITUKAR
+                    dengan kategori — kategori naik ke sini, nama barang turun
+                    ke baris lokasi di bawah. */}
+                <div className="flex md:hidden items-center gap-1 min-w-0">
                   <BadgeDraf assetId={asset.id} className="shrink-0" />
                   <div className="text-xs text-muted-foreground truncate">{asset.asset_name}</div>
+                </div>
+                <div className="hidden md:block text-xs text-muted-foreground truncate" data-testid={`card-kategori-${asset.id}`}>
+                  {asset.category}
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
@@ -354,20 +363,23 @@ const AssetMobileCard = memo(({ asset, editId, onEdit, onDelete, onOpenKartu, on
                 wraps to the next line where natural (flex-wrap), and only
                 truncates when a single value exceeds the whole row width. */}
             <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
-              <span className="truncate min-w-0">{asset.category}</span>
+              <span className="truncate min-w-0 md:hidden">{asset.category}</span>
+              <span className="hidden md:flex items-center gap-1 min-w-0" data-testid={`card-nama-tablet-${asset.id}`}>
+                <BadgeDraf assetId={asset.id} className="shrink-0" />
+                <span className="truncate min-w-0">{asset.asset_name}</span>
+              </span>
               {/* Tampil pula saat nama lokasinya kosong tetapi koordinat ATAU
                   penempatan denahnya sudah ada — penandanya menempel pada ikon
                   pin ini, jadi tanpa barisnya ia takkan pernah terlihat justru
                   pada aset yang paling sering belum diisi lokasinya. */}
-              {lokasi ? (
+              {lokasi && (
                 <span className="flex items-center gap-0.5 min-w-0">
-                  <BadgeStikerRingkas asset={asset} className="hidden md:inline-flex" />
                   <IkonLokasiAset asset={asset} className="w-3 h-3" />
                   <span className="truncate min-w-0">
                     {lokasi}
                   </span>
                 </span>
-              ) : <BadgeStikerRingkas asset={asset} className="hidden md:inline-flex" />}
+              )}
             </div>
             {/* Row 3: Eselon, Price, Stiker — same flexible layout as row 2 */}
             <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
