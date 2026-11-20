@@ -98,13 +98,27 @@ describe("baris HP memakai badge itu", () => {
     expect(within(badge).getByTestId("ikon-stiker-belum")).toBeInTheDocument();
   });
 
-  it("kartu tablet menaruh huruf ringkas di kiri pin lokasi", () => {
-    render(<AssetMobileCard asset={{ ...sudah("Sedang"), location: "Gudang" }} />);
+  it("kartu tablet menaruh huruf ringkas tepat di samping NUP", () => {
+    // Permintaan pemilik: "letakkan informasi mengenai stikernya tepat
+    // disamping NUP, jangan disamping nama kategori barang".
+    render(<AssetMobileCard asset={{ ...sudah("Sedang"), NUP: 3, location: "Gudang" }} />);
     const badge = screen.getByTestId("stiker-ringkas-a1");
-    expect(badge.nextElementSibling).toHaveAttribute("data-testid", "lokasi-penanda-a1");
+    expect(badge.previousElementSibling).toHaveAttribute("data-testid", "card-nup-garansi-a1");
     expect(badge).toHaveTextContent("M");
     expect(badge).toHaveClass("hidden", "md:inline-flex", "bg-emerald-100");
     expect(screen.getByTestId("badge-stiker")).toHaveClass("md:hidden");
+  });
+
+  it("kartu tablet menukar posisi: kategori di bawah kode, nama barang di baris lokasi", () => {
+    render(<AssetMobileCard asset={{ ...sudah("Sedang"), location: "Gudang" }} />);
+    const kategori = screen.getByTestId("card-kategori-a1");
+    expect(kategori).toHaveTextContent("Alat");
+    expect(kategori).toHaveClass("hidden", "md:block");
+    const nama = screen.getByTestId("card-nama-tablet-a1");
+    expect(nama).toHaveTextContent("Laptop");
+    expect(nama).toHaveClass("hidden", "md:flex");
+    // Nama barang sebaris dengan pin lokasi.
+    expect(nama.parentElement).toContainElement(screen.getByTestId("lokasi-penanda-a1"));
   });
 });
 
