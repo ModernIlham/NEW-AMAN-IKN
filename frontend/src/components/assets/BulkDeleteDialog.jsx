@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import axios from "axios";
 import { getApiError } from "../../lib/utils";
 import { frasaKonfirmasiHapus, konfirmasiCocok } from "../../lib/konfirmasiHapus";
+import OverlayProses from "../ui/OverlayProses";
+import { jalankanHapusBerat, TENGGAT_HAPUS_BERAT } from "../../lib/prosesHapusBerat";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -60,12 +62,27 @@ const BulkDeleteDialog = memo(({ open, onClose, activityId, activityName, totalI
     if (!siap) return;
     setDeleting(true);
     try {
-      const r = await axios.delete(`${API}/assets/bulk-delete/${activityId}`, {
-        params: { jumlah_konfirmasi: jumlah },
-      });
-      toast.success(r.data.message);
+      const hasil = await jalankanHapusBerat(
+        () => axios.delete(`${API}/assets/bulk-delete/${activityId}`, {
+          params: { jumlah_konfirmasi: jumlah }, timeout: TENGGAT_HAPUS_BERAT,
+        }),
+        // Jawaban terputus (proses lama) → selesai bila aset kegiatan sudah 0.
+        async () => {
+          const c = await axios.get(`${API}/assets`, {
+            params: { activity_id: activityId, page: 1, page_size: 1 }, timeout: 15000,
+          });
+          return (Number(c.data?.total) || 0) === 0;
+        },
+      );
+      // Layar tetap buram sampai daftar SELESAI dimuat ulang — kalau tidak,
+      // data lama sempat tampil lagi dan terkesan belum terhapus.
+      try { await onSuccess?.(); } catch { /* galat muat ulang ditangani pemanggil */ }
+      if (hasil.status === "belum_pasti") {
+        toast.warning("Penghapusan masih berjalan di server. Muat ulang daftar beberapa saat lagi untuk memastikan.");
+      } else {
+        toast.success(hasil.data?.message || "Semua aset kegiatan ini sudah dihapus");
+      }
       onClose(false);
-      onSuccess?.();
     } catch (err) {
       toast.error(getApiError(err, "Gagal menghapus data"));
       // Jumlah berubah sejak dialog dibuka (409) → tampilkan angka terbaru
@@ -79,7 +96,15 @@ const BulkDeleteDialog = memo(({ open, onClose, activityId, activityName, totalI
   const tampilTerfilter = filterAktif && Number.isFinite(totalItems) && jumlah !== null && totalItems !== jumlah;
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <>
+    <OverlayProses
+      aktif={deleting}
+      judul="Menghapus semua aset…"
+      keterangan={`Sedang menghapus ${jumlah !== null ? `${jumlah.toLocaleString("id-ID")} aset` : "aset"} beserta foto & dokumennya di server. Mohon tunggu dan jangan tutup halaman ini.`}
+      testId="overlay-hapus-semua"
+    />
+    {/* Selama proses berjalan dialog tidak boleh ditutup (Esc/klik luar). */}
+    <Dialog open={open} onOpenChange={(v) => { if (!deleting) onClose(v); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
@@ -149,6 +174,7 @@ const BulkDeleteDialog = memo(({ open, onClose, activityId, activityName, totalI
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 });
 

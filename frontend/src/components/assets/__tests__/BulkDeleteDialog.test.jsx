@@ -14,7 +14,12 @@ import { toast } from "sonner";
 import BulkDeleteDialog from "../BulkDeleteDialog";
 
 jest.mock("axios");
-jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+// Jeda pantau dipercepat (1 ms) — logika aslinya tetap dipakai.
+jest.mock("../../../lib/prosesHapusBerat", () => {
+  const asli = jest.requireActual("../../../lib/prosesHapusBerat");
+  return { ...asli, jalankanHapusBerat: (k, c) => asli.jalankanHapusBerat(k, c, { jeda: 1, batas: 5000 }) };
+});
+jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn(), warning: jest.fn() } }));
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -103,4 +108,61 @@ test("nama kegiatan kosong → frasa konfirmasi HAPUS", async () => {
   await waitFor(() => expect(screen.getByTestId("bulk-delete-jumlah").textContent).toMatch(/600/));
   ketik("hapus");
   expect(tombol()).toBeEnabled();
+});
+
+// ── Layar buram selama proses (permintaan pemilik, Nov 2026) ─────────────
+// "datanya masih ada tampil padahal sedang diprogres di background,
+// buramkan layarnya … agar tidak bisa diotak atik lagi".
+
+test("layar buram tampil selama hapus DAN sampai daftar selesai dimuat ulang", async () => {
+  let lepasHapus; let lepasMuat;
+  axios.delete.mockReturnValue(new Promise(r => { lepasHapus = r; }));
+  const onSuccess = jest.fn(() => new Promise(r => { lepasMuat = r; }));
+  const onClose = jest.fn();
+  render(<BulkDeleteDialog open onClose={onClose} onSuccess={onSuccess} activityId="keg-1"
+    activityName="Uji sintetis 3" totalItems={600} />);
+  await waitFor(() => expect(screen.getByTestId("bulk-delete-jumlah").textContent).toMatch(/600/));
+  expect(screen.queryByTestId("overlay-hapus-semua")).toBeNull();
+  ketik("Uji sintetis 3");
+  fireEvent.click(tombol());
+  const overlay = await screen.findByTestId("overlay-hapus-semua");
+  expect(overlay).toHaveClass("backdrop-blur-sm", "pointer-events-auto", "fixed", "inset-0");
+  expect(overlay).toHaveAttribute("aria-busy", "true");
+  // Server selesai, tapi daftar belum dimuat ulang → masih buram.
+  lepasHapus({ data: { message: "ok", deleted: 600 } });
+  await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+  expect(screen.getByTestId("overlay-hapus-semua")).toBeInTheDocument();
+  expect(onClose).not.toHaveBeenCalled();
+  lepasMuat();
+  await waitFor(() => expect(screen.queryByTestId("overlay-hapus-semua")).toBeNull());
+  expect(onClose).toHaveBeenCalledWith(false);
+});
+
+test("Esc tidak menutup dialog selama penghapusan berjalan", async () => {
+  let lepasHapus;
+  axios.delete.mockReturnValue(new Promise(r => { lepasHapus = r; }));
+  const { onClose } = buka({ totalItems: 600 });
+  await waitFor(() => expect(screen.getByTestId("bulk-delete-jumlah").textContent).toMatch(/600/));
+  ketik("Uji sintetis 3");
+  fireEvent.click(tombol());
+  await screen.findByTestId("overlay-hapus-semua");
+  fireEvent.keyDown(document.activeElement || document.body, { key: "Escape" });
+  expect(onClose).not.toHaveBeenCalled();
+  lepasHapus({ data: { message: "ok" } });
+  await waitFor(() => expect(onClose).toHaveBeenCalledWith(false));
+});
+
+test("jawaban terputus (504) bukan 'gagal': dipantau sampai aset kegiatan habis", async () => {
+  axios.delete.mockRejectedValue({ response: { status: 504 } });
+  const { onSuccess, onClose } = buka({ totalItems: 600 });
+  await waitFor(() => expect(screen.getByTestId("bulk-delete-jumlah").textContent).toMatch(/600/));
+  // Pantauan: masih 120 aset, lalu 0 → selesai.
+  axios.get.mockResolvedValueOnce({ data: { total: 120 } }).mockResolvedValueOnce({ data: { total: 0 } });
+  ketik("Uji sintetis 3");
+  fireEvent.click(tombol());
+  await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+  expect(axios.get).toHaveBeenCalledTimes(3); // 1 hitung awal + 2 pantauan
+  expect(toast.error).not.toHaveBeenCalled();
+  expect(toast.success).toHaveBeenCalled();
+  await waitFor(() => expect(onClose).toHaveBeenCalledWith(false));
 });
