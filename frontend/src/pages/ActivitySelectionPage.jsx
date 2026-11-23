@@ -26,6 +26,8 @@ import { authMediaUrl } from "@/lib/mediaUrl";
 import { compressImageFile } from "@/lib/imageCompression";
 import { compressPdfFile } from "@/lib/pdfCompression";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import OverlayProses from "@/components/ui/OverlayProses";
+import { jalankanHapusBerat, TENGGAT_HAPUS_BERAT } from "@/lib/prosesHapusBerat";
 import { useBackGuard } from "@/hooks/useBackGuard";
 import { useTripleClick } from "@/hooks/useTripleClick";
 import { kabarkanPerubahanSatker } from "@/lib/referensiSatker";
@@ -155,6 +157,8 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
     lingkup_unit: [],
   });
   const [saving, setSaving] = useState(false);
+  // Nama kegiatan yang sedang dihapus (null = tidak ada) — memicu layar buram.
+  const [menghapusKegiatan, setMenghapusKegiatan] = useState(null);
   // Distinguishes a failed fetch (show retry) from a genuinely empty list.
   const [fetchError, setFetchError] = useState(null);
   // Inline required-field errors for the create/edit activity dialog.
@@ -559,11 +563,27 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
       requireText: "HAPUS",
     });
     if (!ok) return;
+    // Layar diburamkan sejak permintaan dikirim sampai daftar SELESAI dimuat
+    // ulang — kalau tidak, kartu kegiatan lama masih tampil & bisa diklik
+    // sehingga terkesan perintah hapus belum direspons.
+    setMenghapusKegiatan(name || "kegiatan");
     try {
-      await axios.delete(`${API}/inventory-activities/${id}`);
-      toast.success("Kegiatan dihapus");
-      fetchActivities();
-    } catch { toast.error("Gagal hapus"); }
+      const hasil = await jalankanHapusBerat(
+        () => axios.delete(`${API}/inventory-activities/${id}`, { timeout: TENGGAT_HAPUS_BERAT }),
+        // Jawaban terputus (proses lama) → selesai bila kegiatannya sudah 404.
+        async () => {
+          try { await axios.get(`${API}/inventory-activities/${id}`, { timeout: 15000 }); return false; }
+          catch (e) { if (e?.response?.status === 404) return true; throw e; }
+        },
+      );
+      await fetchActivities();
+      if (hasil.status === "belum_pasti") {
+        toast.warning("Penghapusan masih berjalan di server. Muat ulang daftar beberapa saat lagi untuk memastikan.");
+      } else {
+        toast.success("Kegiatan dihapus");
+      }
+    } catch (err) { toast.error(getApiError(err, "Gagal hapus")); }
+    finally { setMenghapusKegiatan(null); }
   };
 
   // Open PDF: prefer GridFS streaming endpoint; fallback to inline base64 (legacy).
@@ -687,6 +707,12 @@ export default function ActivitySelectionPage({ user, onLogout, onSelectActivity
 
   return (
     <div className="min-h-screen bg-background">
+      <OverlayProses
+        aktif={!!menghapusKegiatan}
+        judul="Menghapus kegiatan…"
+        keterangan={`"${menghapusKegiatan || ""}" beserta seluruh asetnya sedang dihapus di server. Mohon tunggu dan jangan tutup halaman ini.`}
+        testId="overlay-hapus-kegiatan"
+      />
       <header className="bg-card border-b border-border px-4 py-3 sticky top-0 z-40 backdrop-blur-sm bg-card/95">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
