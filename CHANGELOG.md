@@ -18,6 +18,20 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1155] Hapus kegiatan & Hapus Semua — layar buram selama proses berjalan — 2026-11-23
+
+- Saat menghapus kegiatan atau menekan **Hapus Semua** aset, layar kini
+  diburamkan dan dikunci (tidak bisa diklik, Esc tidak menutup dialog)
+  dengan pesan "sedang menghapus…" sampai penghapusan selesai **dan** daftar
+  sudah dimuat ulang. Data lama tidak lagi tampil seolah perintah belum
+  direspons.
+- Perbaikan: menghapus kegiatan besar dulu bisa tampil "Gagal hapus" padahal
+  server masih menghapus di latar (koneksi diputus setelah 20 detik/2
+  menit). Kini aplikasi menunggu lebih lama dan, bila koneksi terputus,
+  memantau server sampai data benar-benar terhapus (maks. 10 menit).
+- Penolakan server yang sebenarnya (mis. kegiatan sudah disahkan, jumlah
+  aset berubah) tetap ditampilkan sebagai galat seperti sebelumnya.
+
 ## [#1154] Kartu aset HP — kategori pindah ke bawah kode aset — 2026-11-20
 
 - Tampilan HP kini mengikuti susunan tablet: kategori tepat di bawah kode
