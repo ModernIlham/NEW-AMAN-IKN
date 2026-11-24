@@ -18,6 +18,16 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1156] Mode Kamera — cari kode barang langsung dari Edit Info — 2026-11-24
+
+- Di panel **Edit Info** kamera, Kode Barang kini tampil bersama uraian
+  kategorinya di samping kode, dengan ikon kaca pembesar untuk mencari.
+- Pencarian menerima kode (boleh bertitik, mis. `3.05.01`) atau uraian
+  (mis. "meja kerja"); pilih satu hasil untuk mengganti kode barang.
+- Bawaan tetap `0000000000` (kategori dummy) dan ada tombol "Kembali ke
+  bawaan". Aset baru otomatis mendapat NUP berurutan untuk kode terpilih
+  (tetap jalan offline); aset lama mempertahankan NUP-nya.
+
 ## [#1155] Hapus kegiatan & Hapus Semua — layar buram selama proses berjalan — 2026-11-23
 
 - Saat menghapus kegiatan atau menekan **Hapus Semua** aset, layar kini
