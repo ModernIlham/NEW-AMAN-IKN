@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import {
   X, Camera, MapPin, Clock, Pencil, SwitchCamera, Loader2, Check,
   ChevronLeft, ChevronRight, RotateCcw, AlertTriangle, Zap, ZapOff, Sun, ScanLine,
-  Volume2, VolumeX, Sparkles, Settings2, Smartphone, RectangleHorizontal, Wand2, Flower2,
+  Volume2, VolumeX, Sparkles, Settings2, Smartphone, RectangleHorizontal, Wand2, Flower2, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useBackGuard } from "../../hooks/useBackGuard";
@@ -21,6 +21,7 @@ import { playShutterSound, shutterSoundEnabled } from "../../lib/shutterSound";
 import { autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 import { UKURAN_STIKER } from "../../lib/stikerAset";
 import { normalisasiJenisOperasional } from "../../lib/jenisOperasional";
+import { cariKategori, KODE_BARANG_BAWAAN } from "../../lib/cariKategori";
 import {
   PREFERENSI_BAWAAN, RASIO_FOTO, hitungBidang, resolusiTersedia,
 } from "../../lib/preferensiKamera";
@@ -40,6 +41,69 @@ const CamChip = ({ selected, cls, onClick, children, testId }) => (
 
 const camSelectCls = "w-full h-9 px-2 rounded-lg border border-border bg-background text-sm text-foreground";
 const camInputCls = "w-full h-9 px-2.5 rounded-lg border border-border bg-background text-sm text-foreground";
+
+// Kode Barang di panel Edit Info: kode + uraian kategori tertulis langsung di
+// sampingnya, ikon kaca pembesar membuka pencarian inline (kode ATAU uraian).
+// Bawaan tetap kode kategori dummy (0000000000) — tombol "Bawaan" kembali ke situ.
+const KodeBarangCari = ({ formData, categories, open, kueri, hasil, onToggle, onKueri, onPilih }) => {
+  const kode = formData?.asset_code || KODE_BARANG_BAWAAN;
+  const kat = (categories || []).find(c => c.label === formData?.category);
+  const uraian = formData?.category || "Belum diklasifikasi";
+  const dummy = (categories || []).find(c => /dummy/i.test(c.label || ""));
+  const kodeBawaan = dummy?.kode_aset || KODE_BARANG_BAWAAN;
+  const diBawaan = kode === kodeBawaan;
+  return (
+    <div className="col-span-2 space-y-1" data-testid="full-camera-kode-barang">
+      <label className="text-[11px] text-muted-foreground">Kode Barang</label>
+      <button type="button" onClick={onToggle} aria-expanded={open} data-testid="full-camera-kode-barang-cari"
+        title="Cari kode barang / kategori"
+        className="w-full min-h-9 flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-background text-left hover:bg-muted">
+        <span className="font-mono text-sm font-semibold text-foreground flex-shrink-0">{kode}</span>
+        <span className={`flex-1 min-w-0 text-xs leading-snug line-clamp-2 ${kat || formData?.category ? "text-foreground/80" : "text-muted-foreground italic"}`}
+          data-testid="full-camera-kode-barang-uraian">{uraian}</span>
+        <Search className="w-4 h-4 flex-shrink-0 text-primary" aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="rounded-lg border border-border bg-muted/40 p-2 space-y-2" data-testid="full-camera-kode-barang-panel">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" aria-hidden="true" />
+            <input value={kueri} onChange={e => onKueri(e.target.value)} autoFocus inputMode="search" enterKeyHint="search"
+              placeholder="Ketik kode (mis. 3.05.01) atau uraian (mis. laptop)"
+              aria-label="Cari kode barang atau kategori" data-testid="full-camera-kode-barang-input"
+              className={`${camInputCls} pl-8`} />
+          </div>
+          {!diBawaan && (
+            <button type="button" onClick={() => onPilih(dummy || null)} data-testid="full-camera-kode-barang-bawaan"
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs border border-dashed border-border hover:bg-muted text-muted-foreground">
+              <RotateCcw className="w-3.5 h-3.5 flex-shrink-0" />
+              Kembali ke bawaan <span className="font-mono text-foreground">{kodeBawaan}</span>
+            </button>
+          )}
+          <div className="max-h-56 overflow-y-auto divide-y divide-border rounded-md bg-background border border-border" role="listbox" aria-label="Hasil pencarian kode barang">
+            {hasil.map(c => {
+              const dipilih = formData?.category === c.label;
+              return (
+                <button type="button" key={c.id || `${c.kode_aset}-${c.label}`} role="option" aria-selected={dipilih}
+                  onClick={() => onPilih(c)} data-testid={`full-camera-kode-barang-opsi-${c.kode_aset || c.id}`}
+                  className={`w-full flex items-start gap-2 px-2 py-2 text-left hover:bg-muted ${dipilih ? "bg-primary/10" : ""}`}>
+                  <span className="font-mono text-xs font-semibold text-foreground flex-shrink-0 pt-px">{c.kode_aset || "—"}</span>
+                  <span className="flex-1 min-w-0 text-xs leading-snug text-foreground/90 break-words">{c.label}</span>
+                  {dipilih && <Check className="w-3.5 h-3.5 flex-shrink-0 text-primary mt-0.5" />}
+                </button>
+              );
+            })}
+            {hasil.length === 0 && (
+              <p className="text-xs text-center text-muted-foreground py-3">
+                {(categories || []).length === 0 ? "Daftar kategori belum termuat" : "Tidak ditemukan"}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 // Pesan error kamera per jenis (fungsi murni di luar komponen agar tidak
 // menjadi dependency effect).
@@ -141,6 +205,8 @@ const FullCameraSheet = memo(function FullCameraSheet({
   onCapture,       // (dataUrl, sesiAset) => void — foto baru (sudah distempel + terkompresi)
   onRemovePhoto,   // (index) => void
   onSetField,      // (name, value) => void — edit info aset dari panel
+  categories = null, // daftar kategori {label, kode_aset} utk pencarian kode barang
+  onPickCategory,  // (kategori | null) => void — null = kembali ke kode bawaan
   onGpsFix,        // ({lat, lng}) => void — tiap fix GPS baru (update form + cache)
   onSaveAndNew,    // () => void — simpan aset ini lalu siapkan aset baru
   onReviewSaved,   // () => void — simpan lalu tinjau aset tersimpan sebelumnya
@@ -175,6 +241,14 @@ const FullCameraSheet = memo(function FullCameraSheet({
   const [gps, setGps] = useState(null); // {lat, lng, accuracy}
   const [gpsDenied, setGpsDenied] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  // Pencarian kode barang di panel Edit Info (inline, bukan portal — aturan
+  // overlay kamera z-[120]).
+  const [cariKodeOpen, setCariKodeOpen] = useState(false);
+  const [cariKode, setCariKode] = useState("");
+  const bisaCariKode = !modePemegang && typeof onPickCategory === "function" && Array.isArray(categories);
+  const hasilCariKode = cariKodeOpen && bisaCariKode ? cariKategori(categories, cariKode) : [];
+  const tutupCariKode = useCallback(() => { setCariKodeOpen(false); setCariKode(""); }, []);
+  useEffect(() => { if (!editOpen) tutupCariKode(); }, [editOpen, tutupCariKode]);
   const [confirmPhoto, setConfirmPhoto] = useState(null);
   const [previewPhoto, setPreviewPhoto] = useState(null);
   const photoScope = sesiAset || formData?.id || formData?.asset_code || "";
@@ -290,12 +364,13 @@ const FullCameraSheet = memo(function FullCameraSheet({
   // Back HP: tutup scanner/panel edit dulu, lalu konfirmasi hapus, lalu kamera.
   useBackGuard(useCallback(() => {
     if (panelLensa) { setPanelLensa(false); return; }
+    if (cariKodeOpen) { tutupCariKode(); return; }
     if (editOpen) { setEditOpen(false); return; }
     if (panelSetel) { setPanelSetel(false); return; }
     if (confirmIdx !== null) { setConfirmIdx(null); return; }
     if (scanActive) { setScanActive(false); return; }
     onCloseRef.current?.();
-  }, [editOpen, panelSetel, panelLensa, confirmIdx, scanActive, setConfirmIdx]));
+  }, [editOpen, cariKodeOpen, tutupCariKode, panelSetel, panelLensa, confirmIdx, scanActive, setConfirmIdx]));
 
   // Kunci scroll latar selama kamera terbuka
   useEffect(() => {
@@ -1235,7 +1310,13 @@ const FullCameraSheet = memo(function FullCameraSheet({
               </button>
             </div>
             {modePemegang ? panelLaporan : <div className="grid grid-cols-2 gap-2">
-              {visibleEditFields.map(f => (
+              {visibleEditFields.map(f => (f.name === "asset_code" && bisaCariKode) ? (
+                <KodeBarangCari key={f.name} formData={formData} categories={categories}
+                  open={cariKodeOpen} kueri={cariKode} hasil={hasilCariKode}
+                  onToggle={() => (cariKodeOpen ? tutupCariKode() : setCariKodeOpen(true))}
+                  onKueri={setCariKode}
+                  onPilih={c => { onPickCategory(c); tutupCariKode(); }} />
+              ) : (
                 <div key={f.name} className={`space-y-0.5 ${f.full ? "col-span-2" : ""}`}>
                   <label className="text-[11px] text-muted-foreground">
                     {f.label}{f.required && <span className="text-red-500"> *</span>}{f.readOnly ? " (otomatis)" : ""}
