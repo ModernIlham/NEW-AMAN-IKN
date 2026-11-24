@@ -55,6 +55,7 @@ import { keIndeksFinal } from "../../lib/indeksFotoLuring";
 import { gabungMediaChecklist } from "../../lib/mediaChecklist";
 import { compressImageFile, compressDataUrl, generateThumbnailFromDataUrl, dataUrlBytes } from "../../lib/imageCompression";
 import { reserveDummyNup as reserveDummyNupLib } from "../../lib/dummyNup";
+import { KODE_BARANG_BAWAAN } from "../../lib/cariKategori";
 import { statusInventarisasiOtomatis, autoInventarisasiEnabled } from "../../lib/inventoryStatus";
 import { terapkanHeaderSatker } from "../../lib/satkerAktif";
 import { keteranganPsp } from "../../lib/tandaPsp";
@@ -1605,6 +1606,26 @@ const AssetForm = memo(({
   // Buka Mode Kamera langsung dalam keadaan memindai QR (edit inventarisasi).
   const openFullCameraScan = useCallback(() => { setCameraAutoScan(true); openFullCamera(); }, [openFullCamera]);
   const cameraSetField = useCallback((name, value) => { setFormData(p => ({ ...p, [name]: value })); clearFieldError(name); }, [clearFieldError]);
+  // Pilih kode barang dari panel Edit Info kamera. Aset BARU: NUP dinomori
+  // ulang dari urutan lokal bersama untuk kode tsb (sama seperti kategori
+  // dummy — aman dari kembar walau aset sebelumnya masih di antrean). Aset
+  // LAMA (edit): NUP dipertahankan, sama dengan dropdown kategori form utama.
+  // `null` = kembali ke kode bawaan bila kategori dummy tidak ada.
+  const pickCategoryToken = useRef(0);
+  const cameraPickCategory = useCallback((c) => {
+    const kode = c?.kode_aset || (c ? "" : KODE_BARANG_BAWAAN);
+    const label = c?.label || "";
+    const token = ++pickCategoryToken.current;
+    setFormData(p => ({
+      ...p, category: label, ...(kode ? { asset_code: kode } : {}),
+      ...(!isEditing ? { NUP: "" } : {}),
+    }));
+    clearFieldError("category"); clearFieldError("asset_code");
+    if (isEditing) return;
+    reserveDummyNup(kode, label)
+      .then(nup => { if (token === pickCategoryToken.current && nup) setFormData(p => ({ ...p, NUP: nup })); })
+      .catch(() => {});
+  }, [isEditing, reserveDummyNup, clearFieldError]);
 
   // "Samakan dengan sebelumnya": konteks lokasi/pengguna dari aset terakhir
   // yang disimpan (localStorage 'aman_last_asset_ctx', ditulis saat submit).
@@ -2421,6 +2442,8 @@ const AssetForm = memo(({
           onCapture={addCameraPhoto}
           onRemovePhoto={removePhoto}
           onSetField={cameraSetField}
+          categories={categories || []}
+          onPickCategory={cameraPickCategory}
           onGpsFix={handleCameraGpsFix}
           onSaveAndNew={cameraSaveAndNew}
           onReviewSaved={onCameraReviewSaved ? cameraReviewSaved : undefined}

@@ -339,3 +339,32 @@ test("silang memakai foto penuh, diblokir selama simpan, dan konfirmasi tidak pi
   view.rerender(<FullCameraSheet {...props} sesiAset="aset-b" />);
   expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 });
+
+test("Edit Info: kode barang bawaan 0000000000 + uraian di samping, ikon cari memfilter kategori", async () => {
+  const cats = [
+    { id: "d", label: "Dummy", kode_aset: "0000000000" },
+    { id: "1", label: "Laptop", kode_aset: "3100102003" },
+    { id: "2", label: "Meja Kerja Pegawai", kode_aset: "3050104001" },
+  ];
+  const onPickCategory = jest.fn();
+  const { rerender } = render(<FullCameraSheet formData={{ ...fd, asset_code: "0000000000", category: "Dummy" }}
+    onClose={jest.fn()} onSetField={jest.fn()} categories={cats} onPickCategory={onPickCategory} />);
+  fireEvent.click(await screen.findByTestId("full-camera-edit-btn"));
+  const kotak = screen.getByTestId("full-camera-kode-barang");
+  expect(within(kotak).getByText("0000000000")).toBeInTheDocument();
+  expect(screen.getByTestId("full-camera-kode-barang-uraian")).toHaveTextContent("Dummy");
+  fireEvent.click(screen.getByTestId("full-camera-kode-barang-cari"));
+  expect(screen.queryByTestId("full-camera-kode-barang-bawaan")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByTestId("full-camera-kode-barang-input"), { target: { value: "lap" } });
+  expect(screen.getByTestId("full-camera-kode-barang-opsi-3100102003")).toBeInTheDocument();
+  expect(screen.queryByTestId("full-camera-kode-barang-opsi-3050104001")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByTestId("full-camera-kode-barang-opsi-3100102003"));
+  expect(onPickCategory).toHaveBeenCalledWith(cats[1]);
+  expect(screen.queryByTestId("full-camera-kode-barang-panel")).not.toBeInTheDocument();
+  rerender(<FullCameraSheet formData={{ ...fd, asset_code: "3100102003", category: "Laptop" }}
+    onClose={jest.fn()} onSetField={jest.fn()} categories={cats} onPickCategory={onPickCategory} />);
+  expect(screen.getByTestId("full-camera-kode-barang-uraian")).toHaveTextContent("Laptop");
+  fireEvent.click(screen.getByTestId("full-camera-kode-barang-cari"));
+  fireEvent.click(screen.getByTestId("full-camera-kode-barang-bawaan"));
+  expect(onPickCategory).toHaveBeenLastCalledWith(cats[0]);
+});
