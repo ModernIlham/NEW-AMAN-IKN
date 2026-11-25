@@ -39,7 +39,7 @@ beforeEach(() => {
 async function buka() {
   render(<AssetForm isOpen onClose={jest.fn()} activity={{ id: "k1" }}
     categories={[]} editAsset={null} onSubmitSuccess={jest.fn()} />);
-  await screen.findByTestId("asset-code-picker");
+  await screen.findByTestId("pengguna-pegawai-picker");
 }
 
 test("pihak ketiga dicari di direktori dan terisi ke pengguna beserta ikonnya", async () => {
