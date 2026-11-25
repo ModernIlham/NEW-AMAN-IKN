@@ -30,20 +30,23 @@ beforeEach(() => {
 async function buka(edit) {
   render(<AssetForm isOpen onClose={jest.fn()} activity={{ id: "k1" }}
     categories={[]} editAsset={edit ? aset : null} onSubmitSuccess={jest.fn()} />);
-  await screen.findByTestId("asset-code-picker");
+  await screen.findByPlaceholderText("Cari di referensi atau ketik kode");
   await waitFor(() => expect(screen.queryByTestId("form-loading-skeleton")).toBeNull());
 }
 
 test.each([false, true])("kontrol sejajar input tanpa mengecilkan tombol simpan (edit=%s)", async edit => {
   await buka(edit);
-  const ids = ["asset-code-picker", "asset-purchase-date", "asset-garansi", "pengguna-pegawai-picker", "pengguna-tap-kartu"];
-  if (edit) ids.push("bast-upload-btn");
+  const ids = ["asset-purchase-date", "asset-garansi", "pengguna-pegawai-picker", "pengguna-tap-kartu"];
+  if (edit) ids.push("asset-code-picker", "bast-upload-btn");
   for (const id of ids) {
     expect(screen.getByTestId(id)).toHaveClass("h-8", "min-h-0", "min-w-0");
     expect(screen.getByTestId(id)).toHaveAttribute("type", "button");
   }
   expect(screen.getByTestId("asset-form-submit")).not.toHaveClass("min-h-0");
-  if (!edit) expect(screen.queryByTestId("bast-upload-btn")).toBeNull();
+  if (!edit) {
+    expect(screen.queryByTestId("asset-code-picker")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bast-upload-btn")).toBeNull();
+  }
   // Opsional untuk QA layout Chromium memakai DOM React + CSS produksi asli.
   if (process.env.AMAN_QA_FORM_DIR) {
     const fs = require("fs");
@@ -54,7 +57,7 @@ test.each([false, true])("kontrol sejajar input tanpa mengecilkan tombol simpan 
 });
 
 test("pemicu pencarian kode dan pegawai tetap membuka pilihan", async () => {
-  await buka(false);
+  await buka(true);
   await userEvent.click(screen.getByTestId("asset-code-picker"));
   expect(await screen.findByTestId("asset-code-picker-search")).toBeInTheDocument();
   await userEvent.keyboard("{Escape}");

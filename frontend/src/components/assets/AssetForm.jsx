@@ -2752,7 +2752,7 @@ const AssetForm = memo(({
                   return (
                     <div className="flex gap-1.5">
                       <Input name="asset_code" value={formData.asset_code} onChange={handleInputChange} placeholder="Cari di referensi atau ketik kode" required className={`h-8 bg-muted flex-1 min-w-0${fieldErrCls("asset_code")}`} readOnly={kodeLocked} aria-invalid={!!fieldErrors.asset_code} />
-                      {!kodeLocked && (
+                      {isEditing && !kodeLocked && (
                         <DropdownMenu open={kodePickerOpen} onOpenChange={setKodePickerOpen}>
                           <DropdownMenuTrigger asChild>
                             <button type="button" title="Cari kode barang di referensi kodefikasi" className="h-8 min-h-0 min-w-0 px-2.5 rounded-md border border-input bg-card hover:bg-muted flex items-center gap-1 text-xs shrink-0" data-testid="asset-code-picker">
