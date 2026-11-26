@@ -68,6 +68,38 @@ def _kunci(aset, mode, uraian, pegawai, format_tanggal):
     return (("nilai", nilai), nilai) if nilai else (("kosong",), f"{GROUP_OPTIONS[mode]} belum diisi")
 
 
+def _bagian_kosong(key):
+    """Bagian "belum diisi" — termasuk jalur eselon yang seluruh jenjangnya kosong."""
+    return key[0] == "kosong" or (key[0] == "eselon" and not any(key[1:]))
+
+
+def bagi_susunan(aset, mode="", uraian=None, pegawai=None, format_tanggal=None):
+    """Bagi aset menjadi bagian Susunan untuk laporan yang TIDAK dipaginasi.
+
+Dipakai Laporan Eksekutif per Barang Serupa: tiap bagian lalu dikelompokkan
+lagi menjadi barang serupa. Kunci & label bagian SAMA dengan Data Aset
+(`_kunci`), jadi kedua laporan tak pernah membelah aset dengan dua cara.
+
+Berbeda dengan Data Aset (urutan kemunculan pertama mengikuti sort daftar),
+laporan ini tidak mengikuti sort daftar — urutannya tetap menurut kode. Maka
+bagian diurutkan menurut label (abjad; jenjang kode otomatis urut kode karena
+labelnya diawali kode), dan bagian yang belum diisi diletakkan di akhir.
+Mode kosong → satu bagian tanpa label. Tidak membuang & tidak memutasi aset.
+"""
+    if mode not in GROUP_OPTIONS:
+        raise ValueError("Pilihan pengelompokan Data Aset tidak dikenal")
+    if not mode:
+        return [{"label": "", "rows": list(aset)}]
+    referensi = {**dict(GOLONGAN_DEFAULTS), **(uraian or {})}
+    bagian = {}
+    for a in aset:
+        key, label = _kunci(a, mode, referensi, pegawai or {}, format_tanggal)
+        bagian.setdefault(key, {"label": label, "rows": []})["rows"].append(a)
+    urut = sorted(bagian.items(),
+                  key=lambda kv: (_bagian_kosong(kv[0]), kv[1]["label"].casefold(), kv[0]))
+    return [b for _, b in urut]
+
+
 def irisan_kelompok(aset, mode="", row_slice=None, uraian=None, pegawai=None, format_tanggal=None):
     """Kembalikan aset irisan + metadata kelompok (indeks lokal dan global).
 

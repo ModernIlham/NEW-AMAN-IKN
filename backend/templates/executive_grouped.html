@@ -27,6 +27,15 @@
         .data-header-meta strong { color: #e2e8f0; }
 
         .data-table-wrapper { padding: 4mm 8mm 2mm; }
+        /* Susunan PDF (pola sama dengan executive_summary_data.html): satu
+           tabel per bagian, judul bagian di thead agar ikut berulang saat
+           bagian berlanjut ke halaman berikutnya. */
+        .data-table + .data-table { margin-top: 4mm; }
+        .data-table thead th.group-heading { background: #e0f2fe; color: #0c4a6e;
+            text-align: left; font-size: 10px; text-transform: none;
+            letter-spacing: 0; padding: 8px; overflow-wrap: break-word; }
+        .group-meta { font-size: 8px; font-weight: 400; margin-top: 3px; }
+        .group-banner { padding: 8px 12px; font-size: 10px; color: #0c4a6e; background: #f0f9ff; margin-bottom: 3mm; }
         .data-table { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: fixed; }
         .data-table thead { display: table-header-group; }
         .data-table thead th { background: #0f172a; color: #e2e8f0; padding: 6px 4px; font-weight: 600; font-size: 7px; text-transform: uppercase; letter-spacing: 0.3px; text-align: center; border: 1px solid #1e293b; }
@@ -99,25 +108,40 @@
 {% endif %}
 
 <div class="data-table-wrapper">
+    {% if data_group_by %}
+    <div class="group-banner">Disusun menurut <strong>{{ data_group_label }}</strong>.
+        Bagian diurutkan menurut abjad (bagian yang belum diisi di akhir); barang serupa
+        dihitung di dalam setiap bagian, sehingga satu jenis barang yang tersebar di
+        beberapa bagian tampil pada tiap bagian tersebut.</div>
+    {% endif %}
+    {% for s in sections %}
     <table class="data-table">
+        <colgroup>
+            {% for width in [4, 8, 13, 17, 12, 6, 9, 9, 10, 12] %}<col style="width:{{ width }}%;" />{% endfor %}
+        </colgroup>
         <thead>
+            {% if data_group_by and s.label %}
+            <tr><th colspan="10" class="group-heading">{{ data_group_label }}: {{ s.label }}
+                <div class="group-meta">{{ s.total_groups }} kelompok - {{ s.total_units }} unit - Rp {{ s.value_fmt }}</div>
+            </th></tr>
+            {% endif %}
             <tr>
-                <th style="width:4%;">No</th>
-                <th style="width:8%;">Foto</th>
-                <th style="width:13%;">Kode &amp; Kategori</th>
-                <th style="width:17%;">Nama Barang</th>
-                <th style="width:12%;">NUP</th>
-                <th style="width:6%;">Jumlah</th>
-                <th style="width:9%;">Harga Satuan (Rp)</th>
-                <th style="width:9%;">Total Nilai (Rp)</th>
-                <th style="width:10%;">Kondisi</th>
-                <th style="width:12%;">Status Inventarisasi</th>
+                <th>No</th>
+                <th>Foto</th>
+                <th>Kode &amp; Kategori</th>
+                <th>Nama Barang</th>
+                <th>NUP</th>
+                <th>Jumlah</th>
+                <th>Harga Satuan (Rp)</th>
+                <th>Total Nilai (Rp)</th>
+                <th>Kondisi</th>
+                <th>Status Inventarisasi</th>
             </tr>
         </thead>
         <tbody>
-            {% for r in rows %}
+            {% for r in s.rows %}
             <tr>
-                <td class="center">{{ loop.index }}</td>
+                <td class="center">{{ r.no }}</td>
                 <td class="photo-cell">
                     {% if r.photo_url %}<img src="{{ r.photo_url }}" class="photo-img" alt="Foto" />
                     {% else %}<div class="photo-empty">No Foto</div>{% endif %}
@@ -142,16 +166,19 @@
                 <td><div class="cell-sub">{{ r.status_summary }}</div></td>
             </tr>
             {% endfor %}
+            {% if loop.last %}
             <tr class="total-row">
-                <td colspan="4">TOTAL: {{ total_groups }} kelompok barang serupa</td>
+                <td colspan="4">TOTAL: {{ total_groups }} kelompok barang serupa{% if data_group_by and sections|length > 1 %} dalam {{ sections|length }} bagian{% endif %}</td>
                 <td class="center">&nbsp;</td>
                 <td class="center">{{ total_units }}</td>
                 <td>&nbsp;</td>
                 <td class="right">{{ total_value_fmt }}</td>
                 <td colspan="2">&nbsp;</td>
             </tr>
+            {% endif %}
         </tbody>
     </table>
+    {% endfor %}
 </div>
 
 </body>

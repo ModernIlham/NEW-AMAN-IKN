@@ -36,20 +36,48 @@ test.each(dataGroupOptions)("unduhan %s mempertahankan filter multi dan sort", a
   expect(opts.timeout).toBe(45000); // URL lengkap diteruskan juga ke Pusat Unduhan.
 });
 
-test("ZIP ikut pilihan kelompok dan urutan terbaru tanpa memengaruhi Barang Serupa", async () => {
+test("ZIP ikut pilihan kelompok dan urutan terbaru", async () => {
   const view = render(<ReportDownloads {...props} />);
   await screen.findByTestId("download-data-page-1");
   fireEvent.change(screen.getByTestId("data-aset-group"), { target: { value: "psp" } });
   view.rerender(<ReportDownloads {...props} sortBy="name_asc" />);
   await userEvent.click(screen.getByTestId("toggle-batch-mode"));
   await userEvent.click(screen.getByLabelText("Data Aset (semua halaman)"));
+  await userEvent.click(screen.getByLabelText("Eksekutif per Barang Serupa"));
   await userEvent.click(screen.getByTestId("batch-download-btn"));
   expect(downloadFileWithProgress.mock.calls[0][2].data).toEqual({
-    types: ["executive-data"], detail_fields: "", data_group_by: "psp", sort_by: "name_asc",
+    types: ["executive-data", "executive-grouped"], detail_fields: "", data_group_by: "psp", sort_by: "name_asc",
     filter: { location: ["Gedung A", "Gedung B"], search: "komputer" },
   });
+});
+
+test.each(dataGroupOptions.filter(([key]) => key))(
+  "Barang Serupa ikut Susunan PDF %s beserta filter multi dan kolom tambahan", async (key) => {
+    render(<ReportDownloads {...props} />);
+    await screen.findByTestId("download-data-page-1");
+    fireEvent.change(screen.getByTestId("data-aset-group"), { target: { value: key } });
+    await userEvent.click(screen.getByTestId("detail-field-spm"));
+    await userEvent.click(screen.getByTestId("download-executive-grouped"));
+    const [url, name, opts] = downloadFileWithProgress.mock.calls[0];
+    const params = new URL(url).searchParams;
+    expect(url).toContain("/executive-grouped-pdf?");
+    expect(params.get("data_group_by")).toBe(key);
+    expect(params.get("detail_fields")).toBe("spm");
+    expect(params.getAll("location")).toEqual(["Gedung A", "Gedung B"]);
+    expect(params.get("search")).toBe("komputer");
+    // Barang Serupa tidak mengikuti sort daftar (urut kode) — tak dikirim.
+    expect(params.has("sort_by")).toBe(false);
+    expect(name).toBe(`Laporan_Eksekutif_Barang_Serupa_${key}.pdf`);
+    expect(opts.timeout).toBe(45000);
+  });
+
+test("Barang Serupa tanpa Susunan tidak mengirim data_group_by", async () => {
+  render(<ReportDownloads {...props} filterLaporan="" />);
+  await screen.findByTestId("download-data-page-1");
   await userEvent.click(screen.getByTestId("download-executive-grouped"));
-  expect(downloadFileWithProgress.mock.calls[1][0]).not.toContain("data_group_by");
+  const [url, name] = downloadFileWithProgress.mock.calls[0];
+  expect(url).toMatch(/\/executive-grouped-pdf$/);
+  expect(name).toBe("Laporan_Eksekutif_Barang_Serupa.pdf");
 });
 
 test("info halaman lama tidak menimpa hasil filter baru", async () => {

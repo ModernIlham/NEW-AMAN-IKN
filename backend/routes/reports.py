@@ -5197,6 +5197,18 @@ def _downscale_to_data_uri(raw: bytes, max_w: int = 640, quality: int = 80) -> s
 # WeasyPrint mulai membahayakan VPS satu mesin.
 MAKS_KELOMPOK_LAPORAN = 2000
 
+# Field tambahan yang di-$push ke anggota kelompok Barang Serupa agar bagian
+# "Susunan PDF" bisa ditentukan dengan kunci yang SAMA dengan Data Aset
+# (`data_aset_pdf._kunci`). Jenjang kode dibaca dari kunci kelompok; SPM,
+# Supplier, dan Perolehan sudah ikut untuk kolom tambahan. PSP butuh identitas
+# pemilik agar `lengkapi_psp` bisa memverifikasi referensi SIMAN.
+_FIELD_SUSUNAN_SERUPA = {
+    "lokasi": ("location",),
+    "pemegang": ("pengguna_nip", "user"),
+    "psp": ("activity_id", "kode_satker", "kode_satker_lengkap", "siman"),
+    **{f"eselon{n}": tuple(f"eselon{i}" for i in range(1, n + 1)) for n in range(1, 6)},
+}
+
 
 async def _gridfs_photo_data_uri(gid: str, max_w: int = 640) -> str:
     """Ambil foto dari GridFS lalu downscale ke data-URI; '' bila gagal.
@@ -5366,6 +5378,45 @@ KAT_JENJANG_EKSEKUTIF = (1, 2, 3, 4, 5)
 #: cukup kasar untuk memuat seluruhnya dalam satu daftar yang terbaca, dan
 #: cukup halus untuk membedakan Alat Kantor dari Alat Rumah Tangga.
 KONDISI_JENJANG_KELOMPOK = 3
+
+
+async def _peta_pegawai_kegiatan(activity, aset):
+    """{nip: dokumen pegawai} untuk NIP yang DIPAKAI aset laporan.
+
+    Scope satker (REVIEW-9 R15): Master Pegawai per-satker. Tanpa ini seluruh
+    direktori pegawai instansi ikut masuk HTML/PDF laporan satker ini.
+    Di-scope ke satker KEGIATAN (bukan satker pemanggil): laporan memang
+    tentang kegiatan itu, dan pemanggil sudah dijamin berhak atasnya.
+    Dibatasi ke NIP yang benar-benar dipakai aset laporan → sekaligus ringan.
+    Dipakai bersama Data Aset & Barang Serupa agar label Pemegang tak drift.
+    """
+    nip_dipakai = {str(a.get("pengguna_nip") or "").strip()
+                   for a in aset if str(a.get("pengguna_nip") or "").strip()}
+    ks_keg = str((activity or {}).get("kode_satker") or "").strip()
+    q_peg = {"nip": {"$in": list(nip_dipakai)}}
+    if ks_keg:
+        q_peg["kode_satker"] = {"$in": [ks_keg, "", None]}
+    peta = {}
+    async for p in db.pegawai.find(
+            q_peg, {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1,
+                    "jabatan": 1, "eselon1": 1, "eselon2": 1, "eselon3": 1,
+                    "eselon4": 1, "eselon5": 1}):
+        nip_p = str(p.get("nip") or "").strip()
+        if nip_p:
+            peta[nip_p] = p
+    # Orang luar (PGW-09): direktori bersama tanpa scope, hanya untuk NIP yang
+    # tak dikenali Master Pegawai satker kegiatan (internal menang).
+    sisa_nip = [n for n in nip_dipakai if n not in peta]
+    if sisa_nip:
+        async for p in db.pegawai_luar.find(
+                {"nip": {"$in": sisa_nip}},
+                {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1, "jabatan": 1,
+                 "kelompok": 1, "tataran": 1, "instansi_nama": 1,
+                 "satker_luar_nama": 1, "provinsi_nama": 1}):
+            nip_p = str(p.get("nip") or "").strip()
+            if nip_p:
+                peta[nip_p] = p
+    return peta
 
 
 async def _build_executive_summary_data(activity_id: str, detail_fields=None,
@@ -5634,41 +5685,9 @@ async def _build_executive_summary_data(activity_id: str, detail_fields=None,
     # (lihat `lbl_eselon_px`), jadi tak ada lagi yang perlu dipotong.
     eselon_chart = [{"name": e[0], "count": e[1]["count"], "value": e[1]["value"], "bar_pct": round(e[1]["count"] / e1_max * 100)} for e in eselon1_breakdown_sorted[:10]]
 
-    # Distribusi per PENGGUNA (key = NIP/NIK, tampil nama; terhubung master pegawai)
-    # Scope satker (REVIEW-9 R15): Master Pegawai per-satker. Tanpa ini seluruh
-    # direktori pegawai instansi ikut masuk HTML/PDF Laporan Eksekutif satker
-    # ini. Dibatasi ke NIP yang memang dipakai aset laporan agar sekaligus
-    # ringan.
-    # Di-scope ke satker KEGIATAN (bukan satker pemanggil): laporan ini memang
-    # tentang kegiatan itu, dan pemanggil sudah dijamin berhak atasnya.
-    # Dibatasi pula ke NIP yang benar-benar dipakai aset laporan → sekaligus
-    # ringan.
-    _nip_dipakai = {str(a.get("pengguna_nip") or "").strip()
-                    for a in all_assets if str(a.get("pengguna_nip") or "").strip()}
-    _ks_keg = str((activity or {}).get("kode_satker") or "").strip()
-    _q_peg = {"nip": {"$in": list(_nip_dipakai)}} if _nip_dipakai else {"nip": {"$in": []}}
-    if _ks_keg:
-        _q_peg["kode_satker"] = {"$in": [_ks_keg, "", None]}
-    peg_master = {}
-    async for _p in db.pegawai.find(
-            _q_peg, {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1,
-                     "jabatan": 1, "eselon1": 1, "eselon2": 1, "eselon3": 1,
-                     "eselon4": 1, "eselon5": 1}):
-        nip_p = str(_p.get("nip") or "").strip()
-        if nip_p:
-            peg_master[nip_p] = _p
-    # Orang luar (PGW-09): direktori bersama tanpa scope, hanya untuk NIP yang
-    # tak dikenali Master Pegawai satker kegiatan (internal menang).
-    _sisa_nip = [n for n in _nip_dipakai if n not in peg_master]
-    if _sisa_nip:
-        async for _p in db.pegawai_luar.find(
-                {"nip": {"$in": _sisa_nip}},
-                {"_id": 0, "nip": 1, "nama": 1, "unit_kerja": 1, "jabatan": 1,
-                 "kelompok": 1, "tataran": 1, "instansi_nama": 1,
-                 "satker_luar_nama": 1, "provinsi_nama": 1}):
-            nip_p = str(_p.get("nip") or "").strip()
-            if nip_p:
-                peg_master[nip_p] = _p
+    # Distribusi per PENGGUNA (key = NIP/NIK, tampil nama; terhubung master
+    # pegawai). Aturan scope satker ada di `_peta_pegawai_kegiatan`.
+    peg_master = await _peta_pegawai_kegiatan(activity, all_assets)
     pengguna_rows, pengguna_ringkas = distribusi_pengguna(all_assets, peg_master)
     # Pengguna luar dibagi tersendiri SESUDAH pengguna internal; jalur eselon
     # organisasi lain tak dilebur ke pohon satker ini.
@@ -6368,7 +6387,8 @@ def _compact_nup_ranges(nups):
 
 
 async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
-                                        filter_aset: "FilterLaporan" = None):
+                                        filter_aset: "FilterLaporan" = None,
+                                        data_group_by: str = "", data_user=None):
     """Build data for Laporan Eksekutif per Barang Serupa (grouped assets).
 
     Group key sama dengan /api/assets/groups (batch.py) TAPI tanpa filter
@@ -6378,8 +6398,19 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
     detail_fields: optional set of EXEC_DETAIL_FIELDS keys — per kelompok,
     nilai DISTINCT anggota untuk field tersebut ditampilkan sebagai baris
     tambahan di bawah Nama Barang (maks 3 nilai, sisanya "+N lainnya").
+
+    data_group_by: pilihan "Susunan PDF" yang sama dengan Data Aset
+    (`data_aset_pdf.GROUP_OPTIONS`). Bila diisi, aset dibagi dulu menjadi
+    bagian (Lokasi, Pemegang, Eselon, …) dengan kunci yang SAMA dengan Data
+    Aset, lalu barang serupa dihitung DI DALAM tiap bagian — satu jenis
+    barang yang tersebar di tiga lokasi tampil sebagai tiga baris di tiga
+    bagian, dan jumlah unit seluruh bagian tetap = total aset.
     """
     detail_fields = detail_fields or set()
+    if data_group_by not in dap.GROUP_OPTIONS:
+        raise ValueError("Pilihan pengelompokan Data Aset tidak dikenal")
+    if data_group_by == "psp" and data_user is None:
+        raise ValueError("Pengelompokan PSP memerlukan lingkup pengguna")
     activity = await db.inventory_activities.find_one({"id": activity_id}, {"_id": 0})
     if not activity:
         return None
@@ -6393,6 +6424,26 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
     def fmt(v):
         try: return f"{int(v):,}".replace(",", ".")
         except (ValueError, TypeError): return "0"
+
+    # Anggota kelompok hanya membawa field yang dibaca template — ditambah
+    # field penentu bagian Susunan yang SEDANG dipilih saja (SPM, Supplier,
+    # dan Perolehan memang sudah ikut untuk kolom tambahan).
+    anggota = {
+        "id": "$id",
+        "NUP": "$NUP",
+        "condition": "$condition",
+        "inventory_status": "$inventory_status",
+        "category": "$category",
+        "purchase_price": "$purchase_price",
+        "nomor_spm": "$nomor_spm",
+        "perolehan_dari_nama": "$perolehan_dari_nama",
+        "nomor_kontrak": "$nomor_kontrak",
+        "nomor_bukti_perolehan": "$nomor_bukti_perolehan",
+        "supplier": "$supplier",
+        "serial_number": "$serial_number",
+    }
+    for f in _FIELD_SUSUNAN_SERUPA.get(data_group_by, ()):
+        anggota[f] = f"${f}"
 
     # Filter layar ikut diterapkan pada $match — kelompok "barang serupa"
     # dihitung HANYA dari aset yang lolos filter (mis. hanya Rusak Berat).
@@ -6409,20 +6460,7 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
                 "purchase_price": {"$ifNull": ["$purchase_price", 0]}
             },
             "count": {"$sum": 1},
-            "members": {"$push": {
-                "id": "$id",
-                "NUP": "$NUP",
-                "condition": "$condition",
-                "inventory_status": "$inventory_status",
-                "category": "$category",
-                "purchase_price": "$purchase_price",
-                "nomor_spm": "$nomor_spm",
-                "perolehan_dari_nama": "$perolehan_dari_nama",
-                "nomor_kontrak": "$nomor_kontrak",
-                "nomor_bukti_perolehan": "$nomor_bukti_perolehan",
-                "supplier": "$supplier",
-                "serial_number": "$serial_number",
-            }}
+            "members": {"$push": anggota}
         }},
         {"$sort": {"_id.asset_code": 1, "_id.asset_name": 1, "_id.purchase_date": 1}},
     ]
@@ -6453,13 +6491,69 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
         except ValueError:
             return (1, 0, s)
 
-    # Representative per group = member dengan NUP numerik terkecil
+    # ── Bagian Susunan ───────────────────────────────────────────────────
+    # Tanpa Susunan: satu bagian berisi seluruh kelompok (perilaku lama).
+    # Dengan Susunan: anggota tiap kelompok dibagi menurut kunci Data Aset,
+    # lalu di dalam tiap bagian anggota sekelompok disatukan kembali. Urutan
+    # kelompok di dalam bagian tetap urutan pipeline (kode, nama, tanggal).
+    if data_group_by:
+        semua_anggota = []
+        for gi, g in enumerate(raw_groups):
+            for m in g["members"]:
+                m["_gi"] = gi
+                # Jenjang kode dibaca dari kunci kelompok (bukan di-$push lagi).
+                m["asset_code"] = g["_id"].get("asset_code") or ""
+                semua_anggota.append(m)
+        pegawai_susunan, uraian_susunan = {}, {}
+        if data_group_by == "psp":
+            from routes.assets import lengkapi_psp
+            await lengkapi_psp(semua_anggota, data_user)
+        elif data_group_by == "pemegang":
+            pegawai_susunan = await _peta_pegawai_kegiatan(activity, semua_anggota)
+        elif data_group_by.startswith("kode_"):
+            panjang = kod.LEVEL_LENGTHS[int(data_group_by[-1])]
+            prefiks = sorted({kod.normalize_kode(m["asset_code"])[:panjang]
+                              for m in semua_anggota} - {""})
+            if prefiks:
+                async for k in db.kodefikasi.find({"kode": {"$in": prefiks}},
+                                                  {"_id": 0, "kode": 1, "uraian": 1}):
+                    uraian_susunan[k.get("kode", "")] = k.get("uraian", "")
+        bagian_mentah = dap.bagi_susunan(
+            semua_anggota, data_group_by, uraian_susunan, pegawai_susunan,
+            format_tanggal=_fmt_tanggal_id)
+        bagian_list = []
+        for b in bagian_mentah:
+            per_kelompok = {}
+            for m in b["rows"]:
+                per_kelompok.setdefault(m["_gi"], []).append(m)
+            bagian_list.append({
+                "label": b["label"],
+                "entri": [(raw_groups[gi]["_id"], ms)
+                          for gi, ms in sorted(per_kelompok.items())]})
+    else:
+        bagian_list = [{"label": "",
+                        "entri": [(g["_id"], g["members"]) for g in raw_groups]}]
+
+    # Gerbang kedua: Susunan memecah satu kelompok menjadi beberapa baris
+    # (satu per bagian). Ambang yang sama berlaku pada jumlah BARIS yang
+    # benar-benar dirender — tetap ditolak terang-terangan, tidak dipangkas.
+    total_baris = sum(len(b["entri"]) for b in bagian_list)
+    if total_baris > MAKS_KELOMPOK_LAPORAN:
+        raise HTTPException(
+            status_code=400,
+            detail=(f"Susunan {dap.GROUP_OPTIONS[data_group_by]} menghasilkan "
+                    f"{total_baris} baris kelompok (>{MAKS_KELOMPOK_LAPORAN}) — "
+                    "terlalu banyak untuk dirender sekaligus. Persempit filter, "
+                    "pilih Susunan lain, atau gunakan Ekspor CSV/Excel."))
+
+    # Representative per kelompok (per bagian) = member dengan NUP numerik
+    # terkecil — foto sampul mengikuti anggota yang memang ada di bagian itu.
     rep_ids = []
-    for g in raw_groups:
-        rep = min(g["members"], key=nup_key)
-        g["rep_id"] = rep.get("id")
-        if g["rep_id"]:
-            rep_ids.append(g["rep_id"])
+    for b in bagian_list:
+        for _key, members in b["entri"]:
+            rep_id = min(members, key=nup_key).get("id")
+            if rep_id:
+                rep_ids.append(rep_id)
 
     # Batch-fetch foto sampul representative (satu query, hanya 1 foto per aset)
     photo_map = {}
@@ -6506,17 +6600,8 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
                  ("Berlebih", "Berlebih"), ("Sengketa", "Sengketa"),
                  ("Belum Diinventarisasi", "Belum")]
 
-    rows = []
-    total_units = 0
-    total_value = 0.0
-    for g in raw_groups:
-        key = g["_id"]
-        members = g["members"]
-        count = g["count"]
-        group_value = sum(sp(m.get("purchase_price")) for m in members)
-        total_units += count
-        total_value += group_value
-
+    async def _baris_kelompok(key, members):
+        """Satu baris tabel untuk satu kelompok barang serupa (di satu bagian)."""
         cond_counts = {}
         stat_counts = {}
         for m in members:
@@ -6553,26 +6638,51 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
         # Foto sampul kelompok: foto inline (cover_photo) lebih murah, jadi
         # dipakai lebih dulu; bila kosong tapi ada cover_gid (aset migrasi
         # GridFS-only) → ambil blob dari GridFS + downscale 640px ke data-URI.
-        rep_id = g.get("rep_id")
+        rep_id = min(members, key=nup_key).get("id")
         cover_url = photo_map.get(rep_id) or thumb_map.get(rep_id)
         if not cover_url and gid_map.get(rep_id):
             cover_url = await _gridfs_photo_data_uri(gid_map[rep_id]) or None
 
-        rows.append({
+        return {
             "asset_code": key.get("asset_code") or "-",
             "category_label": cat_map.get(category, category) or "-",
             "asset_name": key.get("asset_name") or "-",
             "brand_model": brand_model or "-",
             "year": year or "-",
             "nup_range": _compact_nup_ranges([m.get("NUP") for m in members]),
-            "count": count,
+            "count": len(members),
             "unit_price_fmt": fmt(sp(key.get("purchase_price"))),
-            "group_value_fmt": fmt(group_value),
+            "group_value_fmt": fmt(sum(sp(m.get("purchase_price")) for m in members)),
             "kondisi_summary": kondisi or "-",
             "status_summary": status or "-",
             "photo_url": cover_url,
             "detail_lines": detail_lines,
-        })
+        }
+
+    rows = []
+    sections = []
+    total_units = 0
+    total_value = 0.0
+    for b in bagian_list:
+        sec_rows = []
+        sec_value = 0.0
+        for key, members in b["entri"]:
+            row = await _baris_kelompok(key, members)
+            # Nomor urut berlanjut lintas bagian (seperti Data Aset).
+            row["no"] = len(rows) + 1
+            rows.append(row)
+            sec_rows.append(row)
+            sec_value += sum(sp(m.get("purchase_price")) for m in members)
+        sec_units = sum(r["count"] for r in sec_rows)
+        total_units += sec_units
+        total_value += sec_value
+        sections.append({"label": b["label"], "rows": sec_rows,
+                         "total_groups": len(sec_rows), "total_units": sec_units,
+                         "value_fmt": fmt(sec_value)})
+    if not sections:
+        # Hasil filter kosong: tetap satu tabel (header + baris TOTAL nol).
+        sections = [{"label": "", "rows": [], "total_groups": 0,
+                     "total_units": 0, "value_fmt": "0"}]
 
     satker_name = _activity_identity(activity, settings)["satker_name"]
 
@@ -6584,6 +6694,9 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
         "nomor_sk": activity.get("nomor_surat", "-"),
         "tanggal_cetak": _fmt_tanggal_id(datetime.now()),
         "rows": rows,
+        "sections": sections,
+        "data_group_by": data_group_by,
+        "data_group_label": dap.GROUP_OPTIONS.get(data_group_by, "") if data_group_by else "",
         "total_groups": len(rows),
         "total_units": total_units,
         "total_value_fmt": fmt(total_value),
@@ -6592,13 +6705,24 @@ async def _build_executive_grouped_data(activity_id: str, detail_fields=None,
     }
 
 
+async def _data_serupa_atau_400(activity_id, detail_fields, filter_aset, data_group_by, user):
+    """Bangun data Barang Serupa; pilihan Susunan tak dikenal → 400."""
+    try:
+        return await _build_executive_grouped_data(
+            activity_id, _parse_detail_fields(detail_fields), filter_aset=filter_aset,
+            data_group_by=data_group_by, data_user=user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @reports_router.get("/inventory-activities/{activity_id}/executive-grouped-html")
 async def executive_grouped_html(activity_id: str, detail_fields: str = "",
+                                 data_group_by: str = "",
                                  _user: dict = Depends(require_user_or_query_token)):
     """Serve Laporan Eksekutif per Barang Serupa as HTML preview"""
     await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
-    data = await _build_executive_grouped_data(activity_id, _parse_detail_fields(detail_fields))
+    data = await _data_serupa_atau_400(activity_id, detail_fields, None, data_group_by, _user)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
     env = _jinja_env()
@@ -6610,14 +6734,18 @@ async def executive_grouped_html(activity_id: str, detail_fields: str = "",
 @reports_router.get("/inventory-activities/{activity_id}/executive-grouped-pdf")
 async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = "",
                                          filter_aset: FilterLaporan = Depends(filter_laporan),
-                                         _user: dict = Depends(require_user_or_query_token)):
-    """Generate Laporan Eksekutif per Barang Serupa (grouped assets) PDF"""
+                                         _user: dict = Depends(require_user_or_query_token),
+                                         data_group_by: str = ""):
+    """Generate Laporan Eksekutif per Barang Serupa (grouped assets) PDF.
+
+    data_group_by = pilihan "Susunan PDF" yang sama dengan Data Aset.
+    """
     await pastikan_akses_kegiatan_id(_user, activity_id)
     from jinja2 import Environment, FileSystemLoader
     import weasyprint
 
-    data = await _build_executive_grouped_data(activity_id, _parse_detail_fields(detail_fields),
-                                               filter_aset=filter_aset)
+    data = await _data_serupa_atau_400(activity_id, detail_fields, filter_aset,
+                                       data_group_by, _user)
     if not data:
         raise HTTPException(status_code=404, detail="Kegiatan tidak ditemukan")
 
@@ -6626,7 +6754,8 @@ async def generate_executive_grouped_pdf(activity_id: str, detail_fields: str = 
     html = template.render(**data)
     pdf_bytes = await asyncio.to_thread(lambda: weasyprint.HTML(string=html).write_pdf())
 
-    filename = "Laporan_Eksekutif_Barang_Serupa.pdf"
+    filename = ("Laporan_Eksekutif_Barang_Serupa"
+                f"{'_' + data_group_by if data_group_by else ''}.pdf")
     return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
                              headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
@@ -8093,9 +8222,11 @@ async def batch_download_pdf_zip(request: Request, activity_id: str,
                     continue
 
                 if report_type == "executive-grouped":
+                    # Susunan PDF yang sama dengan Data Aset ikut diteruskan.
                     response = await generate_executive_grouped_pdf(
                         activity_id, detail_fields=detail_fields,
-                        filter_aset=f_aset, _user=_user)
+                        filter_aset=f_aset, _user=_user,
+                        data_group_by=payload.data_group_by)
                     pdf_buffer = await _get_pdf_buffer_from_response(response)
                     filename = f"Eksekutif_Barang_Serupa_{activity_id[:8]}.pdf"
                     zf.writestr(filename, pdf_buffer.getvalue())
