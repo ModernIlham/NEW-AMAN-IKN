@@ -26,7 +26,14 @@ function manifestRilis(compilation) {
     return [file, `sha256-${crypto.createHash("sha256").update(bytes).digest("base64")}`];
   }));
   const id = crypto.createHash("sha256").update(JSON.stringify({ assets, critical, main, integrity })).digest("hex").slice(0, 16);
-  return { id, main, assets, critical, integrity, source_sha: /^[a-f0-9]{40}$/i.test(process.env.REACT_APP_RELEASE_SHA || "") ? process.env.REACT_APP_RELEASE_SHA.toLowerCase() : null };
+  // SHA rilis dibaca dari AMAN_RELEASE_SHA — SENGAJA tanpa awalan REACT_APP_.
+  // CRA menyematkan SELURUH variabel REACT_APP_* ke bundel di mana pun kode
+  // membaca kunci process.env yang tak terdefinisi (mis. REACT_APP_OFFLINE_
+  // QUERY_CACHE), sehingga SHA dengan awalan itu mengubah hash main &
+  // asset-dashboard di SETIAP deploy walau kodenya sama. REACT_APP_RELEASE_SHA
+  // hanya cadangan untuk perkakas lama.
+  const sha = process.env.AMAN_RELEASE_SHA || process.env.REACT_APP_RELEASE_SHA || "";
+  return { id, main, assets, critical, integrity, source_sha: /^[a-f0-9]{40}$/i.test(sha) ? sha.toLowerCase() : null };
 }
 class LightboxPrecachePlugin {
   constructor(template) { this.template = template; }
@@ -36,7 +43,13 @@ class LightboxPrecachePlugin {
         const source = fs.readFileSync(this.template, "utf8");
         if (!source.includes(PENANDA) || !source.includes(RELEASE_MARKER)) throw new Error("Penanda precache/rilis hilang.");
         const release = manifestRilis(compilation);
-        const output = source.replace(PENANDA, JSON.stringify(berkasLightbox(compilation))).replace(RELEASE_MARKER, JSON.stringify(release));
+        // `source_sha` HANYA ke aman-release.json (dibaca perkakas rilis).
+        // Worker tak memakainya; menyematkannya membuat isi worker berubah di
+        // SETIAP deploy — termasuk deploy khusus backend — sehingga tiap
+        // perangkat memasang ulang worker dan mengunduh ulang seluruh aset
+        // critical (±667 kB gzip) walau tak satu pun chunk berubah.
+        const { source_sha: _sumber, ...untukWorker } = release;
+        const output = source.replace(PENANDA, JSON.stringify(berkasLightbox(compilation))).replace(RELEASE_MARKER, JSON.stringify(untukWorker));
         compilation.emitAsset("service-worker.js", new compiler.webpack.sources.RawSource(output));
         compilation.emitAsset("aman-release.json", new compiler.webpack.sources.RawSource(JSON.stringify(release)));
       });

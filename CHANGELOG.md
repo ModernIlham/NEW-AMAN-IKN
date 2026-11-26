@@ -18,6 +18,23 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1163] Deploy tak lagi memaksa setiap perangkat mengunduh ulang aplikasi — 2026-11-26
+
+- **Deploy yang hanya mengubah server kini tidak memicu unduhan apa pun di
+  perangkat.** SHA rilis dulu dioper ke build sebagai `REACT_APP_RELEASE_SHA`;
+  karena CRA menyematkan seluruh variabel `REACT_APP_*` ke bundel, hash `main`
+  dan `asset-dashboard` serta isi service worker berubah di SETIAP deploy,
+  sehingga setiap perangkat memasang ulang aplikasi dan mengunduh ulang ±667 kB
+  (gzip). SHA kini dioper sebagai `AMAN_RELEASE_SHA` dan hanya tercatat di
+  `aman-release.json`. Terbukti: dua build kode yang sama dengan SHA berbeda
+  kini menghasilkan berkas yang identik.
+- **Deploy yang mengubah tampilan hanya mengunduh berkas yang berubah.** Saat
+  memasang rilis baru, service worker memakai ulang berkas ber-hash yang sudah
+  tersimpan — hanya bila sidik SHA-256-nya cocok dengan manifest rilis baru;
+  selain itu diunduh seperti biasa. Diuji di Chromium: deploy yang mengubah
+  dashboard mengunduh 2 berkas (±280 kB) alih-alih 20 (±666 kB), dan aplikasi
+  tetap terbuka saat luring sesudahnya.
+
 ## [#1162] Halaman Pilih Kegiatan tak lagi menghitung ulang seluruh aset tiap dibuka — 2026-11-26
 
 - Jumlah & nilai aset per kegiatan serta panel "barang di lebih dari satu
