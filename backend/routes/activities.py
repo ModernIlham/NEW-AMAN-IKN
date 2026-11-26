@@ -21,6 +21,9 @@ from auth_utils import require_admin, require_user, require_writer
 from routes.media import auto_compress_image
 import pdf_compress_utils as pcu
 from shared_utils import (
+    cache_get,
+    cache_set,
+    kunci_cache_dari_kueri,
     decode_data_url,
     eselon_satker,
     get_document_from_gridfs,
@@ -365,25 +368,38 @@ async def get_inventory_activities(_user: dict = Depends(require_user)):
             await ensure_ticket_number(act)
 
     activity_ids = [act.get("id") for act in activities if act.get("id")]
-    
-    stats_pipeline = [
-        {"$match": {"activity_id": {"$in": activity_ids}}},
-        {"$group": {
-            "_id": "$activity_id",
-            "count": {"$sum": 1},
-            "total_value": {"$sum": ekspresi_harga()}
-        }}
-    ]
-    all_stats = await db.assets.aggregate(stats_pipeline).to_list(None)
+
+    # Jumlah & nilai aset per kegiatan = agregasi atas SELURUH aset kegiatan
+    # yang tampil (hingga 100). Hanya ringkasan angka yang di-cache — daftar
+    # kegiatannya tetap dibaca segar, jadi kegiatan baru langsung muncul.
+    # Kunci memuat himpunan id kegiatan; setiap tulis aset membersihkan
+    # namespace ini (`invalidate_asset_cache`).
+    cache_key = "ringkas|" + kunci_cache_dari_kueri(_user, {"ids": tuple(sorted(activity_ids))})
+    stats_map = await cache_get("kegiatan", cache_key)
+    if stats_map is None:
+        stats_pipeline = [
+            {"$match": {"activity_id": {"$in": activity_ids}}},
+            {"$group": {
+                "_id": "$activity_id",
+                "count": {"$sum": 1},
+                "total_value": {"$sum": ekspresi_harga()}
+            }}
+        ]
+        all_stats = await db.assets.aggregate(stats_pipeline).to_list(None)
+        # Nilai turunan siap-JSON (Redis menyimpan JSON; Decimal128 mentah
+        # akan berubah jadi teks dan merusak format angka).
+        stats_map = {s["_id"]: {"count": s.get("count", 0),
+                                "total_value": harga_json(s.get("total_value", 0)),
+                                "total_value_exact": harga_teks_eksak(s.get("total_value", 0))}
+                     for s in all_stats}
+        await cache_set("kegiatan", cache_key, stats_map)
     step2_time = time.time() - start - step1_time
-    
-    stats_map = {s["_id"]: s for s in all_stats}
-    
+
     for act in activities:
-        act_stats = stats_map.get(act.get("id"), {})
+        act_stats = stats_map.get(act.get("id")) or {}
         act["total_assets"] = act_stats.get("count", 0)
-        act["total_value"] = harga_json(act_stats.get("total_value", 0))
-        act["total_value_exact"] = harga_teks_eksak(act_stats.get("total_value", 0))
+        act["total_value"] = act_stats.get("total_value", harga_json(0))
+        act["total_value_exact"] = act_stats.get("total_value_exact", harga_teks_eksak(0))
     
     total_time = time.time() - start
     logger.info(f"get_inventory_activities: fetch={step1_time:.3f}s, aggregate={step2_time:.3f}s, total={total_time:.3f}s")

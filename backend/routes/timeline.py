@@ -15,7 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from auth_utils import require_user
 from db import db
-from shared_utils import (kode_satker_user, pastikan_akses_aset,
+from shared_utils import (cache_get, cache_set, kode_satker_user,
+                          kunci_cache_dari_kueri, pastikan_akses_aset,
                           scope_query_aset)
 from timeline_utils import (LABEL_STATUS, MODUL_LABEL, buat_event,
                             event_dari_riwayat, event_portal_laporan,
@@ -441,6 +442,14 @@ async def aset_lintas_kegiatan(user: dict = Depends(require_user)):
     match = await scope_query_aset(user, {
         "dihapus": {"$ne": True},
         "asset_code": {"$nin": ["", None]}})
+    # Agregasi atas SELURUH aset satker (scan + $group) — dulu dihitung ulang
+    # setiap halaman Pilih Kegiatan dibuka, termasuk mount sekejap pada tiap
+    # reload dashboard. Hasil di-cache per lingkup query; setiap tulis aset
+    # membersihkannya (`invalidate_asset_cache`).
+    cache_key = "lintas|" + kunci_cache_dari_kueri(user, match)
+    tersimpan = await cache_get("kegiatan", cache_key)
+    if tersimpan is not None:
+        return tersimpan
     pipeline = [
         {"$match": match},
         {"$project": {"_id": 0, "id": 1, "activity_id": 1, "asset_code": 1,
@@ -468,10 +477,12 @@ async def aset_lintas_kegiatan(user: dict = Depends(require_user)):
         {"_id": 0, "id": 1, "ticket_number": 1, "name": 1,
          "status_pengesahan": 1})}
     kelompok = susun_kelompok_lintas_kegiatan(groups, kegiatan)
-    return {"kelompok": kelompok, "jumlah": len(kelompok),
+    hasil = {"kelompok": kelompok, "jumlah": len(kelompok),
             "catatan": (
                 "Barang yang sama tercatat di beberapa kegiatan adalah hal "
                 "wajar (kegiatan = pemutakhir berkala). Timeline Aset "
                 "menggabungkannya otomatis per identitas — gunakan daftar ini "
                 "untuk melihat status termutakhir tiap barang, bukan untuk "
                 "menghapus data lama.")}
+    await cache_set("kegiatan", cache_key, hasil)
+    return hasil

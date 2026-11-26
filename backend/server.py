@@ -70,7 +70,10 @@ async def _tata_letak_pdf_gagal(_request, exc):
 app.add_exception_handler(_LayoutError, _tata_letak_pdf_gagal)
 
 # GZip compression
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# Level 6, bukan bawaan Starlette (9): pada JSON daftar aset 2,6 MB level 9
+# memakan ±60 ms CPU vs ±31 ms untuk hasil hanya ±1,7% lebih kecil
+# (diukur 26 Nov 2026). Mesin produksi 2 vCPU berbagi CPU dengan mongod.
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
 # CORS — env-driven allowlist (never wildcard while allow_credentials=True).
 # Reads ALLOWED_ORIGINS (comma-separated); falls back to the legacy CORS_ORIGINS

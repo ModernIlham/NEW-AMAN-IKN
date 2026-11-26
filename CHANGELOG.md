@@ -18,6 +18,17 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1162] Halaman Pilih Kegiatan tak lagi menghitung ulang seluruh aset tiap dibuka — 2026-11-26
+
+- Jumlah & nilai aset per kegiatan serta panel "barang di lebih dari satu
+  kegiatan" dulu dihitung dari SELURUH aset satker setiap halaman Pilih
+  Kegiatan dibuka. Kini hasilnya disimpan sementara per satker dan otomatis
+  diperbarui setiap ada perubahan aset (tambah/ubah/hapus/impor/ubah massal).
+  Kegiatan baru tetap langsung muncul. Nama/status kegiatan pada panel lintas
+  kegiatan dapat tertinggal paling lama 2 menit.
+- Kompresi respons server memakai level 6 (sebelumnya 9): CPU kompresi ±50%
+  lebih hemat untuk ukuran hasil yang praktis sama (±1,7% lebih besar).
+
 ## [#1161] Dashboard aset lebih ringan saat dibuka — tanpa halaman Pilih Kegiatan sekejap — 2026-11-26
 
 Hasil audit performa (diukur di Chromium dengan CPU diperlambat 4×, setara HP

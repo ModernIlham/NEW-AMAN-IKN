@@ -347,6 +347,11 @@ from redis_utils import (redis_aktif as _redis_aktif, redis_get as _redis_get,
 
 # Registry namespace → (TTLCache lokal untuk fallback, TTL detik untuk Redis).
 _cache_wasdal = TTLCache(maxsize=50, ttl=90)
+# Halaman Pilih Kegiatan: jumlah/nilai aset per kegiatan dan "aset lintas
+# kegiatan" — keduanya agregasi atas SELURUH aset satker, dulu dihitung ulang
+# di setiap pembukaan halaman. Dibersihkan setiap tulis aset
+# (`invalidate_asset_cache`), TTL hanya jaring pengaman.
+_cache_kegiatan = TTLCache(maxsize=100, ttl=120)
 _CACHE_LOCAL = {
     "filter_opts": _cache_filter_opts,
     "stats": _cache_stats,
@@ -355,9 +360,17 @@ _CACHE_LOCAL = {
     # Dasbor Wasdal memuat SELURUH aset + 6 register per kunjungan — TTL
     # pendek meredam muat ulang beruntun tanpa risiko data pemantauan basi.
     "wasdal": _cache_wasdal,
+    "kegiatan": _cache_kegiatan,
 }
 _CACHE_TTL = {"filter_opts": 180, "stats": 60, "analytics": 120,
-              "categories": 300, "wasdal": 90}
+              "categories": 300, "wasdal": 90, "kegiatan": 120}
+
+
+def kunci_cache_dari_kueri(_user, query: dict) -> str:
+    """Kunci cache dari query FINAL (sesudah isolasi satker) + satker akun."""
+    import hashlib
+    sidik = repr(sorted((k, repr(v)) for k, v in (query or {}).items()))
+    return f"{kode_satker_user(_user)}|{hashlib.sha1(sidik.encode()).hexdigest()}"
 
 
 # Dataset generation partitions caches across restore/reset, including workers
@@ -424,7 +437,8 @@ def invalidate_asset_cache():
     _cache_filter_opts.clear()
     _cache_stats.clear()
     _cache_analytics.clear()
-    _redis_bump(["filter_opts", "stats", "analytics"])
+    _cache_kegiatan.clear()
+    _redis_bump(["filter_opts", "stats", "analytics", "kegiatan"])
 
 # --- Tinify Config ---
 TINIFY_API_KEY = os.environ.get("TINIFY_API_KEY", "")
