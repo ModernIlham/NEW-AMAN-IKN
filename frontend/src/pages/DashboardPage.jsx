@@ -71,6 +71,7 @@ import { useAssetFilters } from "@/hooks/useAssetFilters";
 import { buatCacheHalamanAset } from "@/lib/cacheHalamanAset";
 import { buatPemuatDaftarAset } from "@/lib/pemuatDaftarAset";
 import { bacaModeInventarisasi, perluSiapOfflineOtomatis, simpanModeInventarisasi } from "@/lib/siapOffline";
+import { bacaKegiatanTersimpan, cadanganKegiatanLuring, hapusKegiatanTersimpan, simpanKegiatanTersimpan } from "@/lib/kegiatanTersimpan";
 import { HASIL_USANG, usePenjagaPermintaan } from "@/hooks/usePenjagaPermintaan";
 import { useOperasiBatch } from "@/hooks/useOperasiBatch";
 import { ringkasBatch, pesanGalatBatch, terapkanHasilBatchKeTampilan } from "@/lib/operasiBatch";
@@ -1995,44 +1996,55 @@ function AssetManagementPage({ user, onLogout, activity, onBack, onActivityRefre
 // MAIN EXPORT - Wrapper Component with Activity Flow
 // ============================================================================
 export default function DashboardPage({ user, onLogout, dark, toggleDark, onShowInfo, onShowModules }) {
-  const [selectedActivity, setSelectedActivity] = useState(null);
+  // Kegiatan tersimpan langsung dipakai saat reload — dulu `null` dulu, sehingga
+  // halaman Pilih Kegiatan sempat ter-mount sekejap dan menembakkan 5 request
+  // (termasuk agregasi seluruh aset satker) yang langsung dibuang. Salinan
+  // hanya dipakai bila milik AKUN YANG SAMA: logout otomatis sengaja
+  // menyisakan kegiatan terakhir, dan akun lain di peramban yang sama tak boleh
+  // sekejap pun melihat kegiatan milik orang lain. Server tetap disegarkan di
+  // latar (efek di bawah) — status pengesahan dsb. menyusul tanpa reload.
+  const [selectedActivity, setSelectedActivity] = useState(() => bacaKegiatanTersimpan(user?.id));
 
   useEffect(() => {
     const storedId = localStorage.getItem('currentActivityId');
     if (storedId) {
+      // Pengguna sempat memilih Kembali/kegiatan lain selama request berjalan
+      // → jawaban usang tak boleh membawanya kembali ke kegiatan ini.
+      const masihBerlaku = () => localStorage.getItem('currentActivityId') === storedId;
       axios.get(`${API}/inventory-activities/${storedId}`)
         .then(r => {
-          setSelectedActivity(r.data);
-          try { localStorage.setItem('currentActivity', JSON.stringify(r.data)); } catch {}
+          if (!masihBerlaku()) return;
+          // Objek identik dipertahankan: identitas baru memicu muat ulang
+          // daftar tanpa ada yang berubah.
+          setSelectedActivity(prev => (prev && JSON.stringify(prev) === JSON.stringify(r.data) ? prev : r.data));
+          simpanKegiatanTersimpan(r.data, user?.id);
         })
         .catch((err) => {
-          // Offline reload (no server response): fall back to the cached
-          // activity object so the dashboard — and its offline snapshot —
-          // can still open. A real server answer (404 etc.) clears the id.
-          if (!err?.response) {
-            try {
-              const cached = localStorage.getItem('currentActivity');
-              const parsed = cached ? JSON.parse(cached) : null;
-              if (parsed?.id === storedId) { setSelectedActivity(parsed); return; }
-            } catch {}
+          if (!masihBerlaku()) return;
+          // Offline reload (no server response) atau gangguan SEMENTARA
+          // (5xx saat deploy, 429, 401 sesi habis → interceptor yang logout):
+          // tetap pakai salinan agar dashboard — dan snapshot luringnya — tetap
+          // terbuka. Hanya jawaban PASTI (kegiatan tak ada / bukan hak akun
+          // ini) yang menghapus pilihan.
+          const status = err?.response?.status;
+          if (![400, 403, 404, 410].includes(status)) {
+            const cadangan = cadanganKegiatanLuring(storedId, user?.id);
+            if (cadangan) { setSelectedActivity(prev => prev || cadangan); return; }
           }
-          localStorage.removeItem('currentActivityId');
-          localStorage.removeItem('currentActivity');
+          hapusKegiatanTersimpan();
+          setSelectedActivity(null);
         });
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- sekali saat mount, seperti sebelumnya
 
   const handleSelectActivity = (activity) => {
     setSelectedActivity(activity);
-    try {
-      localStorage.setItem('currentActivityId', activity.id);
-      // Cached copy lets an offline reload reopen this activity's dashboard
-      localStorage.setItem('currentActivity', JSON.stringify(activity));
-    } catch {}
+    // Cached copy lets an offline reload reopen this activity's dashboard
+    simpanKegiatanTersimpan(activity, user?.id);
   };
 
-  const handleBack = () => { setSelectedActivity(null); localStorage.removeItem('currentActivityId'); localStorage.removeItem('currentActivity'); };
-  const handleLogout = () => { localStorage.removeItem('currentActivityId'); localStorage.removeItem('currentActivity'); onLogout(); };
+  const handleBack = () => { setSelectedActivity(null); hapusKegiatanTersimpan(); };
+  const handleLogout = () => { hapusKegiatanTersimpan(); onLogout(); };
 
   // Re-fetch the active activity after pengesahan so the sealed banner + write-lock
   // gating (driven by activity.status_pengesahan) kick in without a full reload.
@@ -2042,11 +2054,11 @@ export default function DashboardPage({ user, onLogout, dark, toggleDark, onShow
     try {
       const r = await axios.get(`${API}/inventory-activities/${id}`);
       setSelectedActivity(r.data);
-      try { localStorage.setItem('currentActivity', JSON.stringify(r.data)); } catch {}
+      simpanKegiatanTersimpan(r.data, user?.id);
     } catch {
       // Non-fatal: keep the current activity object if the refresh fails.
     }
-  }, [selectedActivity?.id]);
+  }, [selectedActivity?.id, user?.id]);
 
   if (!selectedActivity) return <ActivitySelectionPage user={user} onLogout={handleLogout} onSelectActivity={handleSelectActivity} onShowInfo={onShowInfo} onShowModules={onShowModules} />;
   return <AssetManagementPage user={user} onLogout={handleLogout} activity={selectedActivity} onBack={handleBack} onActivityRefresh={handleActivityRefresh} dark={dark} toggleDark={toggleDark} onShowInfo={onShowInfo} />;

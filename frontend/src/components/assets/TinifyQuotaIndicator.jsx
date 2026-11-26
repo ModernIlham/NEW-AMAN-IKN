@@ -13,8 +13,41 @@ function getStatusColors(usagePercent) {
   return { bar: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/20" };
 }
 
-// Satu sumber data kuota untuk kedua varian (desktop & HP) — dulu varian HP
-// mengambil datanya sendiri dan hasilnya bisa beda dengan varian desktop.
+// Kedua varian (desktop & HP) SAMA-SAMA ter-mount di toolbar — satu disembunyikan
+// CSS — sehingga dulu tiap pembukaan dashboard dan tiap 5 menit menembak
+// /compression-quotas dan /pdf-compression-quotas DUA kali (terlihat di profil
+// muat). Satu permintaan bersama: yang sedang berjalan dipakai bersama, dan
+// hasil yang baru (< 60 dtk) dipakai ulang. Data ini kuota LAYANAN (sama bagi
+// semua akun), jadi aman dibagi antar-komponen.
+const KUOTA_SEGAR_MS = 60 * 1000;
+let kuotaTerakhir = null;   // { at, img, pdf }
+let kuotaBerjalan = null;   // Promise yang sedang berjalan
+
+export function ambilKuotaBersama() {
+  if (kuotaTerakhir && Date.now() - kuotaTerakhir.at < KUOTA_SEGAR_MS) {
+    return Promise.resolve(kuotaTerakhir);
+  }
+  if (!kuotaBerjalan) {
+    kuotaBerjalan = Promise.allSettled([
+      axios.get(`${API}/compression-quotas`),
+      axios.get(`${API}/pdf-compression-quotas`),
+    ]).then(([imgResp, pdfResp]) => {
+      const hasil = {
+        at: Date.now(),
+        img: imgResp.status === "fulfilled" ? imgResp.value.data : null,
+        pdf: pdfResp.status === "fulfilled" ? pdfResp.value.data : null,
+      };
+      // Kegagalan total tidak di-cache: percobaan berikutnya langsung ulang.
+      if (hasil.img || hasil.pdf) kuotaTerakhir = hasil;
+      return hasil;
+    }).finally(() => { kuotaBerjalan = null; });
+  }
+  return kuotaBerjalan;
+}
+
+/** Untuk uji: kosongkan cache bersama. */
+export function resetKuotaBersama() { kuotaTerakhir = null; kuotaBerjalan = null; }
+
 function useKuota() {
   const [imageQuotas, setImageQuotas] = useState([]);
   const [pdfQuotas, setPdfQuotas] = useState([]);
@@ -24,29 +57,28 @@ function useKuota() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let aktif = true;
     const fetchAll = async () => {
       try {
-        const [imgResp, pdfResp] = await Promise.allSettled([
-          axios.get(`${API}/compression-quotas`),
-          axios.get(`${API}/pdf-compression-quotas`),
-        ]);
-        if (imgResp.status === "fulfilled") {
-          setImageQuotas(imgResp.value.data.quotas || []);
-          setAktifGambar(imgResp.value.data.aktif || "");
+        const { img, pdf } = await ambilKuotaBersama();
+        if (!aktif) return;
+        if (img) {
+          setImageQuotas(img.quotas || []);
+          setAktifGambar(img.aktif || "");
         }
-        if (pdfResp.status === "fulfilled") {
-          setPdfQuotas(pdfResp.value.data.quotas || []);
-          setAktifPdf(pdfResp.value.data.aktif || "");
+        if (pdf) {
+          setPdfQuotas(pdf.quotas || []);
+          setAktifPdf(pdf.aktif || "");
         }
       } catch (e) {
         console.warn("Quota fetch error:", e);
       } finally {
-        setLoading(false);
+        if (aktif) setLoading(false);
       }
     };
     fetchAll();
     const interval = setInterval(fetchAll, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => { aktif = false; clearInterval(interval); };
   }, []);
 
   return { imageQuotas, pdfQuotas, aktifGambar, aktifPdf, loading };

@@ -18,6 +18,25 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1161] Dashboard aset lebih ringan saat dibuka — tanpa halaman Pilih Kegiatan sekejap — 2026-11-26
+
+Hasil audit performa (diukur di Chromium dengan CPU diperlambat 4×, setara HP
+kelas menengah; angka lab, bukan angka produksi):
+
+- **Reload dashboard tak lagi sekejap menampilkan halaman Pilih Kegiatan.**
+  Kegiatan terakhir langsung dipakai dari salinan perangkat, lalu disegarkan
+  dari server di latar. Lima permintaan yang dulu terbuang di tiap reload —
+  termasuk dua agregasi atas seluruh aset satker — kini hilang; waktu blokir
+  layar turun ±175–220 ms. Salinan hanya dipakai untuk akun yang sama
+  (logout otomatis sengaja menyisakan kegiatan terakhir di peramban). Galat
+  sementara server (5xx/429/sesi habis) tak lagi melempar pengguna keluar
+  dari dashboard; hanya "kegiatan tidak ada/bukan hak Anda" yang melakukannya.
+- **Ikon pin peta dibuat saat dibutuhkan.** Dulu ±400 ikon dirender setiap
+  dashboard dibuka (±77 ms CPU), padahal hanya editor pin dan peta yang
+  memakainya.
+- **Indikator kuota kompresi tak lagi meminta data dua kali** (versi desktop
+  dan HP kini berbagi satu permintaan).
+
 ## [#1160] Kompresi gambar — gerbang unggahan ikut aturan "berhenti bila sudah optimal" — 2026-11-26
 
 - Lanjutan [#1159]: unggahan foto/dokumen lewat gerbang media (>300 KB)

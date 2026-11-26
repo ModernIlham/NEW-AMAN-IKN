@@ -469,9 +469,22 @@ export const IKON_PIN = [
   ["designpin", "Desain marker pin", "Simbol & penanda", MarkerDesignIcon],
 ].map(([id, nama, kategori, Icon]) => ({ id, nama, kategori, Icon }));
 export const KATEGORI_PIN = [...new Set(IKON_PIN.map((i) => i.kategori))];
-const SVG_IKON = Object.fromEntries(IKON_PIN.map(({ id, Icon }) => [id,
-  renderToStaticMarkup(React.createElement(Icon, { width: 18, height: 18, strokeWidth: 2, "aria-hidden": true })),
-]));
+// SVG tiap ikon dibuat SAAT DIBUTUHKAN lalu disimpan. Dulu ±400 ikon dirender
+// lewat renderToStaticMarkup ketika modul dievaluasi — modul ini ikut dimuat
+// setiap dashboard dibuka (lewat form aset), padahal peta & editor pin hanya
+// memakai beberapa ikon. Terukur ±77 ms CPU tiap pembukaan dashboard pada CPU
+// 4× lebih lambat (setara HP kelas menengah), hilang dengan render malas.
+// Objek biasa, BUKAN `new Map()`: `Map` di berkas ini adalah ikon lucide.
+const IKON_PER_ID = Object.fromEntries(IKON_PIN.map(({ id, Icon }) => [id, Icon]));
+const SVG_TERSIMPAN = Object.create(null);
+export function svgIkonPin(id) {
+  if (!Object.prototype.hasOwnProperty.call(IKON_PER_ID, id)) return "";
+  if (!(id in SVG_TERSIMPAN)) {
+    SVG_TERSIMPAN[id] = renderToStaticMarkup(React.createElement(IKON_PER_ID[id],
+      { width: 18, height: 18, strokeWidth: 2, "aria-hidden": true }));
+  }
+  return SVG_TERSIMPAN[id];
+}
 export const PIN_BAWAAN = { v: 1, mode: "icon", icon: "package", text: "A", image: "",
   circle: true, circleColor: "#ffffff", strokeColor: "#334155", strokeWidth: 1, iconColor: "#0f172a" };
 const warna = (v, fallback) => /^#[0-9a-f]{6}$/i.test(v || "") ? v : fallback;
@@ -483,7 +496,7 @@ export function bacaMarkerPin(value) {
     const r = JSON.parse(value);
     if (!r || r.v !== 1 || !["icon", "text", "custom"].includes(r.mode)) return null;
     if (r.mode === "custom" && !gambarAman(r.image)) return null;
-    return { ...PIN_BAWAAN, mode: r.mode, icon: Object.prototype.hasOwnProperty.call(SVG_IKON, r.icon) ? r.icon : "package",
+    return { ...PIN_BAWAAN, mode: r.mode, icon: Object.prototype.hasOwnProperty.call(IKON_PER_ID, r.icon) ? r.icon : "package",
       text: /^[A-Za-z0-9]{1,3}$/.test(r.text || "") ? r.text : "A", image: r.mode === "custom" ? r.image : "",
       circle: r.circle !== false, circleColor: warna(r.circleColor, PIN_BAWAAN.circleColor),
       strokeColor: warna(r.strokeColor, PIN_BAWAAN.strokeColor), iconColor: warna(r.iconColor, PIN_BAWAAN.iconColor),
@@ -503,7 +516,7 @@ export function opsiPinDesain(value, { color = "#64748b", selected = false, comp
   const d = bacaMarkerPin(value);
   if (!d) return null;
   const isi = d.mode === "custom" ? `<img src="${d.image}" alt="" style="width:18px;height:18px;object-fit:contain"/>`
-    : d.mode === "text" ? `<span style="font:800 ${d.text.length > 2 ? 10 : 13}px/1 system-ui,sans-serif">${d.text}</span>` : SVG_IKON[d.icon];
+    : d.mode === "text" ? `<span style="font:800 ${d.text.length > 2 ? 10 : 13}px/1 system-ui,sans-serif">${d.text}</span>` : svgIkonPin(d.icon);
   const ring = selected ? "#f59e0b" : complete ? "#16a34a" : "#ffffff";
   const count = Number.isFinite(Number(badge)) ? Math.max(0, Math.min(99, Math.floor(Number(badge)))) : 0;
   // Leaflet memberi SEMUA svg di map-pane z-index:200. Lapisan lokal harus
