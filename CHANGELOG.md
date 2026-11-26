@@ -18,6 +18,13 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1160] Kompresi gambar — gerbang unggahan ikut aturan "berhenti bila sudah optimal" — 2026-11-26
+
+- Lanjutan [#1159]: unggahan foto/dokumen lewat gerbang media (>300 KB)
+  memakai loop rantainya sendiri yang belum ikut aturan baru. Kini, bila
+  Tinify berhasil tetapi berkas tak bisa diperkecil, berkas tidak lagi
+  diteruskan ke Compresto/Uploadcare.
+
 ## [#1159] Kompresi gambar — Compresto tak lagi "tersisa 1" dan tak dipakai saat Tinify masih bersaldo — 2026-11-26
 
 - **Peralihan ke Uploadcare tak lagi tersendat.** Bila Compresto/Uploadcare

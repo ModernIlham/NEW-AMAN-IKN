@@ -496,3 +496,30 @@ class TestSapuanModulTerpasang:
         """`len(pdf_bytes)` sebagai `size` berbohong sejak isinya dikompres."""
         src = self._src("routes/pengesahan.py")
         assert '"size": len(pdf_bytes)' not in src
+
+
+@pytest.mark.asyncio
+async def test_gerbang_berhenti_bila_layanan_tak_memperkecil(monkeypatch):
+    """Laporan pemilik: Compresto terhitung padahal Tinify masih bersaldo.
+    Bila Tinify berhasil tetapi berkas sudah optimal, gerbang tak boleh
+    meneruskannya ke Compresto/Uploadcare (aturan sama dengan media.py)."""
+    import os as _os
+    import routes.media as rm
+    dipanggil = []
+
+    def palsu(nama, hasil):
+        async def f(data):
+            dipanggil.append(nama)
+            return hasil(data)
+        return f
+
+    monkeypatch.setitem(rm._FUNGSI_KOMPRESI, "tinify", palsu("tinify", lambda d: d))
+    monkeypatch.setitem(rm._FUNGSI_KOMPRESI, "compresto", palsu("compresto", lambda d: d[:10]))
+    monkeypatch.setitem(rm._FUNGSI_KOMPRESI, "uploadcare", palsu("uploadcare", lambda d: d[:10]))
+    buf = io.BytesIO()
+    PILImage.frombytes("RGB", (700, 700), _os.urandom(700 * 700 * 3)).save(buf, format="JPEG", quality=95)
+    data = buf.getvalue()
+    assert len(data) > gm.AMBANG_JARINGAN
+    hasil = await gm.olah_media(data)
+    assert dipanggil == ["tinify"]
+    assert hasil.ukuran_hasil <= hasil.ukuran_asli
