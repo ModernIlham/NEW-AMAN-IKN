@@ -248,7 +248,7 @@ def dispatch():
             (app/'frontend/build.new/asset-manifest.json').write_text('{"files":{}}')
             legacy=v=='old' and (app/'backend/.venv-releases/legacy-retained.json').exists()
             if f!='frontend_missing_sha' and not legacy:
-                sha='0'*40 if f=='frontend_stale_sha' else os.environ['REACT_APP_RELEASE_SHA']
+                sha='0'*40 if f=='frontend_stale_sha' else os.environ['AMAN_RELEASE_SHA']
                 (app/'frontend/build.new/aman-release.json').write_text(json.dumps({'source_sha':sha}))
             return 0
     if name=='mv':

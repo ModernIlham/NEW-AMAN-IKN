@@ -249,7 +249,7 @@ yarn() {
     mkdir -p build.new
     printf 'bundel baru' > build.new/index.html
     printf '{"files":{}}' > build.new/asset-manifest.json
-    printf '{"source_sha":"%s"}' "$REACT_APP_RELEASE_SHA" > build.new/aman-release.json
+    printf '{"source_sha":"%s"}' "$AMAN_RELEASE_SHA" > build.new/aman-release.json
   fi
 }
 mktemp() {

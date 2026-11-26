@@ -26,8 +26,8 @@ function env() {
   const serve = release => { network.set(keyOf("/"), new Reply(`<script src="${release.main}"></script>`, { headers: { "content-type": "text/html" } })); network.set(keyOf("/index.html"), network.get(keyOf("/"))); network.set(keyOf("/manifest.json"), new Reply("{}", { headers: { "content-type": "application/json" } })); for (const file of release.assets) network.set(keyOf(file), new Reply(file, { headers: { "content-type": "application/javascript" } })); };
   const worker = (release, withLocks = true) => {
     const handlers = {};
-    const self = { navigator: { locks: withLocks ? locks : null }, location: { origin: "https://aman.test" }, addEventListener: (type, handler) => { handlers[type] = handler; }, skipWaiting: jest.fn(async () => {}), clients: { matchAll: async () => [...clients.values()], claim: jest.fn(async () => {}) } };
-    vm.runInNewContext(template.replace("/* AMAN_LIGHTBOX_PRECACHE */ []", "[]").replace("/* AMAN_RELEASE_MANIFEST */ null", JSON.stringify(release)), { self, caches, fetch, URL, Request: PublicRequest, Response: Reply, console, Date: { now: () => clock } });
+    const self = { crypto: require("crypto").webcrypto, navigator: { locks: withLocks ? locks : null }, location: { origin: "https://aman.test" }, addEventListener: (type, handler) => { handlers[type] = handler; }, skipWaiting: jest.fn(async () => {}), clients: { matchAll: async () => [...clients.values()], claim: jest.fn(async () => {}) } };
+    vm.runInNewContext(template.replace("/* AMAN_LIGHTBOX_PRECACHE */ []", "[]").replace("/* AMAN_RELEASE_MANIFEST */ null", JSON.stringify(release)), { self, caches, fetch, URL, Request: PublicRequest, Response: Reply, console, Date: { now: () => clock }, btoa });
     const emit = (type, options = {}) => {
       const waits = []; let response;
       handlers[type]({ ...options, waitUntil: p => waits.push(p), respondWith: p => { response = p; } });
@@ -154,4 +154,49 @@ test("reservasi HTML lebih pendek tidak mengurangi byte sebelum body lama tergan
   e.network.set(keyOf("/"), new Reply(short, { headers: { "content-type": "text/html" } })); const write = w.request("/", "navigate"); await writing;
   expect(e.metadata().releases.aaa.bytes).toBe(oldBytes); expect(e.stores.get("inventory-release-aaa").get(keyOf("/index.html")).body).toBe(long);
   releasePut(); await write; expect(e.metadata().releases.aaa.bytes).toBe(oldBytes - 1000);
+});
+
+// Rilis dengan integrity SHA-256 nyata atas isi berkas (isi = nama berkas di
+// jaringan tiruan) — seperti manifest hasil plugin build.
+const sri = body => "sha256-" + require("crypto").createHash("sha256").update(body).digest("base64");
+function releaseBerhash(id, shared) {
+  const own = [`/static/js/main.${id}.js`, `/static/js/editor.${id}.js`];
+  const assets = [...own, ...shared];
+  return { id, main: own[0], assets, critical: assets, integrity: Object.fromEntries(assets.map(f => [f, sri(f)])) };
+}
+test("deploy baru memakai ulang chunk ber-hash yang identik (terverifikasi SHA-256), hanya mengunduh yang berubah", async () => {
+  const e = env(), bersama = ["/static/js/vendor.111.chunk.js", "/static/js/pustaka.222.chunk.js"];
+  const a = releaseBerhash("aaa", bersama);
+  await start(e, a);
+  e.fetch.mockClear();
+  const b = releaseBerhash("bbb", bersama);
+  await start(e, b);
+  const diambil = e.fetch.mock.calls.map(([r]) => new URL(r.url).pathname);
+  for (const f of bersama) expect(diambil).not.toContain(f);
+  expect(diambil).toEqual(expect.arrayContaining(["/", "/index.html", "/manifest.json", b.main, `/static/js/editor.bbb.js`]));
+  e.offline(true);
+  const w = e.worker(b);
+  expect(await (await w.request(bersama[0])).text()).toBe(bersama[0]);
+  expect(e.stores.get("inventory-release-bbb").has(keyOf(bersama[0]))).toBe(true);
+});
+test("salinan lama yang isinya tak cocok integrity rilis baru TIDAK dipakai — diunduh ulang", async () => {
+  const e = env(), bersama = ["/static/js/vendor.111.chunk.js"];
+  const a = releaseBerhash("aaa", bersama);
+  await start(e, a);
+  // Isi tersimpan dirusak (atau rilis baru menuntut digest lain).
+  e.stores.get("inventory-release-aaa").set(keyOf(bersama[0]), new Reply("isi rusak", { headers: { "content-type": "application/javascript" } }));
+  e.fetch.mockClear();
+  const b = releaseBerhash("bbb", bersama);
+  await start(e, b);
+  expect(e.fetch.mock.calls.map(([r]) => new URL(r.url).pathname)).toContain(bersama[0]);
+  expect(await e.stores.get("inventory-release-bbb").get(keyOf(bersama[0])).text()).toBe(bersama[0]);
+});
+test("tanpa crypto.subtle tidak ada pemakaian ulang (perilaku lama)", async () => {
+  const e = env(), bersama = ["/static/js/vendor.111.chunk.js"];
+  await start(e, releaseBerhash("aaa", bersama));
+  e.fetch.mockClear();
+  const b = releaseBerhash("bbb", bersama); e.serve(b);
+  const w = e.worker(b); w.self.crypto = undefined;
+  await w.install(); await w.activate();
+  expect(e.fetch.mock.calls.map(([r]) => new URL(r.url).pathname)).toContain(bersama[0]);
 });

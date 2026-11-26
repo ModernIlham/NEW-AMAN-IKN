@@ -187,7 +187,7 @@ jobs:
         # CI=false: warning CRA lama tidak menggagalkan build; gerbang error
         # sudah dipegang langkah eslint di atas.
         env:
-          REACT_APP_RELEASE_SHA: ${{ github.sha }}
+          AMAN_RELEASE_SHA: ${{ github.sha }}
         run: CI=false yarn build
 
   kontrak:
@@ -279,7 +279,7 @@ jobs:
           corepack yarn --cwd frontend install --frozen-lockfile
       - name: Uji browser dengan akun dan database sementara
         env:
-          REACT_APP_RELEASE_SHA: ${{ github.sha }}
+          AMAN_RELEASE_SHA: ${{ github.sha }}
         run: >-
           python scripts/uji_browser_ci.py
           --mongo mongodb://127.0.0.1:27017/

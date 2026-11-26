@@ -567,7 +567,7 @@ REACT_APP_BACKEND_URL=https://amanikn-inventarisasi.com
 ### 5.2 Build dan aktivasi melalui controller
 
 Gunakan Node 22 LTS/Yarn 1.22.22. Controller menjalankan frozen install dan build
-ke `build.new` dengan `REACT_APP_RELEASE_SHA` target, memverifikasi
+ke `build.new` dengan `AMAN_RELEASE_SHA` target (sengaja tanpa awalan `REACT_APP_`), memverifikasi
 `aman-release.json.source_sha`, mempertahankan hashed static selama grace, lalu
 mengaktifkan pasangan frontend/backend. Build gagal mempertahankan rilis lama.
 

@@ -681,7 +681,10 @@ yarn install --frozen-lockfile --ignore-engines
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=2048}"
 DEPLOY_FASE=build_frontend
 rm -rf build.new
-BUILD_PATH=build.new REACT_APP_RELEASE_SHA="$DEPLOY_SHA" yarn build
+# AMAN_RELEASE_SHA, bukan REACT_APP_RELEASE_SHA: variabel ber-awalan REACT_APP_
+# ikut tersemat ke bundel sehingga hash chunk berubah di setiap deploy dan
+# setiap perangkat mengunduh ulang aset yang isinya sama.
+BUILD_PATH=build.new AMAN_RELEASE_SHA="$DEPLOY_SHA" yarn build
 if [ ! -f build.new/index.html ]; then
   echo "GAGAL: build.new/index.html tidak ada — build tidak menghasilkan bundel." >&2
   exit 1

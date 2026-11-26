@@ -9,7 +9,8 @@ menjalankan SSH, atau mengubah service VPS.
 ## Package dan stage
 
 Gunakan checkout CI bersih dengan production build yang sudah dihasilkan CI
-tersebut, dengan `REACT_APP_RELEASE_SHA` diset ke SHA tersebut saat build.
+tersebut, dengan `AMAN_RELEASE_SHA` diset ke SHA tersebut saat build (bukan
+`REACT_APP_RELEASE_SHA`, yang ikut tersemat ke bundel dan mengubah hash chunk).
 `aman-release.json.source_sha` wajib cocok; metadata hilang atau stale ditolak.
 Source runtime/backend/plugin dirty/untracked, SHA tidak cocok, chunk yang hilang,
 symlink, serta config frontend di luar allowlist ditolak. Snapshot `.env` atau

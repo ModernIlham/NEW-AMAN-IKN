@@ -109,6 +109,25 @@ async function validShell(response) {
   if (!response.ok || (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase() !== 'text/html') return false;
   return !release.main || (await response.clone().text()).includes(release.main);
 }
+// Hashed static files are immutable: a byte-identical copy already held by an
+// earlier release cache is reused instead of re-downloaded on every deploy.
+// Reuse requires the copy's SHA-256 to match THIS release's integrity entry;
+// anything else (no digest support, no entry, mismatch) falls back to fetch.
+function base64(buffer) {
+  let text = '';
+  for (const byte of new Uint8Array(buffer)) text += String.fromCharCode(byte);
+  return btoa(text);
+}
+async function verifiedCopy(url, meta) {
+  const expected = release.integrity?.[url];
+  if (!/^\/static\//.test(url) || !/^sha256-/.test(expected || '') || !self.crypto?.subtle) return null;
+  try {
+    const cached = await findCached(url, meta);
+    if (!cached || !cached.ok || !validAsset(url, cached)) return null;
+    const digest = await self.crypto.subtle.digest('SHA-256', await cached.clone().arrayBuffer());
+    return 'sha256-' + base64(digest) === expected ? cached : null;
+  } catch { return null; }
+}
 self.addEventListener('install', event => {
   event.waitUntil(serial(async () => {
     let preserveCandidate = (await caches.keys()).includes(ownCache);
@@ -119,7 +138,8 @@ self.addEventListener('install', event => {
       const cache = await caches.open(ownCache);
       const urls = [...new Set([...SHELL, ...release.critical])];
       for (const url of urls) {
-        const response = await fetch(new Request(url, { cache: 'reload', credentials: 'same-origin', integrity: release.integrity?.[url] || '' }));
+        const reused = SHELL.includes(url) ? null : await verifiedCopy(url, meta);
+        const response = reused || await fetch(new Request(url, { cache: 'reload', credentials: 'same-origin', integrity: release.integrity?.[url] || '' }));
         if (!response.ok || !validAsset(url, response) || ((url === '/' || url === '/index.html') && !await validShell(response))) throw new Error('release_precache_incomplete:' + url);
         await cache.put(url, response);
       }
