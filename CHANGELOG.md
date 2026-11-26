@@ -18,6 +18,17 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1164] Dashboard di HP tampil lebih cepat — form aset tak lagi dirender saat tersembunyi — 2026-11-26
+
+- Form Tambah/Edit Aset dulu dirender penuh setiap dashboard dibuka walau di
+  HP ia tersembunyi di luar layar (±250 ms dari ±600 ms kerja render, diukur
+  dengan profil React pada CPU 4× lebih lambat). Kini form yang tertutup baru
+  disiapkan saat peramban senggang (paling lambat 3 detik), atau seketika
+  begitu dibuka; sekali tersiapkan ia tak pernah dilepas, jadi draf, tab, dan
+  fokus tetap aman. Desktop dengan panel form terlihat tidak berubah.
+- Terukur (HP, CPU 4×, median 6 run): daftar aset tampil 2.267 → 1.962 ms,
+  waktu layar terblokir sebelum daftar tampil 921 → 737 ms.
+
 ## [#1163] Deploy tak lagi memaksa setiap perangkat mengunduh ulang aplikasi — 2026-11-26
 
 - **Deploy yang hanya mengubah server kini tidak memicu unduhan apa pun di
