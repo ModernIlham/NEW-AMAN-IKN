@@ -11,7 +11,7 @@ import os
 import base64
 import logging
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -78,10 +78,68 @@ async def increment_quota(service: str):
     )
 
 
+def _ditahan_sampai(quota: dict):
+    """Waktu akhir penahanan sementara (UTC) bila masih berlaku, else None."""
+    nilai = (quota or {}).get("ditahan_sampai")
+    if not isinstance(nilai, datetime):
+        return None
+    nilai = nilai.replace(tzinfo=timezone.utc) if nilai.tzinfo is None else nilai
+    return nilai if nilai > datetime.now(timezone.utc) else None
+
+
 async def is_quota_available(service: str) -> bool:
     """Check if quota is still available for a service."""
     quota = await get_quota(service)
+    if _ditahan_sampai(quota):
+        return False
     return quota["used"] < quota.get("limit", SERVICE_LIMITS.get(service, 500))
+
+
+# Penghitung lokal hanyalah PERKIRAAN pemakaian penyedia. Laporan pemilik:
+# Compresto berhenti melayani (HTTP 429) sementara layar masih menulis sisa
+# 1/500 dan menandainya "dipakai" — rantai terus mencobanya lebih dulu dan
+# indikator tak pernah beralih ke Uploadcare. Bila penyedia MENOLAK karena
+# batas (429) atau tagihan (402) ketika sisa lokal tinggal sedikit, angka
+# penyedialah yang benar: kuota bulan ini dianggap habis. Penolakan 429 saat
+# sisa masih banyak = pembatasan laju sungguhan → layanan ditahan sebentar
+# (rantai & indikator beralih), lalu dicoba lagi otomatis.
+AMBANG_SISA_HABIS = 10
+TAHAN_LAJU = timedelta(minutes=15)
+
+
+async def tandai_penolakan_penyedia(service: str, kode_http: int) -> str:
+    """Catat penolakan 429/402. Mengembalikan "habis" atau "ditahan"."""
+    month = await get_current_month()
+    quota = await get_quota(service)
+    batas = int(quota.get("limit") or SERVICE_LIMITS.get(service, 500))
+    sisa = batas - int(quota.get("used") or 0)
+    if kode_http == 402 or sisa <= AMBANG_SISA_HABIS:
+        await db.compression_quotas.update_one(
+            {"service": service, "month": month},
+            {"$max": {"used": batas},
+             "$set": {"ditutup_penyedia": kode_http},
+             "$setOnInsert": {"limit": batas}},
+            upsert=True)
+        return "habis"
+    await db.compression_quotas.update_one(
+        {"service": service, "month": month},
+        {"$set": {"ditahan_sampai": datetime.now(timezone.utc) + TAHAN_LAJU,
+                  "ditahan_kode": kode_http},
+         "$setOnInsert": {"used": 0, "limit": batas}},
+        upsert=True)
+    return "ditahan"
+
+
+# Galat transport yang PASTI terjadi sebelum permintaan sampai ke penyedia.
+# Selain ini (timeout baca, koneksi putus di tengah) penyedia mungkin sudah
+# memproses — dan menagih — permintaannya. Tidak menghitungnya membuat
+# penghitung lokal tertinggal dari penyedia: itulah "sisa 1" yang tak pernah
+# bisa dipakai. Pola konservatif yang sama dengan anggaran Tinify.
+_BELUM_TERKIRIM = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+
+
+def _mungkin_ditagih(exc: Exception) -> bool:
+    return isinstance(exc, httpx.TransportError) and not isinstance(exc, _BELUM_TERKIRIM)
 
 
 # ============================================================================
@@ -195,6 +253,17 @@ def _alasan_http(response) -> str:
     return f"{dasar}{(' — ' + cuplikan) if cuplikan else ''}"
 
 
+async def _catat_penolakan(service: str, response) -> None:
+    """Penolakan batas/tagihan penyedia → tandai, lalu jelaskan di diagnostik."""
+    kode = response.status_code
+    hasil = await tandai_penolakan_penyedia(service, kode)
+    alasan = ("Penyedia menyatakan kuota habis — beralih ke layanan berikutnya sampai bulan depan"
+              if hasil == "habis" else
+              f"Batas laju layanan tercapai — ditahan {int(TAHAN_LAJU.total_seconds() // 60)} menit, "
+              "sementara itu memakai layanan berikutnya")
+    catat_percobaan(service, False, kode_http=kode, waktu=_sekarang(), alasan=alasan)
+
+
 async def compress_with_compresto(image_bytes: bytes) -> Optional[bytes]:
     """Compress using Compresto API."""
     if not COMPRESTO_API_KEY:
@@ -216,10 +285,9 @@ async def compress_with_compresto(image_bytes: bytes) -> Optional[bytes]:
                 await increment_quota("compresto")
                 catat_percobaan("compresto", True, waktu=_sekarang())
                 return response.content
-            elif response.status_code == 429:
-                logger.warning("Compresto rate limit reached")
-                catat_percobaan("compresto", False, kode_http=429, waktu=_sekarang(),
-                                alasan="Batas laju layanan tercapai — tunggu lalu coba lagi")
+            elif response.status_code in (402, 429):
+                logger.warning(f"Compresto menolak {response.status_code}")
+                await _catat_penolakan("compresto", response)
                 return None
             else:
                 logger.warning(f"Compresto error {response.status_code}: {response.text[:200]}")
@@ -228,6 +296,8 @@ async def compress_with_compresto(image_bytes: bytes) -> Optional[bytes]:
                 return None
     except Exception as e:
         logger.warning(f"Compresto error: {e}")
+        if _mungkin_ditagih(e):
+            await increment_quota("compresto")
         catat_percobaan("compresto", False, waktu=_sekarang(),
                         alasan=f"Tidak dapat menghubungi layanan: {type(e).__name__}: {e}")
         return None
@@ -253,6 +323,10 @@ async def compress_with_uploadcare(image_bytes: bytes) -> Optional[bytes]:
                 },
                 files={"file": ("photo.jpg", image_bytes, "image/jpeg")},
             )
+            if response.status_code in (402, 429):
+                logger.warning(f"Uploadcare menolak {response.status_code}")
+                await _catat_penolakan("uploadcare", response)
+                return None
             if response.status_code != 200:
                 logger.warning(f"Uploadcare upload error: {response.status_code}")
                 catat_percobaan("uploadcare", False, kode_http=response.status_code,
@@ -279,6 +353,8 @@ async def compress_with_uploadcare(image_bytes: bytes) -> Optional[bytes]:
                 return None
     except Exception as e:
         logger.warning(f"Uploadcare error: {e}")
+        if _mungkin_ditagih(e):
+            await increment_quota("uploadcare")
         catat_percobaan("uploadcare", False, waktu=_sekarang(),
                         alasan=f"Tidak dapat menghubungi layanan: {type(e).__name__}: {e}")
         return None
@@ -334,11 +410,19 @@ async def auto_compress_image(image_data_b64: str) -> tuple:
         # kebenaran yang dipakai bersama indikator kuota di layar. Dulu daftar
         # ini ditulis ulang di sini; rantai dan indikatornya lalu bisa berbeda
         # tanpa ada yang menyadarinya. Uji anti-drift menagih keduanya sejalan.
+        sudah_optimal = False
         for method_name in URUTAN:
             compress_fn = _FUNGSI_KOMPRESI.get(method_name)
             if compress_fn is None:
                 continue    # "pillow" bukan layanan jaringan — ditangani di bawah
             compressed = await compress_fn(image_bytes)
+            if compressed and len(compressed) >= original_size:
+                # Layanan BERHASIL tetapi foto tak bisa diperkecil: foto sudah
+                # optimal. Mencoba layanan berikutnya hanya membakar kuota
+                # Compresto/Uploadcare tanpa hasil — salah satu jalan "1
+                # terhitung di Compresto padahal Tinify masih bersaldo".
+                sudah_optimal = True
+                break
             if compressed and len(compressed) < original_size:
                 compressed_b64 = base64.b64encode(compressed).decode('utf-8')
                 # Tipe diambil dari BITA HASIL. Label `image/jpeg` yang
@@ -357,6 +441,9 @@ async def auto_compress_image(image_data_b64: str) -> tuple:
         # dilempar ke thread sejak lama. Gejalanya tampak seperti "server
         # lambat", bukan seperti kompresi yang memblokir.
         compressed = await asyncio.to_thread(compress_with_pillow, image_bytes)
+        if sudah_optimal and len(compressed) >= original_size:
+            # Foto yang sudah optimal tak dibengkakkan ulang oleh Pillow.
+            return image_data_b64, "none", original_size, original_size
         compressed_b64 = base64.b64encode(compressed).decode('utf-8')
         return (f"data:{_tipe_hasil(compressed)};base64,{compressed_b64}",
                 "pillow", original_size, len(compressed))
@@ -420,6 +507,26 @@ async def get_photo_compression_progress(_user: dict = Depends(require_super_adm
     return await ringkasan_progres()
 
 
+def _terapkan_penolakan(ringkas: dict, quota: dict) -> dict:
+    """Bawa penolakan penyedia (habis / ditahan) ke ringkasan layar."""
+    if not ringkas.get("terpasang"):
+        return ringkas
+    ditahan = _ditahan_sampai(quota)
+    if ditahan:
+        ringkas.update({
+            "status": "sementara", "available": False, "tersedia": False,
+            "ditahan_sampai": ditahan.isoformat(),
+            "kode_http": quota.get("ditahan_kode"),
+            "alasan": (f"Batas laju penyedia — ditahan sampai {ditahan.strftime('%H:%M')} UTC; "
+                       "sementara memakai layanan berikutnya")})
+    elif quota.get("ditutup_penyedia") and ringkas.get("remaining", 1) <= 0:
+        ringkas.update({
+            "status": "kuota", "available": False, "tersedia": False,
+            "kode_http": quota.get("ditutup_penyedia"),
+            "alasan": "Penyedia menyatakan kuota bulan ini habis — memakai layanan berikutnya"})
+    return ringkas
+
+
 @media_router.get("/compression-quotas")
 async def get_all_compression_quotas(_user: dict = Depends(require_user)):
     """Get quota status for ALL compression services."""
@@ -454,7 +561,7 @@ async def get_all_compression_quotas(_user: dict = Depends(require_user)):
                         compresto_quota["used"], SERVICE_LIMITS["compresto"])
     r.update({"name": "Compresto", "available": r["tersedia"],
               "terpasang": bool(COMPRESTO_API_KEY), "month": month})
-    quotas.append(r)
+    quotas.append(_terapkan_penolakan(r, compresto_quota))
 
     # Uploadcare
     uploadcare_quota = await get_quota("uploadcare")
@@ -462,7 +569,7 @@ async def get_all_compression_quotas(_user: dict = Depends(require_user)):
                         uploadcare_quota["used"], SERVICE_LIMITS["uploadcare"])
     r.update({"name": "Uploadcare", "available": r["tersedia"],
               "terpasang": bool(UPLOADCARE_PUBLIC_KEY), "month": month})
-    quotas.append(r)
+    quotas.append(_terapkan_penolakan(r, uploadcare_quota))
 
     # Pillow (always available, unlimited)
     quotas.append({
@@ -487,6 +594,9 @@ async def get_all_compression_quotas(_user: dict = Depends(require_user)):
     # lapangan yang memunculkan perubahan ini.
     # Counter diketahui tetapi provider sedang ditahan/gagal → jangan mengaku
     # Tinify akan dipakai. Kuota historis tetap ditampilkan apa adanya.
-    pilihan_aktif = [q for q in quotas if q["service"] != "tinify" or q["available"]]
+    # Layanan yang sedang DITAHAN penyedia (429) juga dilewati, sama seperti
+    # rantainya — supaya "dipakai" tak menempel pada layanan yang menolak.
+    pilihan_aktif = [q for q in quotas
+                     if (q["service"] != "tinify" or q["available"]) and not q.get("ditahan_sampai")]
     return {"quotas": quotas, "month": month,
             "aktif": layanan_aktif(pilihan_aktif), "urutan": list(URUTAN)}

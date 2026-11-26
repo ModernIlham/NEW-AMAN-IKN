@@ -119,6 +119,15 @@ describe("syarat giliran", () => {
     expect(layakPakai(entri("tinify", { remaining: 0 }))).toBe(false);
   });
 
+  test("ditahan penyedia (429) → dilewati walau sisa masih ada", () => {
+    // Layar pemilik: Compresto 1/500 "dipakai" sambil menolak 429.
+    const ditahan = entri("compresto", { used: 499, remaining: 1, status: "sementara",
+      ditahan_sampai: "2026-11-26T08:00:00+00:00", alasan: "Batas laju penyedia" });
+    const uploadcare = entri("uploadcare", { limit: 1000, used: 66, remaining: 934 });
+    expect(layakPakai(ditahan)).toBe(false);
+    expect(entriAktif([ditahan, uploadcare, pillow()]).service).toBe("uploadcare");
+  });
+
   test("tak terbatas → selalu layak", () => {
     expect(layakPakai(pillow())).toBe(true);
   });
