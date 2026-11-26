@@ -223,6 +223,11 @@ async def _olah_gambar(data: bytes, *, izinkan_jaringan: bool) -> HasilMedia:
         if hasil and len(hasil) < asli:
             return HasilMedia(hasil, _sniff_gambar(hasil), nama_layanan,
                               asli, len(hasil))
+        if hasil:
+            # Layanan berhasil tetapi tak memperkecil: berkas sudah optimal.
+            # Jangan membakar kuota layanan berbayar berikutnya (aturan sama
+            # dengan `routes/media.auto_compress_image`).
+            break
 
     try:
         hasil = await asyncio.to_thread(compress_with_pillow, data)
