@@ -18,6 +18,24 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1159] Kompresi gambar — Compresto tak lagi "tersisa 1" dan tak dipakai saat Tinify masih bersaldo — 2026-11-26
+
+- **Peralihan ke Uploadcare tak lagi tersendat.** Bila Compresto/Uploadcare
+  menolak karena batas (HTTP 429) atau tagihan (402) saat sisa hitungan
+  lokal tinggal sedikit (≤10), angka penyedia yang dipakai: kuota bulan itu
+  dianggap habis. Panel tak lagi menulis "1/500 · dipakai" pada layanan yang
+  menolak, dan rantai langsung memakai layanan berikutnya. Penolakan 429
+  saat sisa masih banyak hanya menahan layanan 15 menit.
+- **Hitungan tak lagi tertinggal dari penyedia.** Permintaan yang putus
+  setelah terkirim (timeout baca, koneksi terputus) kini ikut dihitung,
+  karena penyedia mungkin sudah menagihnya. Kegagalan sebelum terkirim
+  (gagal terhubung) tetap tidak dihitung.
+- **Compresto tak terpakai selagi Tinify bersaldo.** Unggahan yang
+  bersamaan dengan proses lain yang sedang memakai Tinify (mis. pengoptimal
+  foto latar) kini menunggu giliran hingga 12 detik, alih-alih langsung
+  beralih ke Compresto. Foto yang tak bisa diperkecil Tinify (sudah optimal)
+  tidak lagi dikirim ke Compresto/Uploadcare dan disimpan apa adanya.
+
 ## [#1158] Susunan PDF kini juga berlaku untuk Eksekutif per Barang Serupa — 2026-11-26
 
 - Pilihan **Susunan PDF** di Rekapitulasi (Golongan s.d. Sub-sub Kelompok,

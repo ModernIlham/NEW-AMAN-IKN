@@ -57,6 +57,8 @@ export function layakPakai(entri) {
   const e = entri || {};
   if (!e.terpasang) return false;
   if (e.service === "tinify" && ["sementara", "tidak_tersedia", "kuota"].includes(e.status)) return false;
+  // Ditahan penyedia (batas laju 429) → rantai server melewatinya; layar juga.
+  if (e.ditahan_sampai) return false;
   return sisaKuota(e) !== 0;
 }
 

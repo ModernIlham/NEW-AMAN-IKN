@@ -120,7 +120,9 @@ async def test_legacy_lebih_tinggi_tidak_dinolkan(rig):
 
 
 @pytest.mark.asyncio
-async def test_dua_pemanggil_terakhir_tidak_bisa_501(rig):
+async def test_dua_pemanggil_terakhir_tidak_bisa_501(rig, monkeypatch):
+    # Jendela tunggu dipersingkat: yang diuji di sini batas 500, bukan antrean.
+    monkeypatch.setattr(ts, "TUNGGU_LEASE_DETIK", 0.3)
     rig.count = 499
     masuk, lanjut = asyncio.Event(), asyncio.Event()
 
@@ -138,6 +140,41 @@ async def test_dua_pemanggil_terakhir_tidak_bisa_501(rig):
     lanjut.set()
     assert (await first).status == "ok"
     assert rig.count == 500
+
+
+@pytest.mark.asyncio
+async def test_pemanggil_kedua_menunggu_giliran_bukan_beralih(rig, monkeypatch):
+    """Laporan pemilik: Tinify masih bersaldo tetapi 1 foto terhitung di
+    Compresto. Saat lease dipegang pemanggil lain (mis. pengoptimal latar),
+    pemanggil kedua dulu langsung menyerah "sementara" → rantai beralih. Kini
+    ia menunggu giliran dan tetap memakai Tinify."""
+    monkeypatch.setattr(ts, "JEDA_CEK_LEASE", 0.02)
+    masuk, lanjut = asyncio.Event(), asyncio.Event()
+
+    async def tahan(request):
+        if request.url.path == "/shrink" and request.content and not masuk.is_set():
+            masuk.set()
+            await lanjut.wait()
+
+    rig.handler = tahan
+    first = asyncio.create_task(ts.optimalkan(gambar()))
+    await asyncio.wait_for(masuk.wait(), 2)
+    second = asyncio.create_task(ts.optimalkan(gambar()))
+    await asyncio.sleep(0.1)
+    assert not second.done()          # menunggu, tidak menyerah
+    lanjut.set()
+    assert (await first).status == "ok"
+    assert (await asyncio.wait_for(second, 5)).status == "ok"
+    assert rig.count == budget(rig)["used"] == 2
+
+
+@pytest.mark.asyncio
+async def test_status_indikator_tidak_menunggu_lease(rig, monkeypatch):
+    monkeypatch.setattr(ts, "TUNGGU_LEASE_DETIK", 30)
+    rig.database.tinify_budget.insert_one({"_id": "tinify:2026-10", "month": "2026-10",
+        "used": 3, "lease": "worker-lain", "lease_until": rig.now + timedelta(seconds=60)})
+    hasil = await asyncio.wait_for(ts.status_kuota(), 2)
+    assert hasil["status"] == "sementara"
 
 
 @pytest.mark.asyncio

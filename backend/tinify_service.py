@@ -34,6 +34,14 @@ BATAS = 500
 TOTAL_DETIK = 40
 LEASE_DETIK = 90
 JEDA_STATUS = 300
+# Lama MENUNGGU lease yang sedang dipegang pemanggil lain (mis. pengoptimal
+# foto latar). Dulu pemanggil kedua langsung menyerah dengan "sementara",
+# sehingga rantai `routes/media` jatuh ke Compresto padahal Tinify masih
+# bersaldo — laporan pemilik: "Tinify masih ada saldo, tiba-tiba 1 terhitung
+# di Compresto". Satu operasi Tinify lazimnya beberapa detik; lewat jendela
+# ini barulah rantai boleh beralih.
+TUNGGU_LEASE_DETIK = 12.0
+JEDA_CEK_LEASE = 0.25
 MAKS_BITA = 25 * 1024 * 1024
 API = "https://api.tinify.com"
 
@@ -225,6 +233,13 @@ async def _jalankan(data, webp, cadangan, *, hanya_status=False):
         return HasilTinify(status=doc.get("status", "sementara")), doc
     token = uuid.uuid4().hex
     locked = await _klaim(doc, token)
+    if not locked and not hanya_status:
+        # Kompresi sungguhan menunggu giliran sebentar alih-alih membakar
+        # kuota layanan berikutnya. Status (polling indikator) tidak menunggu.
+        batas_tunggu = asyncio.get_running_loop().time() + TUNGGU_LEASE_DETIK
+        while not locked and asyncio.get_running_loop().time() < batas_tunggu:
+            await asyncio.sleep(JEDA_CEK_LEASE)
+            locked = await _klaim(doc, token)
     if not locked:
         return HasilTinify(status="sementara", retry_at=now + timedelta(seconds=LEASE_DETIK)), doc
     doc = locked
