@@ -200,10 +200,14 @@ export default function ReportDownloads({
   const handleDownloadGrouped = async () => {
     setGroupedDownloading(true);
     try {
+      // Filter layar + kolom tambahan + Susunan PDF (sama dengan Data Aset).
+      const params = new URLSearchParams(filterLaporan);
+      if (detailFieldsValue) params.set("detail_fields", detailFieldsValue);
+      if (dataGroupBy) params.set("data_group_by", dataGroupBy);
+      const query = params.toString();
       await downloadFileWithProgress(
-        `${API}/inventory-activities/${activityId}/executive-grouped-pdf${detailFieldsValue ? `?detail_fields=${detailFieldsValue}` : ""}`
-        + (filterLaporan ? `${detailFieldsValue ? "&" : "?"}${filterLaporan}` : ""),
-        "Laporan_Eksekutif_Barang_Serupa.pdf",
+        `${API}/inventory-activities/${activityId}/executive-grouped-pdf${query ? `?${query}` : ""}`,
+        `Laporan_Eksekutif_Barang_Serupa${dataGroupBy ? `_${dataGroupBy}` : ""}.pdf`,
         // Laporan paling berat (agregasi semua aset kegiatan): lewat 45 dtk
         // otomatis dilanjutkan di Pusat Unduhan alih-alih gagal timeout.
         { label: "Laporan Eksekutif per Barang Serupa", timeout: 45000 }
@@ -386,15 +390,18 @@ export default function ReportDownloads({
             </div>
           )}
           <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-1.5" data-testid="pengaturan-pdf-data-aset">
-            <label htmlFor="data-aset-group" className="block text-xs font-medium">Susunan PDF Data Aset</label>
+            <label htmlFor="data-aset-group" className="block text-xs font-medium">Susunan PDF Data Aset &amp; Barang Serupa</label>
             <select id="data-aset-group" data-testid="data-aset-group" value={dataGroupBy}
-              onChange={e => setDataGroupBy(e.target.value)} disabled={dataDownloading !== null || batchDownloading}
+              onChange={e => setDataGroupBy(e.target.value)}
+              disabled={dataDownloading !== null || batchDownloading || groupedDownloading}
               className="w-full min-w-0 min-h-11 rounded-md border border-border bg-background px-2 text-xs text-foreground">
               {dataGroupOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </select>
             <p className="text-[10px] leading-relaxed text-muted-foreground">
-              Berlaku untuk Data Aset, termasuk dalam ZIP. Filter dan sort daftar tetap diikuti.
-              {dataGroupBy ? " Satu dasar per unduhan; sort berlaku di dalam kelompok, dengan urutan kelompok mengikuti kemunculan pertama. Data yang belum diisi tetap ditampilkan." : " Tampilan biasa tanpa pembagi kelompok."}
+              Berlaku untuk Data Aset dan Eksekutif per Barang Serupa, termasuk dalam ZIP. Filter daftar tetap diikuti.
+              {dataGroupBy
+                ? " Satu dasar per unduhan; data yang belum diisi tetap ditampilkan. Data Aset: sort daftar berlaku di dalam kelompok, urutan kelompok mengikuti kemunculan pertama. Barang Serupa: bagian diurutkan menurut abjad dan barang serupa dihitung di dalam tiap bagian."
+                : " Tampilan biasa tanpa pembagi kelompok."}
             </p>
           </div>
           {dataInfo && dataInfo.total_assets > 0 && (

@@ -18,6 +18,24 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1158] Susunan PDF kini juga berlaku untuk Eksekutif per Barang Serupa — 2026-11-26
+
+- Pilihan **Susunan PDF** di Rekapitulasi (Golongan s.d. Sub-sub Kelompok,
+  Lokasi, Pemegang, SPM, Eselon I–V, Supplier, Perolehan, PSP) dulu hanya
+  memengaruhi PDF Data Aset. Kini PDF **Eksekutif per Barang Serupa** ikut
+  disusun per bagian — unduhan tunggal maupun di dalam ZIP. Label pilihan
+  menjadi "Susunan PDF Data Aset & Barang Serupa".
+- Tiap bagian diberi judul (mis. "Lokasi: Gedung A — 3 kelompok · 12 unit ·
+  Rp …"); barang serupa dihitung **di dalam** tiap bagian, jadi satu jenis
+  barang yang tersebar di tiga lokasi tampil di ketiga lokasi itu. Jumlah
+  unit dan nilai total tetap sama dengan tanpa susunan.
+- Kunci bagian sama persis dengan Data Aset (nama Pemegang dari Master
+  Pegawai satker kegiatan, PSP dari register SK ber-scope satker). Bagian
+  diurutkan menurut abjad, bagian yang belum diisi di akhir — laporan ini
+  tetap berurut kode dan tidak mengikuti sort daftar.
+- Batas 2.000 baris kelompok kini juga berlaku sesudah pemecahan per
+  bagian; bila terlampaui laporan ditolak dengan saran, tidak dipotong.
+
 ## [#1156] Mode Kamera — cari kode barang langsung dari Edit Info — 2026-11-24
 
 - Di panel **Edit Info** kamera, Kode Barang kini tampil bersama uraian
