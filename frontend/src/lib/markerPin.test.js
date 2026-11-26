@@ -60,3 +60,21 @@ test("unggahan non-gambar/terlalu besar ditolak sebelum decode", async () => {
   await expect(siapkanIkonPin(new File(["<svg/>"], "x.svg", { type: "image/svg+xml" }))).rejects.toThrow("PNG");
   await expect(siapkanIkonPin({ type: "image/png", size: 3 * 1024 * 1024 })).rejects.toThrow("2 MB");
 });
+
+test("ikon dirender saat dibutuhkan, bukan saat modul dimuat (±400 render dulu)", () => {
+  jest.isolateModules(() => {
+    const server = jest.requireActual("react-dom/server");
+    const render = jest.fn(server.renderToStaticMarkup);
+    jest.doMock("react-dom/server", () => ({ ...server, renderToStaticMarkup: render }));
+    const mp = require("./markerPin");
+    expect(render).not.toHaveBeenCalled();
+    const pin = JSON.stringify({ ...mp.PIN_BAWAAN, icon: "laptop" });
+    expect(mp.opsiPinDesain(pin).html).toContain("lucide-laptop");
+    expect(mp.opsiPinDesain(pin).html).toContain("lucide-laptop");
+    expect(render).toHaveBeenCalledTimes(1);   // disimpan, tak dirender ulang
+    expect(mp.svgIkonPin("tidak-ada")).toBe("");
+    // `Map` di modul ini adalah IKON lucide — id "map" tetap ikon biasa.
+    expect(mp.opsiPinDesain(JSON.stringify({ ...mp.PIN_BAWAAN, icon: "map" })).html).toContain("<svg");
+  });
+  jest.dontMock("react-dom/server");
+});
