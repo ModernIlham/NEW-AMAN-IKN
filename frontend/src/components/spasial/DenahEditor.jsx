@@ -9,6 +9,8 @@
 // DITAWARKAN ke operator, tak pernah diterapkan diam-diam.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import L from "leaflet";
+import { pasangPetaDasar } from "../../lib/petaDasar";
+import { pasangKontrolCitra } from "../../lib/lapisanCitra";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
@@ -136,10 +138,9 @@ export default function DenahEditor({ node, onClose, onSaved }) {
         zoomControl: true, attributionControl: true, maxZoom: 22,
       });
       map.attributionControl.setPrefix(false); // prefiks "Leaflet" opsional; © OpenStreetMap tetap (wajib lisensi)
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 22, maxNativeZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(map);
+      pasangPetaDasar(map);
+      // Citra eksisting: menggambar denah di atas kondisi lapangan terbaru.
+      pasangKontrolCitra(map, { onPesan: (t) => toast.info(t) });
     } catch (e) {
       // Kegagalan init HARUS terlihat operator — bukan spinner tanpa akhir.
       setGalatInit(String(e?.message || e || "Peta gagal dimuat"));

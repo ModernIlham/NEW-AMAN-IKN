@@ -18,6 +18,26 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1165] Lapisan citra kondisi eksisting di peta — siap dipakai, menunggu data citra — 2026-11-27
+
+- Peta dasar OSM di kawasan yang sedang dibangun tertinggal dari kondisi
+  lapangan. Kini admin dapat mendaftarkan foto udara terbaru (drone/ortofoto,
+  sudah dipotong jadi ubin XYZ) di **Hierarki Spasial → Citra Eksisting**, dan
+  setiap pengguna dapat menampilkan atau menyembunyikannya lewat tombol
+  **Eksisting** di Peta Aset (panel: tampil/sembunyi per citra, lompat ke area,
+  transparansi) atau tombol ikon gambar di Peta Kolaborasi, Editor Denah, dan
+  Lokasi Temuan. Tanggal rekam selalu tampil di panel dan atribusi peta.
+- Tetap ringan: saat mati tidak ada satu permintaan pun; ubin hanya diminta di
+  dalam batas wilayah dan rentang zoom citra; ubin disajikan nginx sebagai
+  berkas statis (bukan backend) dan tidak ikut di-cache service worker. Pin aset
+  dan denah selalu di atas citra dan tetap bisa diklik.
+- Citra dibaca bersama lintas satker (rekaman geografis), tetapi hanya admin
+  satker pembuatnya atau super-admin yang dapat mengubahnya; ubah memakai versi.
+  Tombol **Periksa** mendeteksi jalur ubin yang belum disajikan server.
+- Alamat peta dasar OSM yang dulu disalin di empat berkas kini satu sumber
+  (`lib/petaDasar.js`). Panduan menyiapkan & mengunggah citra:
+  `docs/LAPISAN-CITRA-EKSISTING.md`.
+
 ## [#1164] Dashboard di HP tampil lebih cepat — form aset tak lagi dirender saat tersembunyi — 2026-11-26
 
 - Form Tambah/Edit Aset dulu dirender penuh setiap dashboard dibuka walau di

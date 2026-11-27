@@ -358,3 +358,24 @@ test("garis tepi label memakai BAYANGAN, bukan -webkit-text-stroke", () => {
   // Nama panjang membungkus; rata tengah supaya baris kedua tak menggantung.
   expect(aturan).toMatch(/text-align:\s*center/);
 });
+
+test("citra eksisting: mati bawaan tanpa permintaan; dinyalakan → panel + satu permintaan", async () => {
+  const { lupakanDaftarCitra } = require("../../../lib/lapisanCitra");
+  lupakanDaftarCitra();
+  localStorage.removeItem("aman_map_citra");
+  const { fireEvent } = require("@testing-library/react");
+  render(<AssetMapFullView {...propsMinimal()} />);
+  await waitFor(() => expect(axios.get).toHaveBeenCalled());
+  const dariCitra = () => axios.get.mock.calls.filter((c) => /\/peta-lapisan/.test(String(c[0])));
+  const tombol = screen.getByTestId("asset-map-citra-toggle");
+  expect(tombol).toHaveAttribute("aria-pressed", "false");
+  expect(dariCitra()).toHaveLength(0);
+  expect(screen.queryByTestId("asset-map-citra-panel")).not.toBeInTheDocument();
+
+  fireEvent.click(tombol);
+  expect(tombol).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByTestId("asset-map-citra-panel")).toBeInTheDocument();
+  await waitFor(() => expect(dariCitra()).toHaveLength(1));
+  expect(localStorage.getItem("aman_map_citra")).toBe("1");
+  localStorage.removeItem("aman_map_citra");
+});

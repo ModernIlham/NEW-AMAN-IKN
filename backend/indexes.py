@@ -443,6 +443,8 @@ async def create_indexes() -> None:
         # Master Pejabat & Ruangan & Unit Kerja: jalur id (dipakai TTD/lookup).
         await _idx(db.pejabat, "id", unique=True)
         await _idx(db.ruangan, "id", unique=True)
+        # Registri citra eksisting peta: jalur id (ubah/hapus) — koleksi kecil.
+        await _idx(db.peta_lapisan, "id", unique=True)
         await _idx(db.unit_kerja, "id", unique=True)
         # Direktori pegawai LUAR (instansi eksternal & pihak ketiga) — satu
         # direktori untuk seluruh instansi, tanpa kode_satker (rencana 5.5).

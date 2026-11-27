@@ -38,6 +38,9 @@ DIKECUALIKAN = {
         "daftar unduhan disaring per-PENGGUNA (dibuat_oleh), bukan per-satker",
     ("geofence.py", "buat_aturan"):
         "sudah menurunkan satker dari perangkatnya bila pemanggil tak bersatker",
+    ("peta_lapisan.py", "buat_lapisan"):
+        'stempel "" berarti citra PUSAT yang hanya bisa diubah super-admin; '
+        "daftar citra memang dibaca bersama (rekaman geografis), tak di-scope",
 }
 
 GERBANG = {"require_writer_satker", "require_admin_satker"}

@@ -32,6 +32,8 @@
 // default kata-kata/kontrak Wasdal tetap berlaku bagi pemanggil lamanya.
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import L from "leaflet";
+import { pasangPetaDasar } from "../../lib/petaDasar";
+import { pasangKontrolCitra } from "../../lib/lapisanCitra";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
 import { toast } from "sonner";
@@ -163,10 +165,8 @@ export default function LokasiTemuanDialog({
     const urutan = [seqRef, seqDenahRef, seqLantaiRef];
     const map = L.map(wadahRef.current, { zoomControl: true, attributionControl: true, maxZoom: 22 });
     map.attributionControl.setPrefix(false); // prefiks "Leaflet" opsional; © OpenStreetMap tetap (wajib lisensi)
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 22, maxNativeZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
+    pasangPetaDasar(map);
+    pasangKontrolCitra(map, { onPesan: (t) => toast.info(t) });
     map.setView(seed ? [seed.lat, seed.lon] : PUSAT_IKN, seed ? 18 : 15);
     petaRef.current = map;
     if (seed) {

@@ -100,6 +100,9 @@ RESET_KEEP_COLLECTIONS = {
     # dengan mudah — memperlakukannya seperti master referensi (ruangan), bukan
     # data transaksi yang boleh direset.
     "spasial_level", "spasial_node",
+    # Registri citra eksisting peta = konfigurasi (alamat ubin, batas, tanggal
+    # rekam) yang disusun manual; ubinnya sendiri berkas statis di luar DB.
+    "peta_lapisan",
     # Registry perangkat pelacak (Fase 11) = konfigurasi lapangan, bukan
     # transaksi. Token hanya ada sebagai HASH dan tak bisa dilihat ulang, jadi
     # reset yang menghapusnya memaksa provisioning ulang SETIAP perangkat di
