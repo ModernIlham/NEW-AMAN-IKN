@@ -5,7 +5,7 @@ import { TENGGAT_BAKA, muatAndal, pesanGalat } from "@/lib/muatAndal";
 import {
   ArrowLeft, Plus, Pencil, Trash2, Loader2, Layers, ChevronRight, ChevronDown,
   Search, MapPinned, LandPlot, Upload, Download, Boxes, ClipboardCheck,
-  MoreVertical, Gauge, AlertTriangle, RefreshCw,
+  MoreVertical, Gauge, AlertTriangle, RefreshCw, Satellite,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ const ImporDenahDialog = lazy(() => import("@/components/spasial/ImporDenahDialo
 const EksporDenahDialog = lazy(() => import("@/components/spasial/EksporDenahDialog"));
 const IsiNodeDialog = lazy(() => import("@/components/spasial/IsiNodeDialog"));
 const OpnameDialog = lazy(() => import("@/components/spasial/OpnameDialog"));
+const CitraEksistingDialog = lazy(() => import("@/components/spasial/CitraEksistingDialog"));
 
 function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
@@ -44,6 +45,7 @@ const KATEGORI_LANTAI = ["basement", "dasar", "reguler", "mezanin", "atap", "tek
  */
 export default function SpasialMasterPage({ user, onBack }) {
   const isWriter = user?.role !== "viewer";
+  const isAdmin = user?.role === "admin";
   const [levels, setLevels] = useState([]);
   const [nodes, setNodes] = useState([]);
   const [preset, setPreset] = useState("ikn_akrab");
@@ -55,6 +57,7 @@ export default function SpasialMasterPage({ user, onBack }) {
   const [editorNode, setEditorNode] = useState(null);  // node yang denahnya digambar
   const [imporBuka, setImporBuka] = useState(false);   // dialog impor file GIS
   const [eksporBuka, setEksporBuka] = useState(false); // dialog ekspor + template
+  const [citraBuka, setCitraBuka] = useState(false);   // registri citra eksisting (admin)
   const [isiNode, setIsiNode] = useState(null);        // node yang dilihat isinya (Fase 9)
   const [opnameNode, setOpnameNode] = useState(null);  // node yang di-opname via scan (Fase 11)
   const [optimasi, setOptimasi] = useState(false);     // tombol optimasi sedang berjalan
@@ -576,6 +579,11 @@ export default function SpasialMasterPage({ user, onBack }) {
           />
         </Suspense>
       )}
+      {citraBuka && (
+        <Suspense fallback={null}>
+          <CitraEksistingDialog onClose={() => setCitraBuka(false)} />
+        </Suspense>
+      )}
       {eksporBuka && (
         <Suspense fallback={null}>
           <EksporDenahDialog
@@ -622,6 +630,15 @@ export default function SpasialMasterPage({ user, onBack }) {
                     title="Impor denah dari Shapefile / KML / KMZ / GeoJSON"
                     data-testid="spasial-impor">
               <Upload className="w-4 h-4 mr-1" /> Impor
+            </Button>
+          )}
+          {isAdmin && (
+            <Button variant="outline" onClick={() => setCitraBuka(true)} size="sm"
+                    title="Daftarkan foto udara terbaru sebagai lapisan kondisi eksisting di peta"
+                    data-testid="spasial-citra">
+              <Satellite className="w-4 h-4 mr-1" />
+              <span className="hidden sm:inline">Citra Eksisting</span>
+              <span className="sm:hidden">Citra</span>
             </Button>
           )}
           {isWriter && (

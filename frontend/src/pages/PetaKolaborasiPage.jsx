@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
+import { pasangPetaDasar } from "../lib/petaDasar";
+import { pasangKontrolCitra } from "../lib/lapisanCitra";
 import "leaflet/dist/leaflet.css";
 // Clustering marker berdekatan — sama seperti Peta Aset (AssetMapFullView).
 import "leaflet.markercluster";
@@ -506,10 +508,9 @@ export default function PetaKolaborasiPage() {
     const map = L.map(mapElRef.current, { zoomControl: true, attributionControl: true, maxZoom: 22, tapHold: true });
     map.attributionControl.setPrefix(false); // prefiks "Leaflet" opsional; © OpenStreetMap tetap (wajib lisensi)
     map.setView([-1.4, 116.7], 5);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 22, maxNativeZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
+    pasangPetaDasar(map);
+    // Citra eksisting (foto udara terbaru) — tombol di kanan atas, mati bawaan.
+    pasangKontrolCitra(map, { onPesan: (t) => toast.info(t) });
     L.control.scale({ metric: true, imperial: false, maxWidth: 140, position: "bottomleft" }).addTo(map);
 
     // Kompas utara (top-right, tak menutup info).

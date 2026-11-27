@@ -13,6 +13,9 @@ jest.mock("@/components/ui/dialog", () => ({
   DialogTitle: ({ children }) => <h2>{children}</h2>,
   DialogDescription: ({ children }) => <p>{children}</p>,
 }));
+// Kontrol citra eksisting diuji sendiri (lib/__tests__/lapisanCitra.test.js);
+// tiruan Leaflet di sini sengaja dangkal dan tak punya L.Control.
+jest.mock("@/lib/lapisanCitra", () => ({ pasangKontrolCitra: jest.fn(() => () => {}) }));
 jest.mock("leaflet", () => {
   const layer = { addTo: jest.fn().mockReturnThis(), remove: jest.fn(), setLatLng: jest.fn().mockReturnThis() };
   const map = { attributionControl: { setPrefix: jest.fn() }, setView: jest.fn().mockReturnThis(),

@@ -518,6 +518,7 @@ from routes.perencanaan import perencanaan_router
 from routes.penilaian import penilaian_router
 from routes.pejabat import pejabat_router
 from routes.ruangan import ruangan_router
+from routes.peta_lapisan import peta_lapisan_router
 from routes.spasial import spasial_router
 from routes.iot import iot_router
 from routes.geofence import geofence_router
@@ -602,6 +603,7 @@ api_router.include_router(penilaian_router)
 api_router.include_router(pejabat_router)
 api_router.include_router(ruangan_router)
 api_router.include_router(spasial_router)
+api_router.include_router(peta_lapisan_router)  # registri citra eksisting peta
 api_router.include_router(iot_router)          # ingest posisi perangkat (Fase 11)
 api_router.include_router(geofence_router)     # pagar area & peringatan (Fase 12)
 api_router.include_router(opname_router)       # scan stiker → rekonsiliasi opname

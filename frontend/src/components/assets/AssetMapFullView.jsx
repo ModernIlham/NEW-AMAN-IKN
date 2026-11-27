@@ -8,7 +8,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import axios from "axios";
-import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen, LandPlot, Building2, Eye, EyeOff, Gauge, Ruler, Tag } from "lucide-react";
+import { MapPinned, RefreshCw, Loader2, Move, X, Filter, Download, Camera, Layers, ChevronDown, Boxes, MousePointerClick, CheckCheck, Eraser, PencilLine, SquareDashed, Share2, ImageIcon, Lock, LockOpen, LandPlot, Building2, Eye, EyeOff, Gauge, Ruler, Tag, Satellite } from "lucide-react";
 import { toast } from "sonner";
 import { compressImageFile } from "../../lib/imageCompression";
 import {
@@ -35,6 +35,10 @@ import PanelLapanganPeta, { buatTokoPosisi } from "./PanelLapanganPeta";
 import { useBackGuard } from "../../hooks/useBackGuard";
 import { useUkurPeta } from "../../hooks/useUkurPeta";
 import { useDenahSpasial } from "../../hooks/useDenahSpasial";
+import { useLapisanCitra } from "../../hooks/useLapisanCitra";
+import { pasangPetaDasar } from "../../lib/petaDasar";
+import { bacaCitraAktif, simpanCitraAktif } from "../../lib/lapisanCitra";
+import PanelCitraEksisting from "./PanelCitraEksisting";
 import { warnaLevel, ordinalLantai } from "../../lib/spasialDenah";
 import { labelDilepas } from "../../lib/labelRingkas";
 import useLebarElemen from "../../hooks/useLebarElemen";
@@ -358,6 +362,15 @@ const AssetMapFullView = memo(function AssetMapFullView({
   });
   const [legendaBuka, setLegendaBuka] = useState(false);
   const denah = useDenahSpasial(petaSiap ? mapRef.current : null, { aktif: denahOn });
+  // ── Lapisan CITRA EKSISTING (foto udara terbaru di atas OSM) ──
+  // Mati secara bawaan; saat mati tak ada satu permintaan pun. Pilihan disimpan
+  // per perangkat dan dipakai bersama peta lain (lib/lapisanCitra).
+  const [citraOn, setCitraOn] = useState(() => bacaCitraAktif());
+  useEffect(() => { simpanCitraAktif(citraOn); }, [citraOn]);
+  const [panelCitraBuka, setPanelCitraBuka] = useState(() => {
+    try { return window.matchMedia("(min-width: 640px)").matches; } catch { return true; }
+  });
+  const citra = useLapisanCitra(petaSiap ? mapRef.current : null, { aktif: citraOn });
   // Kunci geser marker: default TERKUNCI agar sekadar melihat peta (di layar
   // sentuh maupun mouse) tak sengaja menggeser koordinat aset yang sudah ada.
   // Buka (satu ketuk) hanya saat ingin membetulkan posisi. SENGAJA tak disimpan
@@ -772,11 +785,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
     // yang wajib lisensi ODbL) dan hampir menggandakan lebar kotak atribusi
     // di layar HP yang sempit.
     map.attributionControl.setPrefix(false);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 22,
-      maxNativeZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
+    pasangPetaDasar(map);
     // Grup marker ber-CLUSTER: pin yang saling MEPET (dalam ~44 px) dikumpulkan
     // jadi satu gelembung ber-angka; klik → perbesar ke area anggotanya, dan
     // di zoom maksimum pin yang bertindih di-SPIDERFY (dikipas) agar bisa
@@ -1667,6 +1676,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
     d.push({ kunci: "marker", lebarIkon: 36, label: "Marker: Foto" });
     d.push({ kunci: "label", lebarIkon: 36, label: "Label: Aktif" });
     d.push({ kunci: "denah", lebarIkon: 36, label: "Denah: Aktif" });
+    d.push({ kunci: "citra", lebarIkon: 36, label: "Eksisting: Aktif" });
     d.push({ kunci: "ukur", lebarIkon: 36, label: "Ukur: Aktif" });
     if (groups.length > 0) d.push({ kunci: "grup", lebarIkon: 96, lebarPenuh: 240 });
     d.push({ kunci: "unduh", lebarIkon: 36, label: "Unduh" });
@@ -1935,6 +1945,25 @@ const AssetMapFullView = memo(function AssetMapFullView({
         </button>
         <button
           type="button"
+          onClick={() => setCitraOn((v) => !v)}
+          aria-pressed={citraOn}
+          className={`h-9 rounded-lg border text-xs font-medium flex items-center gap-1 flex-shrink-0 transition-colors ${
+            petaTampil("citra") ? "w-auto px-2.5 justify-start" : "w-9 justify-center"} ${
+            citraOn
+              ? "border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+              : "border-border text-foreground/80 hover:bg-muted"
+          }`}
+          aria-label={citraOn ? "Sembunyikan citra kondisi eksisting" : "Tampilkan citra kondisi eksisting"}
+          title={citraOn
+            ? "Citra eksisting tampil — foto udara terbaru di atas peta dasar"
+            : "Tampilkan citra kondisi eksisting (foto udara terbaru) di atas peta dasar"}
+          data-testid="asset-map-citra-toggle"
+        >
+          <Satellite className="w-3.5 h-3.5" />
+          {petaTampil("citra") && <span>Eksisting: {citraOn ? "Aktif" : "Mati"}</span>}
+        </button>
+        <button
+          type="button"
           onClick={toggleCluster}
           aria-pressed={clusterOn}
           className={`h-9 rounded-lg border text-xs font-medium hidden sm:flex items-center gap-1 flex-shrink-0 transition-colors ${
@@ -2019,7 +2048,7 @@ const AssetMapFullView = memo(function AssetMapFullView({
         </button>
         <button
           type="button"
-          onClick={() => { didFitRef.current = false; load(); setGeserVersi((v) => v + 1); if (denahOn) denah.muatUlang(); }}
+          onClick={() => { didFitRef.current = false; load(); setGeserVersi((v) => v + 1); if (denahOn) denah.muatUlang(); if (citraOn) citra.muatUlang(); }}
           disabled={loading}
           className={`h-9 rounded-lg border border-border text-xs font-medium text-foreground/80 hidden sm:flex items-center gap-1 hover:bg-muted disabled:opacity-50 flex-shrink-0 ${
             petaTampil("muatUlang") ? "w-auto px-2.5 justify-start" : "w-9 px-0 justify-center"}`}
@@ -2146,12 +2175,22 @@ const AssetMapFullView = memo(function AssetMapFullView({
           </div>
         )}
 
-        {/* ── Panel lapis denah (kanan bawah; kiri bawah dipakai bar skala) ──
+        {/* ── Kolom panel lapisan (kanan bawah; kiri bawah dipakai bar skala) ──
+            Panel Citra Eksisting dan Lapis Denah ditumpuk dalam SATU kolom
+            supaya tak saling menimpa saat keduanya menyala. */}
+        {(citraOn || denahOn) && (
+        <div className="absolute right-2 bottom-10 z-[500] max-w-[55%] flex flex-col items-end gap-1.5 pointer-events-none"
+          data-testid="asset-map-kolom-panel">
+        {citraOn && (
+          <PanelCitraEksisting citra={citra} buka={panelCitraBuka}
+            onLipat={() => setPanelCitraBuka((v) => !v)} />
+        )}
+        {/* ── Panel lapis denah ──
             Tiap tingkat bisa disembunyikan sendiri-sendiri — di kawasan padat,
             batas blok & persil sering justru mengaburkan gedung yang dicari. */}
         {denahOn && (
           <div
-            className="absolute right-2 bottom-10 z-[500] w-[9.5rem] sm:w-44 max-w-[55%] rounded-lg border border-border bg-background/95 backdrop-blur shadow-lg overflow-hidden"
+            className="pointer-events-auto w-[9.5rem] sm:w-44 max-w-full rounded-lg border border-border bg-background/95 backdrop-blur shadow-lg overflow-hidden"
             data-peta-panel="denah"
             data-testid="asset-map-denah-panel"
           >
@@ -2234,6 +2273,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
             </>
             )}
           </div>
+        )}
+        </div>
         )}
 
         {/* ── Pemilih lantai (muncul saat sebuah gedung diketuk) ──
