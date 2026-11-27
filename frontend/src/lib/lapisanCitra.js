@@ -1,8 +1,9 @@
-// Lapisan CITRA EKSISTING — foto udara terbaru yang ditumpuk di atas OSM.
+// Lapisan EKSISTING — foto udara terbaru (citra) dan gambar titik/garis/area
+// yang ditumpuk di atas OSM.
 //
 // Peta dasar OSM di kawasan yang sedang dibangun tertinggal dari kondisi
-// lapangan. Admin mendaftarkan citra (drone/ortofoto) yang sudah dipotong jadi
-// ubin XYZ di server; modul ini memasangnya di peta mana pun.
+// lapangan. Admin mengunggah citra (dipotong jadi ubin di peramban) dan
+// menggambar jalan/bangunan baru; modul ini memasangnya di peta mana pun.
 //
 // Aturan performa yang dijaga di sini:
 //   • MATI = nol permintaan. Daftar lapisan baru diambil saat pertama kali
@@ -15,6 +16,7 @@
 import L from "leaflet";
 import axios from "axios";
 import { ZOOM_MAKS_PETA } from "./petaDasar";
+import { batasFitur, buatLabelPeta, buatLayerFitur } from "./gambarPeta";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -63,16 +65,33 @@ export function simpanCitraSembunyi(set) {
   try { localStorage.setItem(KUNCI_CITRA_SEMBUNYI, JSON.stringify([...set])); } catch { /* storage diblokir */ }
 }
 
-// ── Daftar lapisan (sekali per sesi) ────────────────────────────────────────
+// ── Daftar lapisan ──────────────────────────────────────────────────────────
 
 let janjiDaftar = null;
+let waktuAmbil = 0;
+// Token ubin berganti harian (server menerima hingga sehari sesudahnya), jadi
+// daftar diambil ulang bila sudah berumur > 6 jam — tab yang dibiarkan terbuka
+// berhari-hari tak berakhir dengan ubin 403.
+const UMUR_DAFTAR_MS = 6 * 3600 * 1000;
 
-/** Ambil lapisan aktif. Satu permintaan per sesi; gagal → boleh dicoba ulang. */
+/** URL template ubin citra (token dari daftar lapisan). */
+export function urlUbin(l, token) {
+  const t = encodeURIComponent(token || "");
+  return `${API}/peta-lapisan/${l.id}/ubin/{z}/{x}/{y}.${l.format}?t=${t}`;
+}
+
+/** Ambil lapisan aktif (citra + gambar), urut bawah → atas. */
 export function ambilDaftarCitra({ paksa = false } = {}) {
-  if (paksa) janjiDaftar = null;
+  if (paksa || (janjiDaftar && Date.now() - waktuAmbil > UMUR_DAFTAR_MS)) janjiDaftar = null;
   if (!janjiDaftar) {
+    waktuAmbil = Date.now();
     janjiDaftar = axios.get(`${API}/peta-lapisan`, { timeout: 15000 })
-      .then((r) => (Array.isArray(r?.data?.items) ? r.data.items : []).filter(lapisanSah))
+      .then((r) => {
+        const token = r?.data?.ubin_token || "";
+        const items = Array.isArray(r?.data?.items) ? r.data.items : [];
+        return items.filter(lapisanSah)
+          .map((l) => (l.jenis === "citra" ? { ...l, url_template: urlUbin(l, token) } : l));
+      })
       .catch((e) => { janjiDaftar = null; throw e; });
   }
   return janjiDaftar;
@@ -81,26 +100,30 @@ export function ambilDaftarCitra({ paksa = false } = {}) {
 /** Dipanggil setelah admin mengubah registri, agar peta mengambil versi baru. */
 export function lupakanDaftarCitra() { janjiDaftar = null; }
 
-/** Lapisan yang layak dipasang: aktif, beralamat, berbatas & berzoom wajar. */
+/** Lapisan yang layak dipasang. */
 export function lapisanSah(l) {
-  const b = l?.batas;
-  return !!(l && l.aktif !== false && typeof l.url_template === "string" && l.url_template
+  if (!l || l.aktif === false) return false;
+  if (l.jenis === "gambar") return Array.isArray(l.fitur);
+  const b = l.batas;
+  return !!(l.jenis === "citra" && l.status !== "memproses" && l.format
     && b && [b.barat, b.selatan, b.timur, b.utara].every(Number.isFinite)
     && b.barat < b.timur && b.selatan < b.utara
     && Number.isInteger(l.zoom_min) && Number.isInteger(l.zoom_maks) && l.zoom_min <= l.zoom_maks);
 }
 
-/** Batas citra → [[selatan, barat], [utara, timur]] (urutan lat,lng Leaflet). */
+/** Batas lapisan → [[selatan, barat], [utara, timur]] (urutan lat,lng Leaflet). */
 export function batasLeaflet(l) {
+  if (l.jenis === "gambar") return batasFitur(l.fitur);
   const b = l.batas;
   return [[b.selatan, b.barat], [b.utara, b.timur]];
 }
 
-/** Apakah viewport {barat,selatan,timur,utara} beririsan dengan batas citra. */
+/** Apakah viewport {barat,selatan,timur,utara} beririsan dengan lapisan. */
 export function viewportMengenai(l, v) {
-  if (!v || !l?.batas) return false;
-  const b = l.batas;
-  return !(v.timur < b.barat || v.barat > b.timur || v.utara < b.selatan || v.selatan > b.utara);
+  const bl = l ? batasLeaflet(l) : null;
+  if (!v || !bl) return false;
+  const [[s, w], [n, e]] = bl;
+  return !(v.timur < w || v.barat > e || v.utara < s || v.selatan > n);
 }
 
 /** Atribusi yang tampil di sudut peta saat lapisan terpasang. */
@@ -110,58 +133,89 @@ export function atribusiCitra(l) {
   return `Citra eksisting: ${[asal, tgl].filter(Boolean).join(", ")}`;
 }
 
-/** Opsi L.tileLayer untuk satu lapisan. */
+/** Opsi L.tileLayer untuk satu lapisan citra. */
 export function opsiUbinCitra(l, opasitas) {
   return {
     pane: PANE_CITRA,
     bounds: batasLeaflet(l),
-    minZoom: l.zoom_min,
+    // Di bawah zoom terendah ubin, Leaflet memakai ubin zoom terendah yang
+    // diperkecil (minNativeZoom) — jumlah ubinnya tetap sama sedikitnya.
+    minZoom: Math.max(0, l.zoom_min - 5),
     minNativeZoom: l.zoom_min,
     maxNativeZoom: l.zoom_maks,
     maxZoom: ZOOM_MAKS_PETA,
-    opacity: opasitas ?? l.opasitas ?? 0.85,
+    opacity: opasitas ?? l.opasitas ?? 1,
     attribution: atribusiCitra(l),
-    // Lapisan yang lebih baru ditumpuk di atas yang lama di wilayah yang sama.
-    zIndex: Number(String(l.tanggal_rekam || "").replace(/\D/g, "")) || 1,
+    zIndex: Number(l.urutan) || 1,   // urutan dari admin: makin besar makin atas
   };
 }
 
-/** Urutan tampil di panel: terbaru dulu. */
+/** Urutan tampil di panel: paling ATAS dulu (gambar di atas citra). */
 export function urutCitra(daftar) {
-  return [...daftar].sort((a, b) => String(b.tanggal_rekam).localeCompare(String(a.tanggal_rekam))
-    || String(a.nama).localeCompare(String(b.nama)));
+  const nilai = (l) => (l.jenis === "gambar" ? 100000 : 0) + (Number(l.urutan) || 0);
+  return [...daftar].sort((a, b) => nilai(b) - nilai(a));
 }
 
 // ── Pengelola layer pada satu peta (tanpa React) ────────────────────────────
 
+export const PANE_GAMBAR = "gambarEksisting";
+export const PANE_GAMBAR_Z = 390;     // di atas denah (380), di bawah overlay (400) & pin (600)
+export const PANE_LABEL = "labelEksisting";
+export const PANE_LABEL_Z = 395;
+
+function siapkanPane(map, nama, z) {
+  if (!map.getPane(nama)) {
+    const p = map.createPane(nama);
+    p.style.zIndex = String(z);
+    p.style.pointerEvents = "none"; // lapisan eksisting hanya latar — klik tembus
+  }
+}
+
 /**
- * Pengelola lapisan citra untuk satu instance peta.
+ * Pengelola lapisan eksisting untuk satu instance peta.
  * `atur(daftar, {sembunyi, opasitas})` menyamakan layer terpasang dengan
- * keadaan yang diminta; `lepas()` mencabut semuanya.
+ * keadaan yang diminta (opasitas = pilihan pengguna untuk CITRA); `lepas()`
+ * mencabut semuanya.
  */
 export function buatPengelolaCitra(map) {
-  const layer = new Map(); // id → L.TileLayer   (Map bawaan JS)
-  if (!map.getPane(PANE_CITRA)) {
-    const p = map.createPane(PANE_CITRA);
-    p.style.zIndex = String(PANE_CITRA_Z);
-    p.style.pointerEvents = "none"; // citra hanya latar — klik tembus ke peta
-  }
+  const layer = new Map(); // id → {jenis, ly, label?, versi}   (Map bawaan JS)
+  siapkanPane(map, PANE_CITRA, PANE_CITRA_Z);
+  siapkanPane(map, PANE_GAMBAR, PANE_GAMBAR_Z);
+  siapkanPane(map, PANE_LABEL, PANE_LABEL_Z);
+  const lepasSatu = (id) => {
+    const it = layer.get(id);
+    if (!it) return;
+    try { it.label?.lepas(); } catch { /* peta dilepas */ }
+    map.removeLayer(it.ly);
+    layer.delete(id);
+  };
   return {
     atur(daftar, { sembunyi = new Set(), opasitas = null } = {}) {
       const mau = new Map(daftar.filter((l) => !sembunyi.has(String(l.id))).map((l) => [String(l.id), l]));
-      for (const [id, ly] of layer) {
-        if (!mau.has(id)) { map.removeLayer(ly); layer.delete(id); }
+      for (const id of [...layer.keys()]) {
+        const l = mau.get(id);
+        if (!l || l.version !== layer.get(id).versi) lepasSatu(id);
       }
       for (const [id, l] of mau) {
         const ada = layer.get(id);
-        if (ada) { ada.setOpacity(opasitas ?? l.opasitas ?? 0.85); continue; }
-        const ly = L.tileLayer(l.url_template, opsiUbinCitra(l, opasitas)).addTo(map);
-        layer.set(id, ly);
+        if (l.jenis === "citra") {
+          if (ada) { ada.ly.setOpacity(opasitas ?? l.opasitas ?? 1); ada.ly.setZIndex(Number(l.urutan) || 1); continue; }
+          layer.set(id, { jenis: "citra", versi: l.version, ly: L.tileLayer(l.url_template, opsiUbinCitra(l, opasitas)).addTo(map) });
+        } else if (!ada) {
+          const renderer = L.svg({ pane: PANE_GAMBAR, padding: 0.3 });
+          const grup = L.featureGroup(l.fitur.map((f) => buatLayerFitur(f, { renderer, pane: PANE_GAMBAR }))).addTo(map);
+          const label = buatLabelPeta(map, { renderer, paneLabel: PANE_LABEL, zoomMin: l.label_zoom_min ?? 15 });
+          label.atur(l.fitur);
+          layer.set(id, { jenis: "gambar", versi: l.version, ly: grup, label, urutan: Number(l.urutan) || 0 });
+        }
       }
+      // Urutan tumpukan gambar: bawah → atas sesuai `urutan` admin.
+      [...layer.values()].filter((it) => it.jenis === "gambar")
+        .sort((a, b) => a.urutan - b.urutan)
+        .forEach((it) => { try { it.ly.bringToFront(); } catch { /* belum dirender */ } });
     },
     lepas() {
-      for (const ly of layer.values()) map.removeLayer(ly);
-      layer.clear();
+      for (const id of [...layer.keys()]) lepasSatu(id);
     },
     jumlahTerpasang: () => layer.size,
   };
@@ -172,7 +226,7 @@ export function buatPengelolaCitra(map) {
 const IKON_CITRA = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4 6-6-4-4Z"/><path d="m16 8 3-3"/><path d="M9 21a6 6 0 0 0-6-6"/></svg>';
 
 /**
- * Tombol Leaflet "Citra eksisting" (pojok kanan atas) untuk Peta Kolaborasi,
+ * Tombol Leaflet "Lapisan eksisting" (pojok kanan atas) untuk Peta Kolaborasi,
  * Editor Denah, dan Lokasi Temuan. Berbagi preferensi dengan tombol di Peta
  * Aset. Opasitas & pilihan per lapisan diatur dari Peta Aset.
  * Kembalikan fungsi pembersih.
@@ -188,7 +242,7 @@ export function pasangKontrolCitra(map, { posisi = "topright", onPesan } = {}) {
     tombol.setAttribute("aria-pressed", aktif ? "true" : "false");
     tombol.style.color = aktif ? "#b45309" : "#334155";
     tombol.style.background = aktif ? "#fef3c7" : "#fff";
-    tombol.title = judul || (aktif ? "Sembunyikan citra eksisting" : "Tampilkan citra eksisting");
+    tombol.title = judul || (aktif ? "Sembunyikan lapisan eksisting" : "Tampilkan lapisan eksisting");
   };
 
   const terapkan = async () => {
@@ -199,13 +253,13 @@ export function pasangKontrolCitra(map, { posisi = "topright", onPesan } = {}) {
       try { pengelola.atur(daftar, { sembunyi: bacaCitraSembunyi(), opasitas: bacaOpasitasCitra() }); }
       catch { return; /* peta dilepas di tengah jalan */ }
       if (daftar.length === 0) {
-        segarkanTombol("Belum ada citra eksisting terdaftar");
-        onPesan?.("Belum ada citra eksisting yang didaftarkan admin.");
+        segarkanTombol("Belum ada lapisan eksisting");
+        onPesan?.("Belum ada lapisan eksisting.");
       } else {
-        segarkanTombol(`Citra eksisting tampil (${daftar.length} lapisan)`);
+        segarkanTombol(`Lapisan eksisting tampil (${daftar.length})`);
       }
     } catch {
-      if (hidup) { segarkanTombol("Daftar citra gagal dimuat"); onPesan?.("Daftar citra eksisting gagal dimuat."); }
+      if (hidup) { segarkanTombol("Lapisan eksisting gagal dimuat"); onPesan?.("Lapisan eksisting gagal dimuat."); }
     }
   };
 
@@ -216,7 +270,7 @@ export function pasangKontrolCitra(map, { posisi = "topright", onPesan } = {}) {
       b.href = "#";
       b.setAttribute("role", "button");
       b.setAttribute("data-testid", "peta-citra-toggle");
-      b.setAttribute("aria-label", "Citra eksisting");
+      b.setAttribute("aria-label", "Lapisan eksisting");
       b.innerHTML = IKON_CITRA;
       b.style.cssText = "display:flex;align-items:center;justify-content:center";
       L.DomEvent.disableClickPropagation(wadah);
@@ -224,7 +278,7 @@ export function pasangKontrolCitra(map, { posisi = "topright", onPesan } = {}) {
         L.DomEvent.preventDefault(e);
         aktif = !aktif;
         simpanCitraAktif(aktif);
-        segarkanTombol(aktif ? "Memuat citra eksisting…" : undefined);
+        segarkanTombol(aktif ? "Memuat lapisan eksisting…" : undefined);
         terapkan();
       });
       tombol = b;
@@ -242,52 +296,4 @@ export function pasangKontrolCitra(map, { posisi = "topright", onPesan } = {}) {
     try { pengelola.lepas(); } catch { /* peta sudah dilepas */ }
     try { kontrol.remove(); } catch { /* peta sudah dilepas */ }
   };
-}
-
-// ── Pemeriksaan ubin (dialog admin) ─────────────────────────────────────────
-
-/** Koordinat ubin XYZ (skema Google/OSM) yang memuat titik lon/lat pada zoom z. */
-export function ubinUntukTitik(lon, lat, z) {
-  const n = 2 ** z;
-  const latRad = (Math.max(-85.0511, Math.min(85.0511, lat)) * Math.PI) / 180;
-  const x = Math.floor(((lon + 180) / 360) * n);
-  const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n);
-  return { z, x: Math.min(n - 1, Math.max(0, x)), y: Math.min(n - 1, Math.max(0, y)) };
-}
-
-/** Isi {z}/{x}/{y} (dan {s} → "a") pada alamat ubin. */
-export function isiAlamatUbin(template, { z, x, y }) {
-  return String(template).replace(/\{z\}/g, z).replace(/\{x\}/g, x).replace(/\{y\}/g, y).replace(/\{s\}/g, "a");
-}
-
-/**
- * Periksa satu ubin di TENGAH batas citra pada zoom maksimum. Hanya untuk
- * alamat lokal ("/…"): alamat luar umumnya terhalang CORS untuk dibaca.
- * Mengembalikan {status: "ok"|"html"|"hilang"|"galat"|"luar", url, pesan}.
- *
- * "html" adalah jebakan utama: tanpa blok nginx yang benar, jalur yang tak
- * ada jatuh ke fallback SPA dan dijawab index.html berstatus 200 — terlihat
- * "berhasil" padahal tak satu ubin pun tersaji.
- */
-export async function periksaUbinCitra(l, { fetchFn = typeof fetch === "function" ? fetch : null } = {}) {
-  const b = l.batas;
-  const t = ubinUntukTitik((b.barat + b.timur) / 2, (b.selatan + b.utara) / 2, l.zoom_maks);
-  const url = isiAlamatUbin(l.url_template, t);
-  if (!String(l.url_template).startsWith("/")) {
-    return { status: "luar", url, pesan: "Alamat di luar server ini — buka tautan contoh untuk memeriksa." };
-  }
-  if (!fetchFn) return { status: "galat", url, pesan: "Peramban tidak mendukung pemeriksaan." };
-  try {
-    const r = await fetchFn(url, { method: "GET", cache: "no-store", credentials: "same-origin" });
-    const jenis = String(r.headers?.get?.("content-type") || "").toLowerCase();
-    if (r.status === 404) return { status: "hilang", url, pesan: "Ubin contoh tidak ditemukan (404). Periksa folder ubin dan alamatnya." };
-    if (!r.ok) return { status: "galat", url, pesan: `Server menjawab ${r.status}.` };
-    if (jenis.includes("text/html")) {
-      return { status: "html", url, pesan: "Server menjawab halaman web, bukan gambar — jalur ubin belum disajikan nginx." };
-    }
-    if (!jenis.startsWith("image/")) return { status: "galat", url, pesan: `Jenis berkas tak dikenal: ${jenis || "kosong"}.` };
-    return { status: "ok", url, pesan: "Ubin contoh tersaji dengan benar." };
-  } catch {
-    return { status: "galat", url, pesan: "Ubin contoh gagal diambil (jaringan)." };
-  }
 }

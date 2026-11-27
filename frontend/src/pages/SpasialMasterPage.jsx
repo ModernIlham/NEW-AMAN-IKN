@@ -27,7 +27,7 @@ const ImporDenahDialog = lazy(() => import("@/components/spasial/ImporDenahDialo
 const EksporDenahDialog = lazy(() => import("@/components/spasial/EksporDenahDialog"));
 const IsiNodeDialog = lazy(() => import("@/components/spasial/IsiNodeDialog"));
 const OpnameDialog = lazy(() => import("@/components/spasial/OpnameDialog"));
-const CitraEksistingDialog = lazy(() => import("@/components/spasial/CitraEksistingDialog"));
+const LapisanEksistingDialog = lazy(() => import("@/components/spasial/LapisanEksistingDialog"));
 
 function getApiError(err, fallback) {
   return err?.response?.data?.detail || fallback;
@@ -581,7 +581,7 @@ export default function SpasialMasterPage({ user, onBack }) {
       )}
       {citraBuka && (
         <Suspense fallback={null}>
-          <CitraEksistingDialog onClose={() => setCitraBuka(false)} />
+          <LapisanEksistingDialog onClose={() => setCitraBuka(false)} />
         </Suspense>
       )}
       {eksporBuka && (
@@ -634,11 +634,11 @@ export default function SpasialMasterPage({ user, onBack }) {
           )}
           {isAdmin && (
             <Button variant="outline" onClick={() => setCitraBuka(true)} size="sm"
-                    title="Daftarkan foto udara terbaru sebagai lapisan kondisi eksisting di peta"
+                    title="Citra dan gambar kondisi lapangan terbaru di atas peta"
                     data-testid="spasial-citra">
               <Satellite className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">Citra Eksisting</span>
-              <span className="sm:hidden">Citra</span>
+              <span className="hidden sm:inline">Lapisan Eksisting</span>
+              <span className="sm:hidden">Eksisting</span>
             </Button>
           )}
           {isWriter && (

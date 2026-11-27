@@ -36,7 +36,7 @@ export function useLapisanCitra(peta, { aktif = false } = {}) {
     setGalat("");
     ambilDaftarCitra({ paksa: versi > 0 })
       .then((d) => { if (!batal) setDaftar(urutCitra(d)); })
-      .catch(() => { if (!batal) setGalat("Daftar citra eksisting gagal dimuat"); })
+      .catch(() => { if (!batal) setGalat("Lapisan eksisting gagal dimuat"); })
       .finally(() => { if (!batal) setMemuat(false); });
     return () => { batal = true; };
   }, [aktif, versi]);
@@ -86,7 +86,9 @@ export function useLapisanCitra(peta, { aktif = false } = {}) {
 
   const menuju = useCallback((l) => {
     if (!peta || !l) return;
-    try { peta.fitBounds(L.latLngBounds(batasLeaflet(l)), { maxZoom: Math.min(l.zoom_maks, 18) }); }
+    const bb = batasLeaflet(l);
+    if (!bb) return;
+    try { peta.fitBounds(L.latLngBounds(bb), { maxZoom: Math.min(l.zoom_maks ?? 18, 18), padding: [20, 20] }); }
     catch { /* peta sudah dilepas */ }
   }, [peta]);
 
@@ -97,7 +99,7 @@ export function useLapisanCitra(peta, { aktif = false } = {}) {
     tampil: !sembunyi.has(String(l.id)),
     diArea: viewportMengenai(l, vp),
   }));
-  const opasitasTampil = opasitas ?? (daftar[0]?.opasitas ?? 0.85);
+  const opasitasTampil = opasitas ?? (daftar.find((l) => l.jenis === "citra")?.opasitas ?? 1);
 
   return { lapis, memuat, galat, opasitas: opasitasTampil, setOpasitas, toggleLapisan, menuju, muatUlang };
 }

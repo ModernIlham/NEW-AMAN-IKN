@@ -10,12 +10,13 @@ function citraPalsu(tambahan = {}) {
   };
 }
 
-const L1 = { id: "c1", nama: "Citra KIPP", tanggal_rekam: "2026-10-15", tampil: true, diArea: true };
-const L2 = { id: "c0", nama: "Citra Mei", tanggal_rekam: "2026-05-01", tampil: false, diArea: false };
+const L1 = { id: "c1", jenis: "citra", nama: "Citra KIPP", tanggal_rekam: "2026-10-15", tampil: true, diArea: true };
+const L2 = { id: "c0", jenis: "citra", nama: "Citra Mei", tanggal_rekam: "2026-05-01", tampil: false, diArea: false };
+const G1 = { id: "g1", jenis: "gambar", nama: "Jalan baru", fitur: [{}, {}], tampil: true, diArea: true };
 
 test("tanpa citra terdaftar: arahkan admin ke tempat mendaftarkannya", () => {
   render(<PanelCitraEksisting citra={citraPalsu()} buka onLipat={() => {}} />);
-  expect(screen.getByTestId("citra-kosong")).toHaveTextContent(/Hierarki Spasial/);
+  expect(screen.getByTestId("citra-kosong")).toHaveTextContent(/Hierarki Spasial → Lapisan Eksisting/);
   expect(screen.queryByTestId("citra-opasitas")).not.toBeInTheDocument();
 });
 
@@ -33,11 +34,17 @@ test("daftar citra: tanggal, penanda di luar layar, saklar, lompat, transparansi
   expect(citra.setOpasitas).toHaveBeenCalledWith(0.4);
 });
 
-test("terlipat: hanya kepala + tanggal citra terbaru", () => {
+test("gambar: jumlah objek tampil, pengatur opasitas citra tidak (tak ada citra)", () => {
+  render(<PanelCitraEksisting citra={citraPalsu({ lapis: [G1] })} buka onLipat={() => {}} />);
+  expect(screen.getByTestId("citra-lapis-g1")).toHaveTextContent("2 objek");
+  expect(screen.queryByTestId("citra-opasitas")).not.toBeInTheDocument();
+});
+
+test("terlipat: hanya kepala + jumlah lapisan", () => {
   const onLipat = jest.fn();
-  render(<PanelCitraEksisting citra={citraPalsu({ lapis: [L1] })} buka={false} onLipat={onLipat} />);
+  render(<PanelCitraEksisting citra={citraPalsu({ lapis: [L1, G1] })} buka={false} onLipat={onLipat} />);
   expect(screen.queryByTestId("citra-lapis-c1")).not.toBeInTheDocument();
-  expect(screen.getByTestId("citra-panel-lipat")).toHaveTextContent("15 Okt 2026");
+  expect(screen.getByTestId("citra-panel-lipat")).toHaveTextContent("2 lapis");
   fireEvent.click(screen.getByTestId("citra-panel-lipat"));
   expect(onLipat).toHaveBeenCalled();
 });

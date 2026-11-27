@@ -49,6 +49,7 @@ memory/test_credentials.md
 
 # ----- Runtime uploads (keep only the bundled default logo) -----
 /backend/uploads/*
+/backend/data_ubin/
 !/backend/uploads/logos
 /backend/uploads/logos/*
 !/backend/uploads/logos/default_logo.png

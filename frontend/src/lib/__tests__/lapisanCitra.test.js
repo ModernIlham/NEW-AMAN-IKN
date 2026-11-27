@@ -1,18 +1,24 @@
 import axios from "axios";
 import L from "leaflet";
 import {
-  ambilDaftarCitra, atribusiCitra, buatPengelolaCitra, formatTanggalCitra, isiAlamatUbin,
-  lapisanSah, lupakanDaftarCitra, opsiUbinCitra, pasangKontrolCitra, periksaUbinCitra,
-  PANE_CITRA, PANE_CITRA_Z, ubinUntukTitik, urutCitra, viewportMengenai, KUNCI_CITRA_AKTIF,
+  ambilDaftarCitra, atribusiCitra, buatPengelolaCitra, formatTanggalCitra,
+  lapisanSah, lupakanDaftarCitra, opsiUbinCitra, pasangKontrolCitra, urlUbin,
+  PANE_CITRA, PANE_CITRA_Z, PANE_GAMBAR, PANE_GAMBAR_Z, urutCitra, viewportMengenai, KUNCI_CITRA_AKTIF,
 } from "../lapisanCitra";
 
 jest.mock("axios", () => ({ get: jest.fn() }));
 
 const CITRA = {
-  id: "c1", nama: "Citra KIPP", sumber: "Tim Satker", tanggal_rekam: "2026-10-15",
-  url_template: "/uploads/ubin/kipp/{z}/{x}/{y}.webp",
+  id: "c1", jenis: "citra", version: 1, urutan: 2, nama: "Citra KIPP", sumber: "Tim Satker",
+  tanggal_rekam: "2026-10-15", format: "webp", status: "siap",
+  url_template: "/api/peta-lapisan/c1/ubin/{z}/{x}/{y}.webp?t=x",
   batas: { barat: 116.69, selatan: -0.98, timur: 116.72, utara: -0.95 },
   zoom_min: 14, zoom_maks: 20, opasitas: 0.8, aktif: true,
+};
+const GAMBAR = {
+  id: "g1", jenis: "gambar", version: 1, urutan: 1, nama: "Jalan baru", aktif: true, label_zoom_min: 15,
+  fitur: [{ id: "f1", tipe: "garis", geometri: { type: "LineString", coordinates: [[116.70, -0.96], [116.71, -0.965]] },
+    gaya: { warna: "#ff0000", tebal: 4 }, label: { teks: "Jl. Baru", posisi: "tengah" } }],
 };
 
 function petaPalsu() {
@@ -53,7 +59,9 @@ describe("format & validasi", () => {
     expect(lapisanSah({ ...CITRA, aktif: false })).toBe(false);
     expect(lapisanSah({ ...CITRA, batas: { ...CITRA.batas, barat: 117 } })).toBe(false);
     expect(lapisanSah({ ...CITRA, zoom_min: 21 })).toBe(false);
-    expect(lapisanSah({ ...CITRA, url_template: "" })).toBe(false);
+    expect(lapisanSah({ ...CITRA, status: "memproses" })).toBe(false);
+    expect(lapisanSah(GAMBAR)).toBe(true);
+    expect(lapisanSah({ ...GAMBAR, fitur: null })).toBe(false);
   });
 
   test("viewport di luar batas terdeteksi", () => {
@@ -66,9 +74,18 @@ describe("format & validasi", () => {
     expect(atribusiCitra(CITRA)).toBe("Citra eksisting: Tim Satker, 15 Okt 2026");
   });
 
-  test("terbaru di atas", () => {
-    const lama = { ...CITRA, id: "c0", tanggal_rekam: "2026-05-01" };
-    expect(urutCitra([lama, CITRA]).map((l) => l.id)).toEqual(["c1", "c0"]);
+  test("urutan panel: gambar di atas citra, lalu menurut urutan admin", () => {
+    const bawah = { ...CITRA, id: "c0", urutan: 1 };
+    expect(urutCitra([bawah, CITRA, GAMBAR]).map((l) => l.id)).toEqual(["g1", "c1", "c0"]);
+  });
+
+  test("viewport & batas lapisan gambar dihitung dari objeknya", () => {
+    expect(viewportMengenai(GAMBAR, { barat: 116.705, selatan: -0.97, timur: 116.72, utara: -0.95 })).toBe(true);
+    expect(viewportMengenai(GAMBAR, { barat: 117, selatan: -1, timur: 117.1, utara: -0.9 })).toBe(false);
+  });
+
+  test("alamat ubin memuat token", () => {
+    expect(urlUbin(CITRA, "1.ab")).toMatch(/\/peta-lapisan\/c1\/ubin\/\{z\}\/\{x\}\/\{y\}\.webp\?t=1\.ab$/);
   });
 });
 
@@ -76,13 +93,17 @@ describe("opsi ubin menjaga performa", () => {
   test("ubin dibatasi wilayah & zoom, di pane antara OSM dan denah", () => {
     const o = opsiUbinCitra(CITRA);
     expect(o.bounds).toEqual([[-0.98, 116.69], [-0.95, 116.72]]);
-    expect(o.minZoom).toBe(14);
+    expect(o.minZoom).toBe(9);           // ubin z14 diperkecil s.d. 5 level di bawahnya
+    expect(o.minNativeZoom).toBe(14);
     expect(o.maxNativeZoom).toBe(20);
     expect(o.maxZoom).toBe(22);
     expect(o.opacity).toBe(0.8);
+    expect(o.zIndex).toBe(2);            // urutan admin
     expect(o.pane).toBe(PANE_CITRA);
     expect(PANE_CITRA_Z).toBeGreaterThan(200); // di atas tilePane OSM
     expect(PANE_CITRA_Z).toBeLessThan(380);    // di bawah denah & pin
+    expect(PANE_GAMBAR_Z).toBeGreaterThan(380);  // gambar di atas denah…
+    expect(PANE_GAMBAR_Z).toBeLessThan(600);     // …tapi di bawah pin aset
   });
 
   test("opasitas pilihan pengguna menimpa bawaan", () => {
@@ -95,7 +116,7 @@ describe("pengelola layer", () => {
     const map = petaPalsu();
     const p = buatPengelolaCitra(map);
     expect(map.pane[PANE_CITRA].style.zIndex).toBe(String(PANE_CITRA_Z));
-    const lain = { ...CITRA, id: "c2", url_template: "/uploads/ubin/b/{z}/{x}/{y}.webp" };
+    const lain = { ...CITRA, id: "c2" };
     p.atur([CITRA, lain]);
     expect(p.jumlahTerpasang()).toBe(2);
     const [pertama] = [...map.lapis];
@@ -108,12 +129,30 @@ describe("pengelola layer", () => {
   });
 });
 
+test("pengelola memasang lapisan gambar & membuat ulang saat versinya berubah", () => {
+  const map = petaPalsu();
+  map.getZoom = () => 16;
+  map.latLngToLayerPoint = () => ({ x: 0, y: 0 });
+  const p = buatPengelolaCitra(map);
+  expect(map.pane[PANE_GAMBAR].style.zIndex).toBe(String(PANE_GAMBAR_Z));
+  p.atur([GAMBAR]);
+  const grup = [...map.lapis].find((l) => l instanceof L.FeatureGroup);
+  expect(grup.getLayers()).toHaveLength(1);
+  // label "tengah" dipasang sebagai penanda teks
+  expect([...map.lapis].some((l) => l instanceof L.Marker)).toBe(true);
+  p.atur([{ ...GAMBAR, version: 2 }]);
+  expect(map.lapis.has(grup)).toBe(false);
+  p.lepas();
+  expect(map.lapis.size).toBe(0);
+});
+
 describe("daftar lapisan", () => {
   test("diambil sekali per sesi dan menyaring yang tak sah", async () => {
-    axios.get.mockResolvedValue({ data: { items: [CITRA, { ...CITRA, id: "rusak", batas: null }] } });
+    axios.get.mockResolvedValue({ data: { ubin_token: "9.zz", items: [CITRA, { ...CITRA, id: "rusak", batas: null }, GAMBAR] } });
     const a = await ambilDaftarCitra();
     const b = await ambilDaftarCitra();
-    expect(a.map((l) => l.id)).toEqual(["c1"]);
+    expect(a.map((l) => l.id)).toEqual(["c1", "g1"]);
+    expect(a[0].url_template).toMatch(/\?t=9\.zz$/);
     expect(b).toBe(a);
     expect(axios.get).toHaveBeenCalledTimes(1);
   });
@@ -152,7 +191,7 @@ describe("kontrol citra untuk peta lain", () => {
     const pesan = jest.fn();
     pasangKontrolCitra(petaPalsu(), { onPesan: pesan });
     await new Promise((r) => setTimeout(r, 0));
-    expect(pesan).toHaveBeenCalledWith(expect.stringMatching(/Belum ada citra/));
+    expect(pesan).toHaveBeenCalledWith(expect.stringMatching(/Belum ada lapisan/));
   });
 
   test("peta dilepas sebelum daftar tiba → tak ada layer dipasang", async () => {
@@ -165,32 +204,5 @@ describe("kontrol citra untuk peta lain", () => {
     lepas({ data: { items: [CITRA] } });
     await new Promise((r) => setTimeout(r, 0));
     expect([...map.lapis].some((l) => l instanceof L.TileLayer)).toBe(false);
-  });
-});
-
-describe("pemeriksaan ubin", () => {
-  test("koordinat ubin sesuai skema XYZ", () => {
-    expect(ubinUntukTitik(0, 0, 1)).toEqual({ z: 1, x: 1, y: 1 });
-    expect(ubinUntukTitik(-180, 85, 2)).toEqual({ z: 2, x: 0, y: 0 });
-    expect(isiAlamatUbin("https://{s}.a/{z}/{x}/{y}.png", { z: 3, x: 4, y: 5 })).toBe("https://a.a/3/4/5.png");
-  });
-
-  const jawab = (status, jenis) => jest.fn(async () => ({
-    status, ok: status >= 200 && status < 300, headers: { get: () => jenis },
-  }));
-
-  test("fallback SPA (HTML 200) dikenali sebagai belum disajikan", async () => {
-    const r = await periksaUbinCitra(CITRA, { fetchFn: jawab(200, "text/html; charset=utf-8") });
-    expect(r.status).toBe("html");
-    expect(r.url).toMatch(/^\/uploads\/ubin\/kipp\/20\/\d+\/\d+\.webp$/);
-  });
-
-  test("gambar → ok, 404 → hilang, alamat luar → tak diambil", async () => {
-    expect((await periksaUbinCitra(CITRA, { fetchFn: jawab(200, "image/webp") })).status).toBe("ok");
-    expect((await periksaUbinCitra(CITRA, { fetchFn: jawab(404, "text/html") })).status).toBe("hilang");
-    const f = jawab(200, "image/png");
-    const luar = await periksaUbinCitra({ ...CITRA, url_template: "https://ubin.contoh.id/{z}/{x}/{y}.png" }, { fetchFn: f });
-    expect(luar.status).toBe("luar");
-    expect(f).not.toHaveBeenCalled();
   });
 });
