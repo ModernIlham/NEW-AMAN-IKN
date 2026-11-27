@@ -1953,10 +1953,8 @@ const AssetMapFullView = memo(function AssetMapFullView({
               ? "border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-400"
               : "border-border text-foreground/80 hover:bg-muted"
           }`}
-          aria-label={citraOn ? "Sembunyikan citra kondisi eksisting" : "Tampilkan citra kondisi eksisting"}
-          title={citraOn
-            ? "Citra eksisting tampil — foto udara terbaru di atas peta dasar"
-            : "Tampilkan citra kondisi eksisting (foto udara terbaru) di atas peta dasar"}
+          aria-label={citraOn ? "Sembunyikan lapisan kondisi eksisting" : "Tampilkan lapisan kondisi eksisting"}
+          title={citraOn ? "Lapisan eksisting tampil" : "Tampilkan citra & gambar kondisi eksisting"}
           data-testid="asset-map-citra-toggle"
         >
           <Satellite className="w-3.5 h-3.5" />

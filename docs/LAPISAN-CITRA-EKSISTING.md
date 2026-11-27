@@ -1,110 +1,82 @@
-# Lapisan Citra Eksisting pada Peta
-
-Status: **fitur tersedia, data citra belum ada** (27 Nov 2026).
-
-## Masalah
+# Lapisan Eksisting pada Peta
 
 Peta dasar OpenStreetMap di kawasan yang sedang dibangun tertinggal dari kondisi
-lapangan. Jalan dan gedung baru belum tergambar, sehingga pin aset tampak berdiri
-di tengah hutan. Lapisan ini menumpangkan **foto udara terbaru** (drone/ortofoto)
-di atas OSM, hanya di wilayah yang dipotret, dan bisa ditampilkan atau
-disembunyikan kapan saja.
+lapangan. Lapisan eksisting menumpangkan dua hal di atasnya, dan bisa ditampilkan
+atau disembunyikan kapan saja:
 
-## Cara kerja
+- **Citra**: foto udara terbaru (GeoTIFF drone/ortofoto).
+- **Gambar**: titik, garis, dan area yang digambar langsung di peta, lengkap dengan
+  warna, tebal, opasitas, dan label.
 
-| Bagian | Lokasi | Catatan |
-|---|---|---|
-| Registri citra | koleksi `peta_lapisan`, `backend/routes/peta_lapisan.py`, validasi `backend/peta_lapisan_utils.py` | Nama, tanggal rekam, sumber, alamat ubin, batas wilayah, rentang zoom, opasitas, aktif/arsip |
-| Peta dasar tunggal | `frontend/src/lib/petaDasar.js` | Satu sumber alamat OSM untuk Peta Aset, Peta Kolaborasi, Editor Denah, Lokasi Temuan |
-| Pemasang lapisan | `frontend/src/lib/lapisanCitra.js` | Pane `citraEksisting` (z 250): di atas OSM (200), di bawah denah (380) dan pin (600) |
-| Peta Aset | tombol **Eksisting** + panel **Citra Eksisting** | Tampil/sembunyi per citra, lompat ke area, transparansi |
-| Peta lain | tombol ikon gambar di kanan atas | Memakai pilihan yang sama (disimpan per perangkat) |
-| Kelola | Hierarki Spasial → **Citra Eksisting** (admin) | Daftar, ubah, arsipkan, hapus, dan **Periksa** ubin contoh |
+## Cara pakai (admin)
 
-### Aturan performa yang dijaga
+**Hierarki Spasial → Lapisan Eksisting.**
 
-1. **Mati = nol permintaan.** Daftar citra baru diambil saat tombol dinyalakan,
-   sekali per sesi.
-2. **Ubin hanya diminta di dalam batas & rentang zoom citra** (opsi Leaflet
-   `bounds`, `minZoom`, `maxNativeZoom`). Menggeser peta di luar area tidak
-   menghasilkan permintaan sia-sia. Di atas zoom maksimum, ubin terakhir diperbesar.
-3. **Ubin adalah berkas statis yang disajikan nginx, bukan backend.** Uvicorn
-   produksi hanya satu proses; satu layar peta bisa meminta 15–25 ubin sekaligus.
-4. **Service worker tidak menyimpan ubin.** Jalur `/uploads/` tidak disentuh
-   service worker; peramban memakai cache HTTP biasa. Deploy tidak ikut mengunduh
-   ulang citra.
-5. **Pin dan denah selalu di atas citra dan tetap bisa diklik** (pane citra
-   `pointer-events: none`).
+1. **Unggah citra** → pilih berkas `.tif`. Lokasi, resolusi, rentang zoom, dan tanggal
+   rekam terbaca otomatis dari berkasnya. Tekan **Unggah**, lalu biarkan halaman
+   terbuka sampai selesai.
+2. **Gambar baru** → beri nama → editor terbuka di atas citra. Pakai tombol di kiri
+   peta untuk menggambar titik, garis, atau area. Ketuk objek untuk mengatur warna,
+   tebal, opasitas, putus-putus, warna isi, dan labelnya (teks, warna, ukuran, tebal,
+   garis tepi, posisi).
+3. **Urutan**: tombol ▲/▼ per jenis; yang di atas tampil paling depan. Gambar selalu
+   di atas citra.
+4. **Sakelar** menampilkan/menyembunyikan lapisan untuk semua pengguna.
 
-### Siapa boleh apa
+Pengguna menyalakan lapisan lewat tombol **Eksisting** di Peta Aset, atau tombol
+satelit di Peta Kolaborasi, Editor Denah, dan Lokasi Temuan.
 
-- **Membaca**: semua pengguna yang login melihat citra **aktif**, lintas satker.
-  Citra adalah rekaman geografis; satu foto kawasan benar bagi semua satker yang
-  asetnya ada di sana (sama seperti OSM).
-- **Menulis**: admin. Citra distempel satker pembuatnya dan hanya boleh diubah atau
-  dihapus admin satker itu atau super-admin. Citra buatan super-admin tidak bisa
-  diubah admin satker, karena tampil di peta semua satker.
-- Ubah memakai versi (OCC); alamat ubin yang sama tidak bisa didaftarkan dua kali.
+## Berkas citra yang diterima
 
-## Menyiapkan citra (dilakukan DI LUAR server)
+GeoTIFF dengan sistem koordinat:
 
-Server produksi 2 vCPU dan sengaja tanpa GDAL (`docs/ARSITEKTUR-SPASIAL-IOT.md`
-§0 #9), jadi pemotongan ubin dikerjakan di laptop.
+- **UTM WGS84** (EPSG:32601–32660 / 32701–32760). Contoh: kawasan IKN = EPSG:32750 (UTM 50S).
+- **WGS84 geografis** (EPSG:4326).
+- **Web Mercator** (EPSG:3857).
 
-1. **Masukan:** GeoTIFF ortofoto (hasil olah drone, mis. WebODM/Agisoft/Pix4D).
-2. **QGIS:** Processing Toolbox → *Raster tools* → **Generate XYZ tiles (Directory)**.
-   - *Extent*: batas citra (catat angka barat/selatan/timur/utara dalam derajat
-     EPSG:4326 untuk registri).
-   - *Minimum zoom*: 14. *Maximum zoom*: sesuai resolusi (lihat tabel).
-   - *Tile format*: **JPG** (lebih kecil) bila citra berbentuk persegi penuh;
-     **PNG** bila tepinya tidak beraturan dan perlu transparan.
-   - **Matikan** *Use inverted tile Y axis (TMS convention)* — aplikasi memakai
-     skema XYZ.
-   - Alternatif baris perintah: `gdal2tiles.py --xyz -z 14-20 -w none ortofoto.tif keluaran/`
-     (perlu diverifikasi sesuai versi GDAL Anda).
-3. **Beri nama folder berversi**, mis. `kipp-2026-10`. Jangan pernah menimpa folder
-   lama dengan citra baru: peramban menyimpan ubin hingga 30 hari, sehingga
-   pengguna akan melihat campuran citra lama dan baru. Citra baru = folder baru +
-   registri baru; yang lama diarsipkan (nonaktif).
+Sistem lain (mis. DGN95 / TM-3) ditolak dengan pesan yang jelas. Ekspor ulang dari
+QGIS/WebODM ke salah satu di atas. RGB 8-bit, dengan atau tanpa band alfa; piksel
+NoData menjadi transparan.
 
-### Perkiraan ukuran (belum diukur dengan data nyata)
+Batas satu citra adalah **60.000 ubin**. Bila lebih, zoom maksimum diturunkan
+otomatis (resolusi dikorbankan, wilayahnya tidak). Sebagai gambaran, citra 5 cm
+seluas 5×5 km menjadi zoom 20 (±15 cm per piksel di layar).
 
-Untuk area **5 × 5 km**:
+## Cara kerjanya
 
-| Zoom maksimum | Resolusi kira-kira | Jumlah ubin | Ukuran (JPG) |
-|---|---|---|---|
-| 18 | ±60 cm | ±1.500 | ±25–60 MB |
-| 19 | ±30 cm | ±5.800 | ±100–250 MB |
-| 20 | ±15 cm | ±23.000 | ±0,4–0,9 GB |
-| 21 | ±7,5 cm | ±91.000 | ±1,5–3,5 GB |
+| Bagian | Lokasi |
+|---|---|
+| Registri, unggah & sajikan ubin | `backend/routes/peta_lapisan.py`, validasi `backend/peta_lapisan_utils.py`, koleksi `peta_lapisan` |
+| Proyeksi (UTM ↔ WGS84 ↔ Web Mercator, ubin XYZ) | `frontend/src/lib/proyeksiCitra.js` (murni, teruji silang dengan pustaka `utm`) |
+| Pemotong ubin di peramban | `frontend/src/lib/ubinCitra.js` (geotiff.js, dimuat lazy) |
+| Gambar & label | `frontend/src/lib/gambarPeta.js`, editor `frontend/src/components/spasial/EditorGambarPeta.jsx` |
+| Tampil di peta | `frontend/src/lib/lapisanCitra.js` (pane citra z 250, gambar z 390, label z 395; pin aset 600) |
 
-Disk VPS 96 GB (terpakai ±31 GB per 29 Agu 2026 — periksa ulang sebelum
-mengunggah citra besar).
+- **Citra dipotong di peramban admin**, bukan di server. Server 2 vCPU tanpa GDAL
+  (`docs/ARSITEKTUR-SPASIAL-IOT.md` §0 #9). Peramban membaca berkas sepotong-sepotong,
+  memproyeksikan ulang ke Web Mercator, lalu menyusun piramida: hanya zoom tertinggi
+  yang dibaca dari citra, sedangkan zoom di bawahnya disusun dari 4 ubin anaknya.
+  Uji: citra 4000×4000 px (10 cm) → 694 ubin dalam ±14 detik.
+- **Ubin disimpan di `backend/data_ubin/<id>/z/x/y.(webp|png)`**, di luar `uploads/`.
+  Folder `uploads/` ikut dibackup utuh dan dihapus saat restore, sedangkan citra bisa
+  berukuran gigabyte. Konsekuensinya, **ubin tidak ikut backup aplikasi**: simpan
+  GeoTIFF aslinya agar bisa diunggah ulang. Lokasi folder bisa diubah dengan env
+  `AMAN_UBIN_DIR`. Unggahan ditolak bila sisa disk < 3 GB.
+- **Ubin hanya untuk pengguna login.** Token HMAC harian dibagikan lewat daftar
+  lapisan, jadi tidak ada kueri DB per ubin. Cache peramban 30 hari (`immutable`):
+  citra baru selalu menjadi lapisan baru dengan id baru.
+- **Performa peta**: saat lapisan mati, tidak ada permintaan sama sekali. Ubin hanya
+  diminta di dalam batas citra. Label gambar tampil mulai zoom yang diatur per lapisan
+  (bawaan 15). Gambar dibatasi 2.000 objek / 100.000 titik sudut / 2 MB per lapisan.
+- **Label garis "ikut garis"** ditaruh di ruas lurus terpanjang bila teksnya muat
+  (teks yang melintasi tikungan tajam sulit dibaca) dan selalu terbaca dari kiri ke
+  kanan. Label area ada di tengah area; untuk bentuk cekung, dipakai titik tengah
+  potongan terpanjang.
 
-## Mengunggah & mendaftarkan
+## Hak akses
 
-1. Salin folder ke server:
-   `rsync -a keluaran/ <user>@<vps>:/var/www/inventarisasi/backend/uploads/ubin/kipp-2026-10/`
-   Folder `backend/uploads/` diabaikan git dan selamat dari deploy.
-2. nginx sudah menyajikan `/uploads/` sebagai berkas statis (`scripts/vps-deploy.sh`:
-   `location /uploads/ { alias …/backend/uploads/; expires 30d; }`). **Perlu
-   diverifikasi** bahwa konfigurasi server produksi masih sama.
-3. Hierarki Spasial → **Citra Eksisting** → *Daftarkan citra*:
-   alamat `/uploads/ubin/kipp-2026-10/{z}/{x}/{y}.jpg`, batas, zoom, tanggal rekam.
-4. Tekan **Periksa**. Hasil *"Server menjawab halaman web, bukan gambar"* berarti
-   nginx belum menyajikan jalur itu dan permintaan jatuh ke halaman aplikasi.
-
-## Sebelum mengunggah: kerahasiaan
-
-`/uploads/` **terbuka tanpa login**. Siapa pun yang tahu alamatnya bisa mengunduh
-ubin. Bila citra kawasan pemerintahan termasuk informasi yang dibatasi, **jangan
-unggah ke `/uploads/`** sebelum akses dibatasi. Usulan: blok nginx tersendiri dengan
-`secure_link` (tautan bertoken kedaluwarsa yang diterbitkan backend sekali per
-sesi), bukan pemeriksaan login per ubin ke backend, yang akan membebani uvicorn.
-Keputusan ini milik pemilik data.
-
-## Belum dikerjakan (tahap berikut)
-
-- Unggah ZIP ubin langsung dari web (validasi + ekstrak di latar belakang).
-- Perlindungan akses ubin (`secure_link`) bila citra dinyatakan terbatas.
-- Simpanan luring citra untuk lapangan tanpa sinyal (perlu batas ukuran di HP).
+- **Baca**: semua pengguna login, lintas satker. Citra dan gambar adalah rekaman
+  geografis, sama seperti OSM.
+- **Tulis**: admin satker pembuatnya atau super-admin. Lapisan buatan super-admin
+  tidak bisa diubah admin satker. Ubah memakai versi (OCC).
+- **Urutan**: admin mana pun (kosmetik, tercatat di audit).

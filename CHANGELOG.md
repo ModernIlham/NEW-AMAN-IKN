@@ -18,6 +18,26 @@ awal pengembangan di branch ini hingga rilis terakhir. Diurutkan dari yang
 
 ---
 
+## [#1166] Lapisan eksisting: unggah citra otomatis, gambar titik/garis/area berlabel, atur urutan — 2026-11-27
+
+- **Unggah citra tanpa isian teknis.** Admin cukup memilih berkas GeoTIFF; lokasi,
+  resolusi, rentang zoom, dan tanggal rekam terbaca otomatis. Peramban memproyeksikan
+  ulang citra (UTM/WGS84/Web Mercator) dan memotongnya jadi ubin sebelum dikirim ke
+  server, sehingga server tidak terbebani. Isian "alamat ubin" dan batas manual
+  dihapus.
+- **Gambar langsung di peta**: titik, garis, dan area di atas citra sebagai alas
+  jiplak. Setiap objek bisa diatur warna, tebal, opasitas, putus-putus, warna isi,
+  dan labelnya (teks, warna, ukuran, tebal, garis tepi, posisi). Label jalan
+  mengikuti alur garis, label area di tengahnya, dan label titik bisa di atas,
+  kanan, bawah, atau kiri.
+- **Urutan lapisan**: tombol naik/turun menentukan citra atau gambar mana yang
+  tampil di atas.
+- Dialog dan panel disederhanakan: Hierarki Spasial → **Lapisan Eksisting**; panel
+  peta **Eksisting** memuat gambar dan citra sekaligus.
+- Ubin citra hanya bisa diakses pengguna login (token harian tanpa kueri DB) dan
+  disimpan di luar folder `uploads/`, sehingga backup/restore tetap ringan.
+  Panduan: `docs/LAPISAN-CITRA-EKSISTING.md`.
+
 ## [#1165] Lapisan citra kondisi eksisting di peta — siap dipakai, menunggu data citra — 2026-11-27
 
 - Peta dasar OSM di kawasan yang sedang dibangun tertinggal dari kondisi
